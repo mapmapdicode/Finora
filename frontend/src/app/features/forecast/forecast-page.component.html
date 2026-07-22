@@ -1,0 +1,37 @@
+<section class="space-y-4">
+  <h2 class="text-2xl font-semibold">Forecast</h2>
+  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
+    This workspace is read-only. You can still review scenarios.
+  </p>
+
+  <form [formGroup]="form" (ngSubmit)="submit()" class="grid gap-3 bg-white border rounded-lg p-4 max-w-3xl">
+    <input formControlName="name" class="border p-2 rounded" placeholder="Scenario name" />
+    <textarea formControlName="assumptions" class="border p-2 rounded h-24" placeholder='{"growthRate": 0.08}'></textarea>
+    <button class="bg-indigo-600 text-white px-4 py-2 rounded" type="submit" [disabled]="!auth.canMutate">Create scenario</button>
+  </form>
+
+  <p class="text-sm text-slate-600">{{ statusMessage }}</p>
+
+  <div class="bg-white border rounded-lg">
+    <div class="px-4 py-2 border-b font-semibold">Saved scenarios</div>
+    <ul class="divide-y">
+      <li *ngFor="let item of scenarios" class="px-4 py-3 flex justify-between gap-3">
+        <div>
+          <p class="font-semibold">{{ item.name }}</p>
+          <p class="text-sm text-slate-600">status: {{ item.status || 'pending' }}</p>
+          <p class="text-xs text-slate-500">ID: {{ item.id }}</p>
+        </div>
+        <button
+          class="text-xs px-3 py-1 border rounded"
+          [disabled]="activeScenarioId === item.id || !auth.canMutate"
+          (click)="runScenario(item)"
+        >
+          {{ activeScenarioId === item.id ? 'Running...' : 'Run' }}
+        </button>
+      </li>
+      <li *ngIf="!scenarios.length" class="px-4 py-3 text-slate-500">No scenarios.</li>
+    </ul>
+  </div>
+
+  <pre class="bg-slate-900 text-green-100 p-4 rounded-lg overflow-auto" *ngIf="lastResult">{{ lastResult | json }}</pre>
+</section>

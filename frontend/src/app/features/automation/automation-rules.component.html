@@ -1,0 +1,91 @@
+<section class="space-y-5">
+  <h2 class="text-2xl font-semibold">Bank automation rules</h2>
+  <p class="text-sm text-slate-500">Automation rules for classifying imported bank transactions.</p>
+
+  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
+    This workspace is read-only. You can only preview matched transactions.
+  </p>
+
+  <form (ngSubmit)="submitRule()" [formGroup]="form" class="bg-white border rounded-lg p-4 grid md:grid-cols-2 gap-3">
+    <input formControlName="name" placeholder="Rule name" class="border p-2 rounded" />
+    <input formControlName="accountId" placeholder="Account ID (optional)" class="border p-2 rounded" />
+    <select formControlName="direction" class="border p-2 rounded">
+      <option value="in">in</option>
+      <option value="out">out</option>
+    </select>
+    <select formControlName="actionType" class="border p-2 rounded">
+      <option value="categorize">categorize</option>
+      <option value="ignore">ignore</option>
+      <option value="transfer">transfer</option>
+      <option value="loan_match">loan_match</option>
+      <option value="investment_funding">investment_funding</option>
+    </select>
+    <select formControlName="type" class="border p-2 rounded">
+      <option value="expense">expense</option>
+      <option value="income">income</option>
+      <option value="loan_payment">loan_payment</option>
+      <option value="loan_disbursement">loan_disbursement</option>
+      <option value="investment_funding">investment_funding</option>
+      <option value="valuation_adjustment">valuation_adjustment</option>
+    </select>
+    <input formControlName="priority" type="number" class="border p-2 rounded" />
+    <label class="flex items-center gap-2">
+      <input type="checkbox" formControlName="enabled" />
+      <span>Enabled</span>
+    </label>
+    <input formControlName="categoryId" placeholder="Category ID (if needed)" class="border p-2 rounded" />
+    <input formControlName="contentPattern" placeholder="contentPattern regex" class="border p-2 rounded" />
+    <input formControlName="referencePattern" placeholder="referencePattern regex" class="border p-2 rounded" />
+    <input formControlName="minAmount" placeholder="minAmount" class="border p-2 rounded" />
+    <input formControlName="maxAmount" placeholder="maxAmount" class="border p-2 rounded" />
+    <input formControlName="predicate" placeholder="predicate" class="border p-2 rounded md:col-span-2" />
+    <button class="bg-blue-700 text-white rounded px-4 py-2 md:col-span-2" [disabled]="!auth.canMutate">
+      {{ editingId ? 'Update rule' : 'Create rule' }}
+    </button>
+    <button
+      type="button"
+      class="bg-slate-200 rounded px-4 py-2 md:col-span-2"
+      (click)="cancelEdit()"
+      *ngIf="editingId && auth.canMutate"
+    >
+      Cancel edit
+    </button>
+  </form>
+
+  <div class="flex items-center justify-between">
+    <p class="text-sm text-slate-600">{{ statusMessage }}</p>
+    <button class="bg-indigo-700 text-white px-3 py-2 rounded" (click)="preview()">Preview on sample</button>
+  </div>
+  <div *ngIf="previewResult" class="bg-slate-900 text-green-100 rounded-lg p-3 overflow-auto">
+    <pre>{{ previewResult | json }}</pre>
+  </div>
+
+  <div class="bg-white border rounded-lg">
+    <div class="px-4 py-2 border-b font-semibold">Rule list</div>
+    <ul class="divide-y">
+      <li *ngFor="let item of rules" class="px-4 py-3">
+        <div class="flex justify-between gap-2">
+          <div>
+            <p class="font-semibold">{{ item.name }}</p>
+            <p class="text-sm text-slate-600">
+              {{ directionLabel(item.direction || 'out') }} · action={{ item.actionType || '-' }} · type={{ item.type || '-' }} ·
+              priority={{ item.priority }} · enabled={{ item.enabled ? 'on' : 'off' }}
+            </p>
+            <p class="text-xs text-slate-500">
+              pattern: {{ item.contentPattern || '-' }} / {{ item.referencePattern || '-' }}
+              (category {{ item.categoryId || 'none' }})
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <button class="text-xs px-3 py-1 border rounded" *ngIf="auth.canMutate" (click)="beginEdit(item)">Edit</button>
+            <button class="text-xs px-3 py-1 border rounded" *ngIf="auth.canMutate" (click)="toggleEnabled(item)">
+              {{ item.enabled ? 'Disable' : 'Enable' }}
+            </button>
+            <button class="text-xs px-3 py-1 border rounded text-red-700" *ngIf="auth.canMutate" (click)="remove(item.id)">Delete</button>
+          </div>
+        </div>
+      </li>
+      <li *ngIf="!rules.length" class="px-4 py-3 text-slate-500">No rules.</li>
+    </ul>
+  </div>
+</section>

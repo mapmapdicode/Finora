@@ -1,0 +1,11 @@
+<section class="max-w-md mx-auto mt-20 bg-white p-6 rounded-lg border shadow">
+  <h2 class="text-2xl font-semibold mb-3">Đăng nhập</h2>
+  <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-3">
+    <input formControlName="email" class="w-full border p-2 rounded" placeholder="Email" />
+    <input formControlName="password" type="password" class="w-full border p-2 rounded" placeholder="Mật khẩu" />
+    <button class="w-full bg-slate-900 text-white p-2 rounded">Đăng nhập</button>
+  </form>
+  <p class="text-sm text-red-600 mt-3">{{ message }}</p>
+  <a class="text-sm text-blue-600" routerLink="/register">Đăng ký (chưa có)</a>
+</section>
+

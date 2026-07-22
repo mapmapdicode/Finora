@@ -1,0 +1,220 @@
+<section class="space-y-4">
+  <h2 class="text-2xl font-semibold">SePay Bank Inbox</h2>
+  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
+    This workspace is read-only. You can review bank transactions but not make changes.
+  </p>
+
+  <div class="space-x-2">
+    <button
+      (click)="connect()"
+      class="bg-blue-700 text-white px-4 py-2 rounded"
+      [disabled]="isBusy || !auth.canMutate"
+    >
+      {{ isBusy ? 'Connecting...' : 'Connect SePay' }}
+    </button>
+    <button (click)="preview()" class="bg-emerald-700 text-white px-4 py-2 rounded">Preview rule</button>
+    <span class="text-sm text-slate-500">
+      Pending: {{ pendingCount }} / Auto: {{ autoReadyCount }} / Posted: {{ postedCount }} / Ignored: {{ ignoredCount }}
+    </span>
+  </div>
+
+  <div *ngIf="lastConnect" class="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+    <p class="font-semibold">Latest SePay connect session</p>
+    <p class="mt-1">Connection ID: {{ lastConnect.connectionId }}</p>
+    <p>Callback State: {{ lastConnect.callbackState }}</p>
+    <p>External ID: {{ lastConnect.externalId || 'auto-generated' }}</p>
+    <a
+      class="inline-block mt-2 text-emerald-900 underline"
+      [href]="lastConnect.connectUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Open SePay connect URL
+    </a>
+  </div>
+
+  <div *ngIf="!hasConnected" class="text-sm text-slate-500">No SePay connection yet.</div>
+
+  <div *ngIf="hasConnected" class="space-y-2">
+    <div *ngFor="let connection of connections" class="rounded border bg-white p-4">
+      <p class="font-semibold">{{ connection.provider }} {{ connection.status }}</p>
+      <p class="text-sm text-slate-600">ID: {{ connection.id }} / External: {{ connection.externalId || 'none' }}</p>
+      <p class="text-sm text-slate-600">
+        Sync: {{ connection.syncStatus || 'idle' }} | Last requested: {{ syncLabel(connection) }} | Callback: {{ callbackLabel(connection) }}
+      </p>
+      <p class="text-xs text-slate-500">Callback state: {{ connection.callbackState || 'not_called' }}</p>
+      <div class="mt-2 flex gap-2">
+        <button
+          *ngIf="auth.canMutate"
+          class="text-xs px-3 py-1 rounded bg-amber-600 text-white"
+          (click)="sync(connection.id)"
+        >
+          Sync
+        </button>
+        <button
+          *ngIf="auth.canMutate"
+          class="text-xs px-3 py-1 rounded bg-red-600 text-white"
+          (click)="revoke(connection.id)"
+        >
+          Revoke
+        </button>
+      </div>
+    </div>
+
+    <div class="inline-flex gap-2">
+      <button
+        *ngFor="let tab of postingTabs"
+        (click)="setTab(tab.key)"
+        [class.bg-slate-900]="activeTab === tab.key"
+        [class.text-white]="activeTab === tab.key"
+        class="px-3 py-2 text-sm rounded border"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <div class="pt-2 space-y-2 sm:flex sm:items-end sm:space-x-2 sm:space-y-0">
+      <label class="block text-sm text-slate-600">
+        Lọc theo tài khoản
+        <select
+          class="mt-1 block border rounded p-2"
+          [value]="accountIdFilter"
+          (change)="setAccountFilter(($any($event.target).value))"
+        >
+          <option value="">Tất cả tài khoản</option>
+          <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
+        </select>
+      </label>
+      <button
+        class="px-3 py-2 rounded border text-sm"
+        *ngIf="accountIdFilter"
+        (click)="clearAccountFilter()"
+      >
+        Hủy lọc
+      </button>
+    </div>
+  </div>
+
+  <h3 class="font-medium mt-4">Bank feed inbox</h3>
+  <div class="text-sm text-slate-500" *ngIf="activeFeed">
+    Đang xem chi tiết: <span class="font-medium">{{ activeFeed.id }}</span>
+  </div>
+
+  <div *ngIf="!feed.length" class="text-sm text-slate-500">Không có dữ liệu phù hợp.</div>
+
+  <ul class="border rounded-lg bg-white divide-y">
+    <li *ngFor="let item of filteredFeed; trackBy: trackByFeedId" class="p-3">
+      <div class="flex justify-between items-start gap-4">
+        <div>
+          <p class="font-semibold">
+            {{ item.occurredAt | date: 'short' }} | {{ item.direction | uppercase }}
+            - {{ item.amount }} {{ item.currency }}
+            <span class="text-slate-500 text-sm">{{ item.direction === 'out' ? 'Expense' : 'Income' }}</span>
+            <span
+              class="ml-2 inline-flex px-2 py-1 rounded-full text-xs"
+              [ngClass]="statusClass(item)"
+            >
+              {{ statusText(item) }}
+            </span>
+          </p>
+          <p class="text-sm text-slate-600">
+            {{ item.description || item.reference || item.classificationEvidence || '-' }}
+            <span class="ml-2 text-xs text-slate-500" *ngIf="item.accountId">({{ accountName(item.accountId) }})</span>
+          </p>
+          <p class="text-xs text-slate-500 mt-1">
+            {{ sourceLabel(item) }}
+            <span *ngIf="item.classificationConfidence !== undefined"> | Tin cậy: {{ confidence(item) }}</span>
+            | Gợi ý: {{ actionHint(item) }}
+            <span *ngIf="isTransferLike(item)" class="ml-2 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">transfer-like</span>
+            <span *ngIf="item.autoClassified" class="ml-2 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">auto-classified</span>
+            <button
+              class="ml-2 underline text-slate-700"
+              type="button"
+              (click)="openDetails(item)"
+            >
+              Chi tiết
+            </button>
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <button
+            class="text-xs px-3 py-1 rounded bg-slate-900 text-white"
+            (click)="openReclassify(item)"
+            *ngIf="canMutate && canApprove(item)"
+          >
+            Reclassify
+          </button>
+          <button
+            class="text-xs px-3 py-1 rounded bg-emerald-600 text-white"
+            (click)="approve(item)"
+            [disabled]="isActionBusy"
+            *ngIf="canMutate && canApprove(item)"
+          >
+            {{ approveLabel(item) }}
+          </button>
+          <button
+            class="text-xs px-3 py-1 rounded bg-amber-600 text-white"
+            (click)="ignore(item)"
+            [disabled]="isActionBusy"
+            *ngIf="canMutate && item.postingState !== 'ignored' && item.postingState !== 'posted'"
+          >
+            Skip
+          </button>
+          <button
+            type="button"
+            class="text-xs px-3 py-1 rounded bg-slate-300"
+            *ngIf="activeFeed?.id === item.id"
+            (click)="closeDetails()"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </li>
+  </ul>
+
+  <div *ngIf="activeFeed" class="bg-white border p-4 rounded-lg space-y-2">
+    <div class="flex justify-between items-start gap-2">
+      <h4 class="font-semibold">Chi tiết giao dịch: {{ activeFeed.id }}</h4>
+      <button class="text-sm px-2 py-1 border rounded" (click)="closeDetails()">Đóng</button>
+    </div>
+    <p class="text-sm text-slate-600">Tài khoản: {{ accountName(activeFeed.accountId) }} ({{ activeFeed.accountId }})</p>
+    <p class="text-sm text-slate-600">Nội dung: {{ activeFeed.description || activeFeed.reference || '-' }}</p>
+    <p class="text-sm text-slate-500">Trạng thái: {{ statusText(activeFeed) }}</p>
+    <p class="text-sm text-slate-600">Gợi ý: {{ actionHint(activeFeed) }}</p>
+    <p class="text-sm text-slate-600">Tin cậy: {{ confidence(activeFeed) }} | Loại: {{ activeFeed.postingState }}</p>
+    <p class="text-sm text-slate-600">Evidence: {{ activeFeed.classificationEvidence || '-' }}</p>
+    <p class="text-sm text-slate-600">Posted transaction: {{ activeFeed.postedTransactionId || '-' }}</p>
+  </div>
+
+  <div *ngIf="previewResult" class="bg-white rounded-lg border p-4 text-sm">
+    <p class="font-semibold mb-2">Preview result</p>
+    <pre>{{ previewResult | json }}</pre>
+  </div>
+
+  <div *ngIf="selectedFeed && auth.canMutate" class="bg-white border p-4 rounded-lg space-y-2">
+    <h4 class="font-semibold">Reclassify: {{ selectedFeed.description || selectedFeed.id }}</h4>
+    <form [formGroup]="reclassifyForm" (ngSubmit)="submitReclassify()" class="grid sm:grid-cols-2 gap-2">
+      <select class="border p-2 rounded" formControlName="type">
+        <option value="income">income</option>
+        <option value="expense">expense</option>
+        <option value="loan_payment">loan_payment</option>
+        <option value="investment_funding">investment_funding</option>
+        <option value="loan_disbursement">loan_disbursement</option>
+      </select>
+      <input formControlName="accountId" placeholder="Account ID (optional)" class="border p-2 rounded" />
+      <input formControlName="categoryId" placeholder="Category ID" class="border p-2 rounded" />
+      <input formControlName="reason" placeholder="Reclassify reason" class="border p-2 rounded sm:col-span-2" />
+      <div class="sm:col-span-2 flex gap-2">
+        <button
+          type="submit"
+          class="px-4 py-2 rounded bg-blue-600 text-white"
+          [disabled]="reclassifyForm.invalid || isActionBusy"
+        >
+          Save
+        </button>
+        <button type="button" class="px-4 py-2 rounded bg-slate-300" (click)="closeReclassify()">Close</button>
+      </div>
+    </form>
+  </div>
+</section>

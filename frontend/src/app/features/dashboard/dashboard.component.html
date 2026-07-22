@@ -1,0 +1,269 @@
+﻿<section class="space-y-4">
+  <div class="rounded-xl border bg-white p-4 shadow-sm">
+    <div class="grid gap-4 lg:grid-cols-2">
+      <div>
+        <h2 class="text-xl font-semibold">Dashboard danh má»¥c</h2>
+        <p class="mt-1 text-sm text-slate-600">{{ summary() }}</p>
+
+        <label class="mt-4 block text-sm">
+          Danh má»¥c Ä‘ang xem
+          <select
+            class="mt-1 block w-full border rounded-lg px-3 py-2"
+            [value]="selectedPortfolioId"
+            (change)="onPortfolioChange(portfolioPicker.value)"
+            #portfolioPicker
+          >
+            <option value="">-- Chá»n danh má»¥c --</option>
+            <option *ngFor="let item of portfolios" [value]="item.id">
+              {{ item.name }} ({{ item.baseCurrency }})
+            </option>
+          </select>
+        </label>
+
+        <div class="mt-4">
+          <label class="block text-sm">
+            Xem theo thá»i Ä‘iá»ƒm (vÃ­ dá»¥: 2026-07-01T10:00:00)
+            <input
+              #asOfInput
+              type="datetime-local"
+              class="mt-1 block w-full border rounded-lg px-3 py-2"
+              [value]="asOfPreviewInput"
+              placeholder="Nhap thoi diem, vi du: 2026-07-01T10:00"
+              (input)="asOfPreviewInput = asOfInput.value"
+            />
+          </label>
+
+          <div class="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="rounded-lg bg-indigo-600 text-white px-3 py-2 disabled:opacity-50"
+              [disabled]="loading()"
+              (click)="previewAsOfNow($event)"
+            >
+              Xem snapshot
+            </button>
+            <button
+              type="button"
+              class="rounded-lg border px-3 py-2"
+              [disabled]="!asOfSnapshotAt || loading()"
+              (click)="clearAsOfPreview()"
+            >
+              Xem hiá»‡n táº¡i
+            </button>
+          </div>
+
+          <p *ngIf="asOfError" class="mt-2 text-sm text-rose-600">{{ asOfError }}</p>
+        </div>
+      </div>
+
+      <div class="grid gap-3">
+        <div class="rounded-xl border p-3">
+          <p class="text-xs text-slate-500">Tá»•ng tÃ i sáº£n rÃ²ng</p>
+          <p class="mt-1 text-3xl font-semibold">{{ netWorth.netWorth }} {{ netWorth.baseCurrency }}</p>
+          <p class="text-xs text-slate-500 mt-1">
+            As-of: {{ netWorth.asOfAt ? (netWorth.asOfAt | date: 'short') : '-' }}
+          </p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="rounded-xl border p-3">
+            <p class="text-xs text-slate-500">Cash</p>
+            <p class="mt-1 text-xl">{{ netWorth.cash }} {{ netWorth.baseCurrency }}</p>
+          </div>
+          <div class="rounded-xl border p-3">
+            <p class="text-xs text-slate-500">Ná»£ pháº£i tráº£</p>
+            <p class="mt-1 text-xl">{{ netWorth.liabilities }} {{ netWorth.baseCurrency }}</p>
+          </div>
+        </div>
+
+        <p *ngIf="loading()" class="text-sm text-slate-500">Äang táº£i dá»¯ liá»‡u...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-xl border bg-white p-4 shadow-sm">
+    <h3 class="text-lg font-semibold">Xu hÆ°á»›ng tÃ i sáº£n rÃ²ng</h3>
+    <p *ngIf="trendDotPositions.length < 2" class="mt-1 text-sm text-slate-500">
+      ChÆ°a Ä‘á»§ dá»¯ liá»‡u snapshot Ä‘á»ƒ váº½ biá»ƒu Ä‘á»“.
+    </p>
+
+    <div *ngIf="trendDotPositions.length >= 2" class="mt-4 overflow-x-auto">
+      <svg [attr.width]="trendWidth" [attr.height]="trendHeight" class="min-w-[860px]">
+        <rect
+          [attr.x]="0"
+          [attr.y]="0"
+          [attr.width]="trendWidth"
+          [attr.height]="trendHeight"
+          fill="none"
+          stroke="#e2e8f0"
+        />
+
+        <path
+          *ngIf="trendSvgPath"
+          [attr.d]="trendSvgPath"
+          fill="none"
+          stroke="#4f46e5"
+          stroke-width="2"
+        />
+
+        <g *ngFor="let point of trendDotPositions">
+          <circle
+            [attr.cx]="point.x"
+            [attr.cy]="point.y"
+            r="6"
+            [attr.fill]="isActiveTrendPoint(point.asOf) ? '#4338ca' : '#c7d2fe'"
+            class="cursor-pointer"
+            stroke="#ffffff"
+            stroke-width="2"
+            [attr.aria-label]="'Chá»n snapshot ' + (point.asOf | date: 'short')"
+            (click)="onTrendPointClick(point.asOf, $event)"
+          ></circle>
+        </g>
+      </svg>
+
+      <p class="mt-2 text-xs text-slate-500">
+        Báº¥m má»™t Ä‘iá»ƒm trÃªn biá»ƒu Ä‘á»“ Ä‘á»ƒ drill-down vÃ o snapshot tÆ°Æ¡ng á»©ng.
+      </p>
+    </div>
+  </div>
+
+  <div class="rounded-xl border bg-white p-4 shadow-sm">
+    <div class="flex flex-wrap gap-2 items-center justify-between">
+      <h3 class="text-lg font-semibold">
+        Chi tiáº¿t {{ drillDownMode() === 'snapshot' ? 'snapshot' : 'hiá»‡n táº¡i' }}
+      </h3>
+      <p class="text-sm text-slate-500">{{ drillDownAsOfText() }}</p>
+    </div>
+
+    <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-lg border p-3">
+        <p class="text-xs text-slate-500">Net worth</p>
+        <p class="text-2xl mt-1">{{ drillDownSnapshot().netWorth }} {{ drillDownSnapshot().baseCurrency }}</p>
+      </div>
+      <div class="rounded-lg border p-3">
+        <p class="text-xs text-slate-500">Cash</p>
+        <p class="text-2xl mt-1">{{ drillDownSnapshot().cash }} {{ drillDownSnapshot().baseCurrency }}</p>
+      </div>
+      <div class="rounded-lg border p-3">
+        <p class="text-xs text-slate-500">Ná»£ pháº£i tráº£</p>
+        <p class="text-2xl mt-1">{{ drillDownSnapshot().liabilities }} {{ drillDownSnapshot().baseCurrency }}</p>
+      </div>
+      <div class="rounded-lg border p-3">
+        <p class="text-xs text-slate-500">Biáº¿n Ä‘á»™ng gáº§n nháº¥t</p>
+        <p class="text-2xl mt-1">
+          {{ drillDownSnapshot().netWorthChange || '0.00' }} {{ drillDownSnapshot().baseCurrency }}
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+      <div>
+        <h4 class="font-semibold">ThÃ nh pháº§n tÃ i sáº£n</h4>
+        <div class="mt-2 rounded-lg border p-3">
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <p class="text-slate-500">Tiá»n máº·t</p>
+            <p class="text-right">{{ drillDownSnapshot().assets?.cash || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+
+            <p class="text-slate-500">Khoáº£n pháº£i thu</p>
+            <p class="text-right">{{ drillDownSnapshot().assets?.receivables || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+
+            <p class="text-slate-500">Báº¥t Ä‘á»™ng sáº£n</p>
+            <p class="text-right">{{ drillDownSnapshot().assets?.property || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+
+            <p class="text-slate-500">TÃ i sáº£n khÃ¡c</p>
+            <p class="text-right">{{ drillDownSnapshot().assets?.otherAssets || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+
+            <p class="text-slate-500">LÃ£i tÃ­ch lÅ©y</p>
+            <p class="text-right">{{ drillDownSnapshot().assets?.accruedInterest || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-semibold">Attribution</h4>
+        <div class="mt-2 rounded-lg border p-3">
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <p class="text-slate-500">DÃ²ng tiá»n rÃ²ng</p>
+            <p class="text-right">{{ drillDownSnapshot().attribution?.externalCashFlow || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+
+            <p class="text-slate-500">LÃ£i dá»“n tÃ­ch</p>
+            <p class="text-right">{{ drillDownSnapshot().attribution?.accruedInterest || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+
+            <p class="text-slate-500">Biáº¿n Ä‘á»™ng Ä‘á»‹nh giÃ¡</p>
+            <p class="text-right">{{ drillDownSnapshot().attribution?.valuationChange || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+
+            <p class="text-slate-500">PhÃ­</p>
+            <p class="text-right">{{ drillDownSnapshot().attribution?.accruedFee || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+          </div>
+        </div>
+
+        <div class="mt-3 rounded-lg border p-3">
+          <h5 class="font-semibold text-sm">Äá»‘i soÃ¡t</h5>
+          <p class="text-sm text-slate-600 mt-2">
+            Reconciled accounts: {{ drillDownSnapshot().dataQuality?.reconciledAccounts || 0 }}
+            Â· Stale valuations: {{ drillDownSnapshot().dataQuality?.staleValuations || 0 }}
+            Â· Nguá»“n: {{ drillDownSnapshot().dataQuality?.asOfSource || '-' }}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-xl border bg-white p-4 shadow-sm">
+    <h3 class="text-lg font-semibold">Lá»‹ch sá»­ snapshot</h3>
+    <p *ngIf="!snapshots.length" class="mt-1 text-sm text-slate-500">ChÆ°a cÃ³ snapshot nÃ o.</p>
+
+    <table *ngIf="snapshots.length" class="w-full mt-3 text-sm border-collapse">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="py-2 pr-3 font-medium">As-of</th>
+          <th class="py-2 pr-3 font-medium">Net worth</th>
+          <th class="py-2 pr-3 font-medium">Cash</th>
+          <th class="py-2 pr-3 font-medium">Liabilities</th>
+          <th class="py-2 pr-3 font-medium">Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let item of snapshots"
+          class="border-b cursor-pointer"
+          [class.bg-indigo-50]="isSelectedSnapshot(item)"
+          (click)="selectSnapshot(item)"
+        >
+          <td class="py-2 pr-3">{{ item.asOfAt | date: 'short' }}</td>
+          <td class="py-2 pr-3">{{ item.netWorth }} {{ item.baseCurrency }}</td>
+          <td class="py-2 pr-3">{{ item.cash }} {{ item.baseCurrency }}</td>
+          <td class="py-2 pr-3">{{ item.liabilities }} {{ item.baseCurrency }}</td>
+          <td class="py-2 pr-3">{{ item.netWorthChange || '0.00' }} {{ item.baseCurrency }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <button
+      *ngIf="snapshotCursor"
+      type="button"
+      class="mt-3 rounded-lg border px-3 py-2"
+      (click)="loadMoreSnapshots()"
+      [disabled]="snapshotLoading"
+    >
+      {{ snapshotLoading ? 'Äang táº£i...' : 'Xem thÃªm' }}
+    </button>
+    <p *ngIf="snapshotLoading && !snapshotCursor" class="mt-2 text-sm text-slate-500">Äang táº£i...</p>
+  </div>
+
+  <div *ngIf="selectedPortfolioId" class="rounded-xl border bg-white p-4 shadow-sm">
+    <h3 class="text-lg font-semibold">TÃ³m táº¯t nhanh</h3>
+    <p class="mt-1 text-sm text-slate-500">Tá»•ng account theo danh má»¥c</p>
+    <ul class="mt-2 text-sm text-slate-700 list-disc pl-5">
+      <li *ngFor="let item of summaryByPortfolio">{{ item }}</li>
+    </ul>
+
+    <h4 class="mt-4 font-semibold">Giao dá»‹ch má»›i nháº¥t</h4>
+    <ul class="mt-2 text-sm text-slate-700 list-disc pl-5">
+      <li *ngFor="let tx of transactions">
+        {{ tx.occurredAt | date: 'short' }}: {{ tx.type }} {{ tx.amount }} {{ tx.currency }}
+      </li>
+    </ul>
+    <p *ngIf="!transactions.length" class="mt-2 text-sm text-slate-500">ChÆ°a cÃ³ giao dá»‹ch gáº§n nháº¥t.</p>
+  </div>
+</section>

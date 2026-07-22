@@ -1,0 +1,34 @@
+<section class="space-y-4">
+  <h2 class="text-2xl font-semibold">Accounts</h2>
+
+  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
+    This workspace is read-only. You can only view accounts.
+  </p>
+
+  <form [formGroup]="form" (ngSubmit)="submit()" class="grid md:grid-cols-3 gap-2 bg-white p-4 rounded-lg border max-w-3xl">
+    <input formControlName="name" placeholder="Account name" class="border p-2 rounded" />
+    <select formControlName="type" class="border p-2 rounded">
+      <option value="cash">cash</option>
+      <option value="bank">bank</option>
+      <option value="card">card</option>
+    </select>
+    <select formControlName="portfolioId" class="border p-2 rounded">
+      <option value="">Chọn danh mục</option>
+      <option *ngFor="let item of portfolios" [value]="item.id">
+        {{ item.name }} ({{ item.baseCurrency }})
+      </option>
+    </select>
+    <input formControlName="currency" placeholder="VND" class="border p-2 rounded" />
+    <button type="submit" class="bg-blue-700 text-white rounded px-4 py-2 md:col-span-3" [disabled]="!auth.canMutate">
+      Add account
+    </button>
+  </form>
+
+  <ul class="border rounded-lg bg-white divide-y">
+    <li *ngFor="let item of accounts" class="px-4 py-2">
+      <p class="font-semibold">{{ item.name }}</p>
+      <p class="text-sm text-slate-600">{{ item.type }} · {{ item.currency }}</p>
+    </li>
+    <li *ngIf="!accounts.length" class="px-4 py-3 text-slate-500">No account yet.</li>
+  </ul>
+</section>

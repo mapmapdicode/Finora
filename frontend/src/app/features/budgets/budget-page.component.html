@@ -1,0 +1,39 @@
+<section class="space-y-4">
+  <h2 class="text-2xl font-semibold">Monthly budget</h2>
+  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
+    This workspace is read-only. You can still browse budget rows.
+  </p>
+
+  <form (ngSubmit)="submit()" [formGroup]="form" class="grid md:grid-cols-3 gap-3 bg-white p-4 rounded-lg border">
+    <input formControlName="period" placeholder="2026-07" class="border p-2 rounded" />
+    <input formControlName="categoryId" placeholder="Category (optional)" class="border p-2 rounded" />
+    <input formControlName="limit" placeholder="Limit (e.g. 5000000)" class="border p-2 rounded" />
+    <button class="md:col-span-3 bg-blue-600 text-white rounded px-4 py-2" [disabled]="!auth.canMutate">Save budget</button>
+  </form>
+
+  <button
+    type="button"
+    class="bg-slate-900 text-white px-4 py-2 rounded"
+    (click)="loadBudget()"
+    [disabled]="loading"
+  >
+    {{ loading ? 'Loading...' : 'Refresh' }}
+  </button>
+
+  <p class="text-sm text-slate-600">{{ statusMessage }}</p>
+
+  <div class="bg-white border rounded-lg">
+    <div class="px-4 py-2 border-b font-semibold">Period: {{ summary?.period || form.value.period }}</div>
+    <ul class="divide-y">
+      <li *ngFor="let row of summary?.rows || []" class="px-4 py-2 grid grid-cols-4 gap-2">
+        <span class="font-mono">#{{ row.categoryId || 'uncategorized' }}</span>
+        <span>Limit: {{ row.limit }}</span>
+        <span>Spent: {{ row.spent }}</span>
+        <span>Currency: {{ row.currency || 'VND' }}</span>
+      </li>
+      <li *ngIf="!summary?.rows?.length" class="px-4 py-2 text-slate-500">
+        No budget items in this period.
+      </li>
+    </ul>
+  </div>
+</section>

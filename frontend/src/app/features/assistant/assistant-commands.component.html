@@ -1,0 +1,74 @@
+<section class="space-y-5">
+  <h2 class="text-2xl font-semibold">Assistant commands</h2>
+  <p class="text-sm text-slate-500">Send command to Assistant and review approval states.</p>
+  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
+    This workspace is read-only. Assistant actions are disabled.
+  </p>
+
+  <form (ngSubmit)="submitCommand()" [formGroup]="form" class="bg-white rounded-lg border p-4 grid md:grid-cols-2 gap-3">
+    <label class="md:col-span-2">
+      <span class="text-sm text-slate-600">Command</span>
+      <textarea
+        formControlName="command"
+        class="border p-2 rounded w-full"
+        rows="3"
+        placeholder='Example: "Create expense 500000 for Food"'
+      ></textarea>
+    </label>
+    <label class="md:col-span-2">
+      <span class="text-sm text-slate-600">Plan (optional)</span>
+      <input formControlName="plan" placeholder="Optional action plan" class="border p-2 rounded w-full" />
+    </label>
+    <button type="submit" class="bg-blue-700 text-white px-4 py-2 md:col-span-2" [disabled]="loading || !auth.canMutate">
+      {{ loading ? 'Sending...' : 'Send command' }}
+    </button>
+  </form>
+
+  <p class="text-sm text-slate-600">{{ statusMessage }}</p>
+
+  <div class="bg-white border rounded-lg">
+    <div class="px-4 py-2 border-b font-semibold">Command history</div>
+    <ul class="divide-y">
+      <li *ngFor="let item of commands" class="px-4 py-3">
+        <div class="flex justify-between gap-4">
+          <div>
+            <p class="font-semibold">{{ item.command }}</p>
+            <p class="text-sm text-slate-600">Status: {{ item.status || 'received' }}</p>
+            <p class="text-xs text-slate-500">ID: {{ item.id }} · plan: {{ item.plan || '-' }}</p>
+            <p class="text-xs text-slate-500" *ngIf="item.approvalId">
+              Approval ID: {{ item.approvalId }} · Expires: {{ item.approvalExpiresAt || 'n/a' }}
+            </p>
+            <pre *ngIf="selectedCommandId === item.id" class="mt-2 text-xs bg-slate-900 text-green-100 p-2 rounded">{{ item | json }}</pre>
+          </div>
+          <div class="flex flex-col gap-2">
+            <button class="text-xs px-3 py-1 border rounded" (click)="inspect(item)">Details</button>
+            <input
+              *ngIf="canApprove(item)"
+              class="text-xs p-2 border rounded"
+              type="text"
+              placeholder="approvalId (auto-fill if available)"
+              [value]="approvalInputs[item.id] || ''"
+              (input)="setApprovalInput(item.id, $any($event.target).value)"
+            />
+            <button
+              class="text-xs px-3 py-1 border rounded"
+              *ngIf="canApprove(item) && auth.canMutate"
+              [disabled]="requiresApproval(item)"
+              (click)="approve(item.id)"
+            >
+              Approve
+            </button>
+            <button
+              class="text-xs px-3 py-1 border rounded"
+              *ngIf="canApprove(item) && auth.canMutate"
+              (click)="cancel(item.id)"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </li>
+      <li *ngIf="!commands.length" class="px-4 py-3 text-slate-500">No commands.</li>
+    </ul>
+  </div>
+</section>

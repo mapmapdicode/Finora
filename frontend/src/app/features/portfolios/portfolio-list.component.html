@@ -1,0 +1,124 @@
+<section class="space-y-6">
+  <div class="grid sm:grid-cols-2 gap-4">
+    <div class="rounded-xl border bg-white p-4 shadow-sm">
+      <h2 class="text-xl font-semibold mb-3">Danh mục</h2>
+
+      <form class="space-y-3" [formGroup]="form" (ngSubmit)="createPortfolio()">
+        <label class="block text-sm">
+          Tên danh mục
+          <input
+            formControlName="name"
+            class="mt-1 block w-full border rounded-lg px-3 py-2"
+            placeholder="Ví dụ: Chính"
+          />
+        </label>
+
+        <label class="block text-sm">
+          Đơn vị gốc
+          <select formControlName="baseCurrency" class="mt-1 block w-full border rounded-lg px-3 py-2">
+            <option *ngFor="let currency of baseCurrencies" [value]="currency">
+              {{ currency }}
+            </option>
+          </select>
+        </label>
+
+        <button
+          type="submit"
+          class="rounded-lg bg-indigo-600 text-white px-4 py-2 disabled:opacity-50"
+          [disabled]="createInProgress || !auth.canMutate || form.invalid"
+        >
+          {{ createInProgress ? 'Đang tạo...' : 'Tạo danh mục' }}
+        </button>
+      </form>
+
+      <p *ngIf="!auth.canMutate" class="mt-3 text-xs text-amber-700">
+        Chế độ chỉ xem: không thể tạo danh mục mới.
+      </p>
+
+      <p *ngIf="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
+    </div>
+
+    <div class="rounded-xl border bg-white p-4 shadow-sm">
+      <h3 class="text-lg font-semibold mb-2">Chọn danh mục</h3>
+      <p *ngIf="!portfolios.length" class="text-sm text-slate-600">Chưa có danh mục.</p>
+
+      <ul *ngIf="portfolios.length" class="space-y-2">
+        <li *ngFor="let item of portfolios">
+          <button
+            type="button"
+            class="w-full text-left border rounded-lg px-3 py-2"
+            [class.bg-indigo-50]="selectedPortfolioId === item.id"
+            (click)="selectPortfolio(item.id)"
+          >
+            <span class="font-medium">{{ item.name }}</span>
+            <span class="ml-2 text-sm text-slate-500">({{ item.baseCurrency }})</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div *ngIf="selectedPortfolioId" class="rounded-xl border bg-white p-4 shadow-sm">
+    <div *ngIf="latestNetWorth() as nw">
+      <h3 class="font-semibold mb-2">Tổng quan danh mục</h3>
+      <p class="text-sm text-slate-500">
+        Nhóm: {{ portfolios.find((item) => item.id === selectedPortfolioId)?.name }} • As-of {{ nw.asOfAt | date: 'short' }}
+      </p>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
+        <div class="rounded-lg border p-3">
+          <p class="text-xs text-slate-500">Tài sản ròng</p>
+          <p class="text-2xl mt-1">{{ nw.netWorth }} {{ nw.baseCurrency }}</p>
+        </div>
+        <div class="rounded-lg border p-3">
+          <p class="text-xs text-slate-500">Cash</p>
+          <p class="text-2xl mt-1">{{ nw.cash }} {{ nw.baseCurrency }}</p>
+        </div>
+        <div class="rounded-lg border p-3">
+          <p class="text-xs text-slate-500">Nợ</p>
+          <p class="text-2xl mt-1">{{ nw.liabilities }} {{ nw.baseCurrency }}</p>
+        </div>
+        <div class="rounded-lg border p-3">
+          <p class="text-xs text-slate-500">Thay đổi gần nhất</p>
+          <p class="text-2xl mt-1">{{ formatChange(nw.netWorthChange) }} {{ nw.baseCurrency }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-5">
+      <h4 class="font-semibold mb-2">Lịch sử net worth</h4>
+      <p *ngIf="!snapshots.length" class="text-sm text-slate-500">Chưa có dữ liệu snapshot.</p>
+
+      <table *ngIf="snapshots.length" class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="text-left border-b">
+            <th class="py-2 pr-3 font-medium">As-of</th>
+            <th class="py-2 pr-3 font-medium">Net worth</th>
+            <th class="py-2 pr-3 font-medium">Cash</th>
+            <th class="py-2 pr-3 font-medium">Liabilities</th>
+            <th class="py-2 pr-3 font-medium">Đổi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of snapshots" class="border-b">
+            <td class="py-2 pr-3">{{ item.asOfAt | date: 'short' }}</td>
+            <td class="py-2 pr-3">{{ item.netWorth }} {{ item.baseCurrency }}</td>
+            <td class="py-2 pr-3">{{ item.cash }} {{ item.baseCurrency }}</td>
+            <td class="py-2 pr-3">{{ item.liabilities }} {{ item.baseCurrency }}</td>
+            <td class="py-2 pr-3">{{ formatChange(item.netWorthChange) }} {{ item.baseCurrency }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <button
+        *ngIf="nextCursor"
+        type="button"
+        class="mt-3 rounded-lg border px-4 py-2"
+        (click)="loadMoreSnapshots()"
+      >
+        Xem thêm
+      </button>
+      <p *ngIf="snapshotLoading" class="mt-2 text-sm text-slate-500">Đang tải...</p>
+    </div>
+  </div>
+</section>

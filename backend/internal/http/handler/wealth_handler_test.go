@@ -1,0 +1,1751 @@
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"wealthos-backend/internal/config"
+	"wealthos-backend/internal/domain"
+	"wealthos-backend/internal/service"
+	"wealthos-backend/internal/storage"
+)
+
+func TestRequireEditorRoleBlocksViewer(t *testing.T) {
+	h := &WealthHandler{}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c.Set("workspace_id", "ws-1")
+	c.Set("workspace_role", "viewer")
+
+	if h.requireEditorRole(c) {
+		t.Fatalf("expected viewer role to be rejected")
+	}
+	if w.Result().StatusCode != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d", w.Result().StatusCode)
+	}
+}
+
+func TestRequireEditorRoleAllowsEditorAndOwner(t *testing.T) {
+	t.Run("editor", func(t *testing.T) {
+		h := &WealthHandler{}
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+		c.Set("workspace_id", "ws-1")
+		c.Set("workspace_role", "editor")
+		if !h.requireEditorRole(c) {
+			t.Fatalf("expected editor role to be allowed")
+		}
+	})
+
+	t.Run("owner", func(t *testing.T) {
+		h := &WealthHandler{}
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+		c.Set("workspace_id", "ws-1")
+		c.Set("workspace_role", "owner")
+		if !h.requireEditorRole(c) {
+			t.Fatalf("expected owner role to be allowed")
+		}
+	})
+}
+
+func TestRequireEditorRoleRejectsMissingRole(t *testing.T) {
+	h := &WealthHandler{}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c.Set("workspace_id", "ws-1")
+
+	if h.requireEditorRole(c) {
+		t.Fatalf("expected missing role to be rejected")
+	}
+	if w.Result().StatusCode != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d", w.Result().StatusCode)
+	}
+}
+
+func TestRequireOwnerRoleOnlyAllowsOwner(t *testing.T) {
+	t.Run("owner", func(t *testing.T) {
+		h := &WealthHandler{}
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+		c.Set("workspace_id", "ws-1")
+		c.Set("workspace_role", "owner")
+		if !h.requireOwnerRole(c) {
+			t.Fatalf("expected owner role to be allowed")
+		}
+	})
+
+	t.Run("editor", func(t *testing.T) {
+		h := &WealthHandler{}
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+		c.Set("workspace_id", "ws-1")
+		c.Set("workspace_role", "editor")
+		if h.requireOwnerRole(c) {
+			t.Fatalf("expected editor role to be rejected")
+		}
+		if w.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", w.Result().StatusCode)
+		}
+	})
+
+	t.Run("viewer", func(t *testing.T) {
+		h := &WealthHandler{}
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+		c.Set("workspace_id", "ws-1")
+		c.Set("workspace_role", "viewer")
+		if h.requireOwnerRole(c) {
+			t.Fatalf("expected viewer role to be rejected")
+		}
+		if w.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", w.Result().StatusCode)
+		}
+	})
+}
+
+func TestListPortfolioSnapshotsRejectsInvalidLimit(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	p, ok := store.FirstPortfolio(ws.ID)
+	if !ok {
+		t.Fatalf("missing portfolio")
+	}
+
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	r := gin.New()
+	r.GET("/portfolios/:id/snapshots", h.ListPortfolioSnapshots)
+
+	req := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/snapshots?limit=bad", nil)
+	req.Header.Set("x-workspace-id", string(ws.ID))
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+
+	if got, want := resp.Result().StatusCode, http.StatusBadRequest; got != want {
+		t.Fatalf("expected %d, got %d", want, got)
+	}
+}
+
+func TestListPortfolioSnapshotsSupportsPagination(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	p, ok := store.FirstPortfolio(ws.ID)
+	if !ok {
+		t.Fatalf("missing portfolio")
+	}
+	acc, err := store.CreateAccount(domain.Account{
+		WorkspaceID: ws.ID,
+		PortfolioID: p.ID,
+		Name:        "Main",
+		Type:        "cash",
+		Currency:    "VND",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	svc := service.NewWealthService(store)
+	for i := 0; i < 4; i++ {
+		_, err := store.CreateTransaction(domain.Transaction{
+			WorkspaceID: ws.ID,
+			AccountID:   acc.ID,
+			Type:        domain.TransactionTypeIncome,
+			Amount:      "10.00",
+			Currency:    "VND",
+			OccurredAt:  time.Now().UTC(),
+			Status:      domain.TransactionStatusPosted,
+		})
+		if err != nil {
+			t.Fatalf("create tx %d: %v", i, err)
+		}
+		if _, err := svc.GetPortfolioNetWorth(string(p.ID)); err != nil {
+			t.Fatalf("compute net worth %d: %v", i, err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	h := NewWealthHandler(store, svc, nil)
+	r := gin.New()
+	r.GET("/portfolios/:id/snapshots", h.ListPortfolioSnapshots)
+
+	req1 := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/snapshots?limit=3", nil)
+	req1.Header.Set("x-workspace-id", string(ws.ID))
+	resp1 := httptest.NewRecorder()
+	r.ServeHTTP(resp1, req1)
+
+	if resp1.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 first page, got %d", resp1.Result().StatusCode)
+	}
+	var page1 struct {
+		Items      []service.NetWorthResult `json:"items"`
+		NextCursor string                   `json:"nextCursor"`
+	}
+	if err := json.NewDecoder(resp1.Result().Body).Decode(&page1); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(page1.Items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(page1.Items))
+	}
+	if page1.NextCursor == "" {
+		t.Fatalf("expected next cursor")
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/snapshots?limit=3&cursor="+url.QueryEscape(page1.NextCursor), nil)
+	req2.Header.Set("x-workspace-id", string(ws.ID))
+	resp2 := httptest.NewRecorder()
+	r.ServeHTTP(resp2, req2)
+
+	if resp2.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 second page, got %d", resp2.Result().StatusCode)
+	}
+	var page2 struct {
+		Items      []service.NetWorthResult `json:"items"`
+		NextCursor string                   `json:"nextCursor"`
+	}
+	if err := json.NewDecoder(resp2.Result().Body).Decode(&page2); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(page2.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(page2.Items))
+	}
+	if page2.NextCursor != "" {
+		t.Fatalf("expected no next cursor on final page")
+	}
+}
+
+func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	p, ok := store.FirstPortfolio(ws.ID)
+	if !ok {
+		t.Fatalf("missing portfolio")
+	}
+	acc, err := store.CreateAccount(domain.Account{
+		WorkspaceID: ws.ID,
+		PortfolioID: p.ID,
+		Name:        "Main",
+		Type:        "cash",
+		Currency:    "VND",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	now := time.Now().UTC()
+	_, err = store.CreateTransaction(domain.Transaction{
+		WorkspaceID: ws.ID,
+		AccountID:   acc.ID,
+		CategoryID:  "salary",
+		Type:        domain.TransactionTypeExpense,
+		Amount:      "10.00",
+		Currency:    "VND",
+		OccurredAt:  now.Add(-3 * time.Hour),
+		Status:      domain.TransactionStatusPosted,
+		Note:        "coffee",
+	})
+	if err != nil {
+		t.Fatalf("create tx1: %v", err)
+	}
+	_, err = store.CreateTransaction(domain.Transaction{
+		WorkspaceID: ws.ID,
+		AccountID:   acc.ID,
+		CategoryID:  "bonus",
+		Type:        domain.TransactionTypeIncome,
+		Amount:      "20.00",
+		Currency:    "VND",
+		OccurredAt:  now.Add(-2 * time.Hour),
+		Status:      domain.TransactionStatusPosted,
+		Note:        "monthly salary",
+	})
+	if err != nil {
+		t.Fatalf("create tx2: %v", err)
+	}
+	_, err = store.CreateTransaction(domain.Transaction{
+		WorkspaceID: ws.ID,
+		AccountID:   acc.ID,
+		CategoryID:  "salary",
+		Type:        domain.TransactionTypeExpense,
+		Amount:      "30.00",
+		Currency:    "VND",
+		OccurredAt:  now.Add(-1 * time.Hour),
+		Status:      domain.TransactionStatusPending,
+		Note:        "bonus",
+	})
+	if err != nil {
+		t.Fatalf("create tx3: %v", err)
+	}
+
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	r := gin.New()
+	r.GET("/transactions", h.ListTransactions)
+
+	type pageResp struct {
+		Items      []domain.Transaction `json:"items"`
+		NextCursor string               `json:"nextCursor"`
+	}
+
+	req1 := httptest.NewRequest(http.MethodGet, "/transactions?limit=2&accountId="+string(acc.ID), nil)
+	req1.Header.Set("x-workspace-id", string(ws.ID))
+	resp1 := httptest.NewRecorder()
+	r.ServeHTTP(resp1, req1)
+	if got, want := resp1.Result().StatusCode, http.StatusOK; got != want {
+		t.Fatalf("expected status %d, got %d", want, got)
+	}
+	var p1 pageResp
+	if err := json.NewDecoder(resp1.Result().Body).Decode(&p1); err != nil {
+		t.Fatalf("decode page1: %v", err)
+	}
+	if len(p1.Items) != 2 {
+		t.Fatalf("expected 2 items on first page, got %d", len(p1.Items))
+	}
+	if p1.NextCursor == "" {
+		t.Fatalf("expected next cursor")
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/transactions?limit=2&accountId="+string(acc.ID)+"&cursor="+url.QueryEscape(p1.NextCursor), nil)
+	req2.Header.Set("x-workspace-id", string(ws.ID))
+	resp2 := httptest.NewRecorder()
+	r.ServeHTTP(resp2, req2)
+	if got, want := resp2.Result().StatusCode, http.StatusOK; got != want {
+		t.Fatalf("expected status %d, got %d", want, got)
+	}
+	var p2 pageResp
+	if err := json.NewDecoder(resp2.Result().Body).Decode(&p2); err != nil {
+		t.Fatalf("decode page2: %v", err)
+	}
+	if len(p2.Items) != 1 {
+		t.Fatalf("expected 1 item on final page, got %d", len(p2.Items))
+	}
+	if p2.NextCursor != "" {
+		t.Fatalf("expected no next cursor on final page")
+	}
+
+	req3 := httptest.NewRequest(http.MethodGet, "/transactions?type=income&accountId="+string(acc.ID)+"&limit=10", nil)
+	req3.Header.Set("x-workspace-id", string(ws.ID))
+	resp3 := httptest.NewRecorder()
+	r.ServeHTTP(resp3, req3)
+	var p3 pageResp
+	if got, want := resp3.Result().StatusCode, http.StatusOK; got != want {
+		t.Fatalf("expected status %d, got %d", want, got)
+	}
+	if err := json.NewDecoder(resp3.Result().Body).Decode(&p3); err != nil {
+		t.Fatalf("decode page3: %v", err)
+	}
+	if len(p3.Items) != 1 {
+		t.Fatalf("expected only income transaction, got %d", len(p3.Items))
+	}
+	if p3.Items[0].Type != domain.TransactionTypeIncome {
+		t.Fatalf("expected income, got %s", p3.Items[0].Type)
+	}
+
+	req4 := httptest.NewRequest(http.MethodGet, "/transactions?search=salary&accountId="+string(acc.ID)+"&limit=10", nil)
+	req4.Header.Set("x-workspace-id", string(ws.ID))
+	resp4 := httptest.NewRecorder()
+	r.ServeHTTP(resp4, req4)
+	var p4 pageResp
+	if got, want := resp4.Result().StatusCode, http.StatusOK; got != want {
+		t.Fatalf("expected status %d, got %d", want, got)
+	}
+	if err := json.NewDecoder(resp4.Result().Body).Decode(&p4); err != nil {
+		t.Fatalf("decode page4: %v", err)
+	}
+	if len(p4.Items) != 3 {
+		t.Fatalf("expected 3 transactions with salary in note or category, got %d", len(p4.Items))
+	}
+}
+
+func TestListTransactionsRejectsInvalidCursor(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	r := gin.New()
+	r.GET("/transactions", h.ListTransactions)
+
+	req := httptest.NewRequest(http.MethodGet, "/transactions?cursor=bad-cursor", nil)
+	req.Header.Set("x-workspace-id", string(ws.ID))
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+
+	if resp.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Result().StatusCode)
+	}
+}
+
+func TestGetPortfolioNetWorthSupportsAsOfQuery(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	p, ok := store.FirstPortfolio(ws.ID)
+	if !ok {
+		t.Fatalf("missing default portfolio")
+	}
+	acc, err := store.CreateAccount(domain.Account{
+		WorkspaceID: ws.ID,
+		PortfolioID: p.ID,
+		Name:        "Main",
+		Type:        "cash",
+		Currency:    "VND",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	prop, err := store.CreateProperty(domain.Property{
+		WorkspaceID: ws.ID,
+		PortfolioID: p.ID,
+		Name:        "Villa",
+		Address:     "HCM",
+	})
+	if err != nil {
+		t.Fatalf("create property: %v", err)
+	}
+	base := time.Date(2026, time.July, 15, 8, 0, 0, 0, time.UTC)
+	_, err = store.AddPropertyValuation(domain.PropertyValuation{
+		PropertyID:  prop.ID,
+		Amount:      "1000.00",
+		Currency:    "VND",
+		Source:      "manual",
+		EffectiveAt: base,
+	})
+	if err != nil {
+		t.Fatalf("add property valuation early: %v", err)
+	}
+	_, err = store.AddPropertyValuation(domain.PropertyValuation{
+		PropertyID:  prop.ID,
+		Amount:      "2000.00",
+		Currency:    "VND",
+		Source:      "manual",
+		EffectiveAt: base.AddDate(0, 0, 4),
+	})
+	if err != nil {
+		t.Fatalf("add property valuation late: %v", err)
+	}
+
+	_, err = store.CreateTransaction(domain.Transaction{
+		WorkspaceID: ws.ID,
+		AccountID:   acc.ID,
+		PortfolioID: p.ID,
+		Type:        domain.TransactionTypeIncome,
+		Amount:      "500.00",
+		Currency:    "VND",
+		OccurredAt:  base.AddDate(0, 0, 2),
+		Status:      domain.TransactionStatusPosted,
+	})
+	if err != nil {
+		t.Fatalf("create first income tx: %v", err)
+	}
+	_, err = store.CreateTransaction(domain.Transaction{
+		WorkspaceID: ws.ID,
+		AccountID:   acc.ID,
+		PortfolioID: p.ID,
+		Type:        domain.TransactionTypeIncome,
+		Amount:      "250.00",
+		Currency:    "VND",
+		OccurredAt:  base.AddDate(0, 0, 6),
+		Status:      domain.TransactionStatusPosted,
+	})
+	if err != nil {
+		t.Fatalf("create second income tx: %v", err)
+	}
+
+	svc := service.NewWealthService(store)
+	h := NewWealthHandler(store, svc, nil)
+	r := gin.New()
+	r.GET("/portfolios/:id/net-worth", h.GetPortfolioNetWorth)
+
+	req := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/net-worth?asOf="+base.AddDate(0, 0, 3).Format(time.RFC3339), nil)
+	req.Header.Set("x-workspace-id", string(ws.ID))
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+
+	if got, want := resp.Result().StatusCode, http.StatusOK; got != want {
+		t.Fatalf("expected status %d, got %d", want, got)
+	}
+	var out service.NetWorthResult
+	if err := json.NewDecoder(resp.Result().Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.NetWorth != "1500.00" {
+		t.Fatalf("expected as-of net worth 1500.00, got %s", out.NetWorth)
+	}
+
+	reqInvalid := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/net-worth?asOf=not-a-date", nil)
+	reqInvalid.Header.Set("x-workspace-id", string(ws.ID))
+	respInvalid := httptest.NewRecorder()
+	r.ServeHTTP(respInvalid, reqInvalid)
+	if got, want := respInvalid.Result().StatusCode, http.StatusBadRequest; got != want {
+		t.Fatalf("expected bad request for invalid asOf, got %d", got)
+	}
+}
+
+func TestParseAsOfSupportsFlexibleInputFormats(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "rfc3339 seconds",
+			input:    "2026-07-22T10:00:00Z",
+			expected: "2026-07-22 10:00:00 +0000 UTC",
+		},
+		{
+			name:     "rfc3339 without seconds",
+			input:    "2026-07-22T10:00Z",
+			expected: "2026-07-22 10:00:00 +0000 UTC",
+		},
+		{
+			name:     "datetime with local separator",
+			input:    "2026-07-22 10:00:00",
+			expected: "2026-07-22 10:00:00 +0000 UTC",
+		},
+		{
+			name:     "date only",
+			input:    "2026-07-22",
+			expected: "2026-07-22 00:00:00 +0000 UTC",
+		},
+		{
+			name:     "rfc3339 with timezone offset",
+			input:    "2026-07-22T14:00:00+07:00",
+			expected: "2026-07-22 07:00:00 +0000 UTC",
+		},
+		{
+			name:     "unix timestamp",
+			input:    "1690080000",
+			expected: "2023-07-23 02:40:00 +0000 UTC",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseAsOf(tc.input)
+			if err != nil {
+				t.Fatalf("parseAsOf %q error: %v", tc.input, err)
+			}
+			if got.Format("2006-01-02 15:04:05 -0700 MST") != tc.expected {
+				t.Fatalf("for %q expected %s, got %s", tc.input, tc.expected, got.Format("2006-01-02 15:04:05 -0700 MST"))
+			}
+		})
+	}
+}
+
+func TestParseDateFilterRejectsInvalidInput(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		got := parseDateFilter("2026-07-22 10:00")
+		if got.IsZero() {
+			t.Fatal("expected valid date to parse")
+		}
+	})
+	t.Run("invalid", func(t *testing.T) {
+		got := parseDateFilter("invalid-date")
+		if !got.IsZero() {
+			t.Fatalf("expected zero for invalid date, got %s", got.Format(time.RFC3339))
+		}
+	})
+}
+
+func TestListAssistantCommandsFiltersByWorkspace(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws1, err := store.CreateWorkspace("Workspace 1", "VND", userID)
+	if err != nil {
+		t.Fatalf("create workspace 1: %v", err)
+	}
+	ws2, err := store.CreateWorkspace("Workspace 2", "VND", userID)
+	if err != nil {
+		t.Fatalf("create workspace 2: %v", err)
+	}
+	store.SeedDemoUser("other@x.com", "Another", "pass")
+
+	_, err = store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws1.ID,
+		UserID:      userID,
+		Command:     "cmd ws1",
+	})
+	if err != nil {
+		t.Fatalf("create ws1 command: %v", err)
+	}
+	_, err = store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws2.ID,
+		UserID:      userID,
+		Command:     "cmd ws2",
+	})
+	if err != nil {
+		t.Fatalf("create ws2 command: %v", err)
+	}
+
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	r := gin.New()
+	r.GET("/assistant/commands", h.ListAssistantCommands)
+
+	req := httptest.NewRequest(http.MethodGet, "/assistant/commands", nil)
+	req.Header.Set("x-workspace-id", string(ws1.ID))
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+
+	if resp.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Result().StatusCode)
+	}
+	var commands []domain.AssistantCommand
+	if err := json.NewDecoder(resp.Result().Body).Decode(&commands); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("expected only commands for selected workspace, got %d", len(commands))
+	}
+	if string(commands[0].WorkspaceID) != string(ws1.ID) {
+		t.Fatalf("expected workspace %s, got %s", ws1.ID, commands[0].WorkspaceID)
+	}
+}
+
+func TestTelegramWebhookRejectsInvalidSecret(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+		TelegramWebhookSecret: "top-secret",
+	})
+	r := gin.New()
+	r.POST("/assistant/telegram/webhook", h.TelegramWebhook)
+
+	body := `{"message":{"text":"open chrome"}}`
+	req := httptest.NewRequest(http.MethodPost, "/assistant/telegram/webhook", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+
+	if resp.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.Result().StatusCode)
+	}
+}
+
+func TestTelegramWebhookCreatesAssistantCommandForLinkedWorkspace(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+
+	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+		TelegramWebhookSecret: "top-secret",
+	})
+	r := gin.New()
+	r.POST("/assistant/telegram/webhook", h.TelegramWebhook)
+
+	body := `{"message":{"text":"tÃ£o mÃ´i lÃ©nh"},"workspaceId":"` + string(ws.ID) + `","update_id":1}`
+	req := httptest.NewRequest(http.MethodPost, "/assistant/telegram/webhook", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "top-secret")
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+
+	if resp.Result().StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.Result().StatusCode)
+	}
+
+	var out struct {
+		Status      string `json:"status"`
+		CommandID   string `json:"commandId"`
+		WorkspaceID string `json:"workspaceId"`
+	}
+	if err := json.NewDecoder(resp.Result().Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Status != "received" {
+		t.Fatalf("expected received status, got %q", out.Status)
+	}
+	if out.WorkspaceID != string(ws.ID) {
+		t.Fatalf("expected workspace %s, got %s", ws.ID, out.WorkspaceID)
+	}
+	if out.CommandID == "" {
+		t.Fatalf("expected command id")
+	}
+
+	commands := store.ListAssistantCommands(ws.ID)
+	if len(commands) != 1 {
+		t.Fatalf("expected command to be persisted, got %d", len(commands))
+	}
+}
+
+func TestTelegramWebhookRequiresWorkspaceLink(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+		TelegramWebhookSecret: "top-secret",
+	})
+	r := gin.New()
+	r.POST("/assistant/telegram/webhook", h.TelegramWebhook)
+
+	body := `{"message":{"text":"open chrome"}}`
+	req := httptest.NewRequest(http.MethodPost, "/assistant/telegram/webhook", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "top-secret")
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+
+	if resp.Result().StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.Result().StatusCode)
+	}
+}
+
+func TestCreateAssistantCommandSetsIntentAndStatus(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ownerID := domain.ID(userID)
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+
+	cases := []struct {
+		name       string
+		command    string
+		plan       string
+		wantStatus string
+		wantPlan   string
+	}{
+		{name: "read intent", command: "show my balance", plan: "", wantStatus: assistantStatusPlanned, wantPlan: assistantIntentRead},
+		{name: "write intent", command: "add new transaction", plan: "", wantStatus: assistantStatusAwaitingApproval, wantPlan: assistantIntentWrite},
+		{name: "external intent", command: "open chrome", plan: "", wantStatus: assistantStatusAwaitingApproval, wantPlan: assistantIntentExternalAction},
+		{name: "draft intent", command: "prepare a draft scenario", plan: "", wantStatus: assistantStatusPlanned, wantPlan: assistantIntentDraft},
+		{name: "blocked intent", command: "delete all data", plan: "", wantStatus: assistantStatusRejected, wantPlan: assistantIntentBlocked},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"command":"` + tc.command + `","plan":"` + tc.plan + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/assistant/commands", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			resp := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(resp)
+			c.Request = req
+			c.Set("workspace_id", string(ws.ID))
+			c.Set("workspace_role", "owner")
+			c.Set("user_id", string(ownerID))
+			h := NewWealthHandler(store, service.NewWealthService(store), nil)
+			h.CreateAssistantCommand(c)
+
+			if resp.Result().StatusCode != http.StatusCreated {
+				t.Fatalf("expected 201, got %d", resp.Result().StatusCode)
+			}
+			var out domain.AssistantCommand
+			if err := json.NewDecoder(resp.Result().Body).Decode(&out); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if out.Status != tc.wantStatus {
+				t.Fatalf("expected status %s, got %s", tc.wantStatus, out.Status)
+			}
+			if out.Plan != tc.wantPlan {
+				t.Fatalf("expected plan %s, got %s", tc.wantPlan, out.Plan)
+			}
+		})
+	}
+}
+
+func TestApproveCommandTransitions(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ownerID := domain.ID(userID)
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws.ID,
+		UserID:      ownerID,
+		Command:     "open chrome",
+		Status:      assistantStatusAwaitingApproval,
+		Plan:        assistantIntentExternalAction,
+		ApprovalID:  "manual-appr-id",
+	})
+	if err != nil {
+		t.Fatalf("create assistant command: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/assistant/commands/"+string(cmd.ID)+"/approve?approvalId="+string(cmd.ApprovalID), nil)
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(resp)
+	c.Request = req
+	c.Params = gin.Params{{Key: "id", Value: string(cmd.ID)}}
+	c.Set("workspace_id", string(ws.ID))
+	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ownerID))
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h.ApproveCommand(c)
+
+	var out domain.AssistantCommand
+	if err := json.NewDecoder(resp.Result().Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if resp.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Result().StatusCode)
+	}
+	if out.Status != assistantStatusDispatched {
+		t.Fatalf("expected status %s, got %s", assistantStatusDispatched, out.Status)
+	}
+	if out.ApprovalID != "" {
+		t.Fatalf("expected approval id to be consumed/cleared, got %q", out.ApprovalID)
+	}
+}
+
+func TestApproveCommandRejectsInvalidTransition(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ownerID := domain.ID(userID)
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws.ID,
+		UserID:      ownerID,
+		Command:     "list recent expenses",
+		Status:      assistantStatusPlanned,
+		Plan:        assistantIntentRead,
+	})
+	if err != nil {
+		t.Fatalf("create assistant command: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/assistant/commands/"+string(cmd.ID)+"/approve", nil)
+	resp := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(resp)
+	c.Request = req
+	c.Params = gin.Params{{Key: "id", Value: string(cmd.ID)}}
+	c.Set("workspace_id", string(ws.ID))
+	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ownerID))
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h.ApproveCommand(c)
+
+	if resp.Result().StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", resp.Result().StatusCode)
+	}
+}
+
+func TestCancelCommandTransitionsAndTerminalRules(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ownerID := domain.ID(userID)
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+
+	allow, err := store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws.ID,
+		UserID:      ownerID,
+		Command:     "list recent expenses",
+		Status:      assistantStatusPlanned,
+		Plan:        assistantIntentRead,
+	})
+	if err != nil {
+		t.Fatalf("create assistant command: %v", err)
+	}
+	completed, err := store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws.ID,
+		UserID:      ownerID,
+		Command:     "list recent expenses",
+		Status:      assistantStatusCompleted,
+		Plan:        assistantIntentRead,
+	})
+	if err != nil {
+		t.Fatalf("create assistant command: %v", err)
+	}
+
+	t.Run("cancel allowed state", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/assistant/commands/"+string(allow.ID)+"/cancel", nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Params = gin.Params{{Key: "id", Value: string(allow.ID)}}
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ownerID))
+		h := NewWealthHandler(store, service.NewWealthService(store), nil)
+		h.CancelCommand(c)
+
+		if resp.Result().StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.Result().StatusCode)
+		}
+		var out domain.AssistantCommand
+		if err := json.NewDecoder(resp.Result().Body).Decode(&out); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if out.Status != assistantStatusCancelled {
+			t.Fatalf("expected status %s, got %s", assistantStatusCancelled, out.Status)
+		}
+	})
+
+	t.Run("cancel blocked state", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/assistant/commands/"+string(completed.ID)+"/cancel", nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Params = gin.Params{{Key: "id", Value: string(completed.ID)}}
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ownerID))
+		h := NewWealthHandler(store, service.NewWealthService(store), nil)
+		h.CancelCommand(c)
+
+		if resp.Result().StatusCode != http.StatusConflict {
+			t.Fatalf("expected 409, got %d", resp.Result().StatusCode)
+		}
+	})
+}
+
+func TestApproveCommandRejectsReplayToken(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ownerID := domain.ID(userID)
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws.ID,
+		UserID:      ownerID,
+		Command:     "open chrome",
+		Status:      assistantStatusAwaitingApproval,
+		Plan:        assistantIntentExternalAction,
+	})
+	if err != nil {
+		t.Fatalf("create assistant command: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+
+	approveReq := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/assistant/commands/"+string(cmd.ID)+"/approve?approvalId="+string(cmd.ApprovalID), nil)
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Params = gin.Params{{Key: "id", Value: string(cmd.ID)}}
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ownerID))
+		h.ApproveCommand(c)
+		return resp
+	}
+
+	resp1 := approveReq()
+	if resp1.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected first approval 200, got %d", resp1.Result().StatusCode)
+	}
+
+	resp2 := approveReq()
+	if resp2.Result().StatusCode != http.StatusConflict {
+		t.Fatalf("expected second approval to be rejected, got %d", resp2.Result().StatusCode)
+	}
+}
+
+func TestTelegramApprovalCallbackSingleUse(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws.ID,
+		UserID:      domain.ID("9999999"),
+		Command:     "open chrome",
+		Status:      assistantStatusAwaitingApproval,
+		Plan:        assistantIntentExternalAction,
+	})
+	if err != nil {
+		t.Fatalf("create assistant command: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+		TelegramWebhookSecret: "top-secret",
+	})
+	r := gin.New()
+	r.POST("/assistant/telegram/webhook", h.TelegramWebhook)
+
+	payload := `{"callback_query":{"data":"approve:` + string(cmd.ID) + `:` + cmd.ApprovalID + `","from":{"id":9999999},"message":{"chat":{"id":11},"from":{"id":9999999}},"id":"cb-1"},"workspaceId":"` + string(ws.ID) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/assistant/telegram/webhook", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "top-secret")
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+	if resp.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 first callback approval, got %d", resp.Result().StatusCode)
+	}
+
+	resp2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/assistant/telegram/webhook", strings.NewReader(payload))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-Telegram-Bot-Api-Secret-Token", "top-secret")
+	r.ServeHTTP(resp2, req2)
+	if resp2.Result().StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 on replayed callback approval, got %d", resp2.Result().StatusCode)
+	}
+}
+
+func TestExecutorEventsChecksSecretAndTransitionMapping(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", userID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws.ID,
+		UserID:      userID,
+		Command:     "open chrome",
+		Status:      assistantStatusPlanned,
+		Plan:        assistantIntentExternalAction,
+	})
+	if err != nil {
+		t.Fatalf("create assistant command: %v", err)
+	}
+	completedCmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
+		WorkspaceID: ws.ID,
+		UserID:      userID,
+		Command:     "open chrome",
+		Status:      assistantStatusCompleted,
+		Plan:        assistantIntentExternalAction,
+	})
+	if err != nil {
+		t.Fatalf("create assistant command: %v", err)
+	}
+
+	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+		HermesExecutorSecret: "hermes-secret",
+	})
+	cases := []struct {
+		name          string
+		requestID     string
+		commandID     domain.ID
+		payloadStatus string
+		wantStatus    string
+		wantCode      int
+	}{
+		{name: "invalid secret", requestID: "exec-1", commandID: cmd.ID, payloadStatus: "completed", wantCode: http.StatusUnauthorized},
+		{name: "accepted maps to dispatched", requestID: "exec-1", commandID: cmd.ID, payloadStatus: "accepted", wantStatus: assistantStatusDispatched, wantCode: http.StatusOK},
+		{name: "running maps from started", requestID: "exec-1", commandID: cmd.ID, payloadStatus: "started", wantStatus: assistantStatusRunning, wantCode: http.StatusOK},
+		{name: "terminal idempotency", requestID: "exec-2", commandID: completedCmd.ID, payloadStatus: "completed", wantStatus: assistantStatusCompleted, wantCode: http.StatusOK},
+		{name: "invalid event status", requestID: "exec-3", commandID: cmd.ID, payloadStatus: "this-is-not-a-status", wantCode: http.StatusBadRequest},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := `{"commandId":"` + string(tc.commandID) + `","status":"` + tc.payloadStatus + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/assistant/executors/"+tc.requestID+"/events", strings.NewReader(payload))
+			req.Header.Set("Content-Type", "application/json")
+			if tc.name != "invalid secret" {
+				req.Header.Set("X-Hermes-Secret", "hermes-secret")
+			}
+			resp := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(resp)
+			c.Request = req
+			c.Params = gin.Params{{Key: "id", Value: tc.requestID}}
+			h.ExecutorEvents(c)
+
+			if resp.Result().StatusCode != tc.wantCode {
+				t.Fatalf("expected %d, got %d", tc.wantCode, resp.Result().StatusCode)
+			}
+			if tc.wantCode != http.StatusOK {
+				return
+			}
+
+			var out struct {
+				Status string `json:"status"`
+			}
+			if err := json.NewDecoder(resp.Result().Body).Decode(&out); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if out.Status != tc.wantStatus {
+				t.Fatalf("expected status %s, got %s", tc.wantStatus, out.Status)
+			}
+		})
+	}
+}
+
+func TestCreateSePayConnectionReturnsConnectUrlAndPersistedState(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/integrations/sepay/connect", strings.NewReader(`{"provider":"sepay","scope":"read_transactions"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Host = "app.local:8443"
+	resp := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(resp)
+	c.Request = req
+	c.Set("workspace_id", string(ws.ID))
+	c.Set("workspace_role", "owner")
+
+	h.CreateSePayConnection(c)
+
+	if resp.Result().StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.Result().StatusCode)
+	}
+
+	var out struct {
+		ConnectionID  string `json:"connectionId"`
+		Provider      string `json:"provider"`
+		Scope         string `json:"scope"`
+		ExternalID    string `json:"externalId"`
+		CallbackState string `json:"callbackState"`
+		ConnectURL    string `json:"connectUrl"`
+	}
+	if err := json.NewDecoder(resp.Result().Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.ConnectionID == "" {
+		t.Fatalf("expected connectionId")
+	}
+	if out.Provider != sepayDefaultProvider {
+		t.Fatalf("expected provider %q, got %q", sepayDefaultProvider, out.Provider)
+	}
+	if out.Scope != sepayDefaultReadScope {
+		t.Fatalf("expected scope %q, got %q", sepayDefaultReadScope, out.Scope)
+	}
+	if out.ExternalID == "" {
+		t.Fatalf("expected externalId")
+	}
+	if out.CallbackState == "" {
+		t.Fatalf("expected callbackState")
+	}
+	if out.ConnectURL == "" {
+		t.Fatalf("expected connectUrl")
+	}
+
+	u, err := url.Parse(out.ConnectURL)
+	if err != nil {
+		t.Fatalf("invalid connectUrl: %v", err)
+	}
+	if u.Path != sepayCallbackPath {
+		t.Fatalf("expected callback path %q, got %q", sepayCallbackPath, u.Path)
+	}
+	if u.Query().Get("state") != out.CallbackState {
+		t.Fatalf("expected callback state in connectUrl")
+	}
+
+	conn, ok := store.GetBankConnection(domain.ID(out.ConnectionID))
+	if !ok {
+		t.Fatalf("expected persisted bank connection")
+	}
+	if conn.CallbackState != out.CallbackState {
+		t.Fatalf("expected persisted callback state, got %q", conn.CallbackState)
+	}
+	if conn.ExternalID != out.ExternalID {
+		t.Fatalf("expected persisted externalId %q, got %q", out.ExternalID, conn.ExternalID)
+	}
+}
+
+func TestSePayCallbackStrictStateValidation(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	conn, err := store.CreateBankConnection(domain.BankConnection{
+		WorkspaceID:   ws.ID,
+		Provider:      sepayDefaultProvider,
+		Scope:         sepayDefaultReadScope,
+		ExternalID:    "ext",
+		CallbackState: "known-state",
+		SyncStatus:    "idle",
+	})
+	if err != nil {
+		t.Fatalf("create bank connection: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+
+	t.Run("missing_state", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/integrations/sepay/callback?connectionId="+string(conn.ID), nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		h.SePayCallback(c)
+		if resp.Result().StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400 for missing state, got %d", resp.Result().StatusCode)
+		}
+	})
+
+	t.Run("unknown_state", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/integrations/sepay/callback?state=unknown", nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		h.SePayCallback(c)
+		if resp.Result().StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404 for unknown state, got %d", resp.Result().StatusCode)
+		}
+	})
+
+	t.Run("valid_state_updates_connection", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/integrations/sepay/callback?state="+conn.CallbackState+"&connectionId="+string(conn.ID), nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		h.SePayCallback(c)
+		if resp.Result().StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for valid state, got %d", resp.Result().StatusCode)
+		}
+		refreshed, ok := store.GetBankConnection(conn.ID)
+		if !ok {
+			t.Fatalf("expected bank connection after callback")
+		}
+		if refreshed.SyncStatus != "callback" {
+			t.Fatalf("expected sync status callback, got %q", refreshed.SyncStatus)
+		}
+		if refreshed.LastSyncedAt.IsZero() {
+			t.Fatalf("expected lastSyncedAt to be set")
+		}
+		if refreshed.CallbackState != conn.CallbackState {
+			t.Fatalf("expected callbackState %q, got %q", conn.CallbackState, refreshed.CallbackState)
+		}
+	})
+}
+
+func TestSyncBankConnectionRateLimitsAndCooldown(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	conn, err := store.CreateBankConnection(domain.BankConnection{
+		WorkspaceID: ws.ID,
+		Provider:    sepayDefaultProvider,
+		Scope:       sepayDefaultReadScope,
+		ExternalID:  "ext",
+		SyncStatus:  "idle",
+	})
+	if err != nil {
+		t.Fatalf("create bank connection: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+
+	request := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-connections/"+string(conn.ID)+"/sync", nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "owner")
+		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
+		h.SyncBankConnection(c)
+		return resp.Result().StatusCode
+	}
+
+	if status := request(); status != http.StatusAccepted {
+		t.Fatalf("first sync expected 202, got %d", status)
+	}
+	if status := request(); status != http.StatusTooManyRequests {
+		t.Fatalf("second sync expected 429, got %d", status)
+	}
+
+	_ = store.UpdateBankConnection(conn.ID, func(item *domain.BankConnection) {
+		item.LastSyncRequestedAt = time.Now().UTC().Add(-(sepayMinSyncCooldown + 2*time.Second))
+	})
+
+	if status := request(); status != http.StatusAccepted {
+		t.Fatalf("sync after cooldown expected 202, got %d", status)
+	}
+
+	refreshed, _ := store.GetBankConnection(conn.ID)
+	if refreshed == nil {
+		t.Fatalf("expected persisted connection")
+	}
+	if time.Since(refreshed.LastSyncRequestedAt) > 5*time.Second {
+		t.Fatalf("expected lastSyncRequestedAt updated after cooldown check")
+	}
+}
+
+func TestCreateSePayConnectionRequiresOwnerRole(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+
+	t.Run("viewer_rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/integrations/sepay/connect", strings.NewReader(`{"provider":"sepay","scope":"read_transactions"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(ownerID))
+		h.CreateSePayConnection(c)
+		if resp.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Result().StatusCode)
+		}
+	})
+
+	t.Run("editor_rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/integrations/sepay/connect", strings.NewReader(`{"provider":"sepay","scope":"read_transactions"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "editor")
+		c.Set("user_id", string(ownerID))
+		h.CreateSePayConnection(c)
+		if resp.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Result().StatusCode)
+		}
+	})
+
+	t.Run("owner_allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/integrations/sepay/connect", strings.NewReader(`{"provider":"sepay","scope":"read_transactions"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ownerID))
+		h.CreateSePayConnection(c)
+		if resp.Result().StatusCode != http.StatusCreated {
+			t.Fatalf("expected 201, got %d", resp.Result().StatusCode)
+		}
+	})
+}
+
+func TestRevokeBankConnectionRequiresOwnerRole(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	conn, err := store.CreateBankConnection(domain.BankConnection{
+		WorkspaceID: ws.ID,
+		Provider:    sepayDefaultProvider,
+		Scope:       sepayDefaultReadScope,
+		ExternalID:  "ext",
+		SyncStatus:  "idle",
+	})
+	if err != nil {
+		t.Fatalf("create bank connection: %v", err)
+	}
+
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+
+	t.Run("viewer_rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-connections/"+string(conn.ID)+"/revoke", nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(ownerID))
+		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
+		h.RevokeBankConnection(c)
+		if resp.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Result().StatusCode)
+		}
+	})
+
+	t.Run("editor_rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-connections/"+string(conn.ID)+"/revoke", nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "editor")
+		c.Set("user_id", string(ownerID))
+		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
+		h.RevokeBankConnection(c)
+		if resp.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Result().StatusCode)
+		}
+	})
+
+	t.Run("owner_allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-connections/"+string(conn.ID)+"/revoke", nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ownerID))
+		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
+		h.RevokeBankConnection(c)
+		if resp.Result().StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.Result().StatusCode)
+		}
+	})
+}
+
+func TestSyncBankConnectionRejectsViewerRole(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	conn, err := store.CreateBankConnection(domain.BankConnection{
+		WorkspaceID: ws.ID,
+		Provider:    sepayDefaultProvider,
+		Scope:       sepayDefaultReadScope,
+		ExternalID:  "ext",
+		SyncStatus:  "idle",
+	})
+	if err != nil {
+		t.Fatalf("create bank connection: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+
+	t.Run("viewer_rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-connections/"+string(conn.ID)+"/sync", nil)
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(ownerID))
+		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
+		h.SyncBankConnection(c)
+		if resp.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Result().StatusCode)
+		}
+	})
+}
+
+func TestRunForecastScenarioTransitionsToRunning(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+
+	scenario, err := store.CreateForecastScenario(domain.ForecastScenario{
+		WorkspaceID: ws.ID,
+		Name:        "Scenario test",
+		Assumptions: `{"growthRate":0.1}`,
+	})
+	if err != nil {
+		t.Fatalf("create forecast scenario: %v", err)
+	}
+
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	body := strings.NewReader(`{"foo":"bar"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/forecast-scenarios/"+string(scenario.ID)+"/run", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(resp)
+	c.Request = req
+	c.Set("workspace_id", string(ws.ID))
+	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ownerID))
+	c.Params = gin.Params{{Key: "id", Value: string(scenario.ID)}}
+
+	h.RunForecastScenario(c)
+
+	if resp.Result().StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.Result().StatusCode)
+	}
+
+	var out domain.ForecastScenario
+	if err := json.NewDecoder(resp.Result().Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Status != "running" {
+		t.Fatalf("expected status running, got %q", out.Status)
+	}
+	if out.ID != scenario.ID {
+		t.Fatalf("expected scenario %s, got %s", scenario.ID, out.ID)
+	}
+	if out.Assumptions == "" {
+		t.Fatalf("expected assumptions in response")
+	}
+
+	var refreshed *domain.ForecastScenario
+	for _, item := range store.ListForecastScenarios(ws.ID) {
+		if item.ID == scenario.ID {
+			refreshed = &item
+			break
+		}
+	}
+	if refreshed == nil {
+		t.Fatalf("scenario not found after run")
+	}
+	if refreshed.Status != "running" {
+		t.Fatalf("stored status expected running, got %q", refreshed.Status)
+	}
+}
+
+func TestBankAutomationRulesRequireEditorRole(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", userID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	acc, err := store.CreateAccount(domain.Account{
+		WorkspaceID: ws.ID,
+		PortfolioID: "",
+		Name:        "Main",
+		Type:        "cash",
+		Currency:    "VND",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	body := `{"accountId":"` + string(acc.ID) + `","name":"Inbound rule","predicate":"in","type":"in","actionType":"income","direction":"in","priority":1,"enabled":true}`
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+
+	t.Run("create_blocked_for_viewer", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-automation-rules", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(userID))
+		h.CreateAutomationRule(c)
+		if resp.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Result().StatusCode)
+		}
+	})
+
+	t.Run("modify_blocked_for_viewer", func(t *testing.T) {
+		rule, err := store.CreateAutomationRule(domain.AutomationRule{
+			WorkspaceID: ws.ID,
+			AccountID:   acc.ID,
+			Name:        "Existing",
+			Priority:    1,
+			Enabled:     true,
+		})
+		if err != nil {
+			t.Fatalf("create rule: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/bank-automation-rules/"+string(rule.ID), strings.NewReader(`{"name":"updated"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = req
+		c.Set("workspace_id", string(ws.ID))
+		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(userID))
+		c.Params = gin.Params{{Key: "id", Value: string(rule.ID)}}
+		h.ModifyAutomationRule(c)
+		if resp.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Result().StatusCode)
+		}
+
+		reqDelete := httptest.NewRequest(http.MethodDelete, "/api/v1/bank-automation-rules/"+string(rule.ID), nil)
+		reqDelete.Header.Set("Content-Type", "application/json")
+		respDelete := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(respDelete)
+		c2.Request = reqDelete
+		c2.Set("workspace_id", string(ws.ID))
+		c2.Set("workspace_role", "viewer")
+		c2.Set("user_id", string(userID))
+		c2.Params = gin.Params{{Key: "id", Value: string(rule.ID)}}
+		h.ModifyAutomationRule(c2)
+		if respDelete.Result().StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", respDelete.Result().StatusCode)
+		}
+	})
+}
+
+func TestModifyAutomationRulePatchOnlyNameKeepsEnabled(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("owner@wealthos.vn", "Owner", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", userID)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	acc, err := store.CreateAccount(domain.Account{
+		WorkspaceID: ws.ID,
+		PortfolioID: "",
+		Name:        "Main",
+		Type:        "cash",
+		Currency:    "VND",
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	rule, err := store.CreateAutomationRule(domain.AutomationRule{
+		WorkspaceID: ws.ID,
+		AccountID:   acc.ID,
+		Name:        "Initial",
+		Priority:    10,
+		Enabled:     true,
+	})
+	if err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+
+	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/bank-automation-rules/"+string(rule.ID), strings.NewReader(`{"name":"Updated name"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(resp)
+	c.Request = req
+	c.Set("workspace_id", string(ws.ID))
+	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(userID))
+	c.Params = gin.Params{{Key: "id", Value: string(rule.ID)}}
+	h.ModifyAutomationRule(c)
+
+	if resp.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Result().StatusCode)
+	}
+	got, ok := store.GetAutomationRule(rule.ID)
+	if !ok {
+		t.Fatal("rule missing after patch")
+	}
+	if got.Name != "Updated name" {
+		t.Fatalf("expected name updated to 'Updated name', got %q", got.Name)
+	}
+	if !got.Enabled {
+		t.Fatal("expected enabled to remain true after partial patch without enabled field")
+	}
+}
+
+func TestCreateAccountRecordsAuditLog(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	p, ok := store.FirstPortfolio(ws.ID)
+	if !ok {
+		t.Fatal("missing default portfolio")
+	}
+
+	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{})
+	payload := `{"portfolioId":"` + string(p.ID) + `","name":"Cash","type":"cash","currency":"VND"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-test-1")
+	resp := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(resp)
+	c.Request = req
+	c.Set("workspace_id", string(ws.ID))
+	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(uid))
+
+	h.CreateAccount(c)
+	if resp.Result().StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.Result().StatusCode)
+	}
+
+	var created domain.Account
+	if err := json.NewDecoder(resp.Result().Body).Decode(&created); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	logs := store.ListAuditLogs(ws.ID)
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 audit log, got %d", len(logs))
+	}
+	log := logs[0]
+	if log.Action != "create_account" {
+		t.Fatalf("expected action create_account, got %q", log.Action)
+	}
+	if log.TargetType != "account" {
+		t.Fatalf("expected target type account, got %q", log.TargetType)
+	}
+	if log.TargetID != created.ID {
+		t.Fatalf("expected target id %s, got %s", created.ID, log.TargetID)
+	}
+	if log.CorrelationID != "corr-test-1" {
+		t.Fatalf("expected correlation id corr-test-1, got %q", log.CorrelationID)
+	}
+}
+
+func TestListAuditLogsRequiresWorkspace(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
+	ws1, err := store.CreateWorkspace("Workspace 1", "VND", uid)
+	if err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	_, err = store.CreateWorkspace("Workspace 2", "VND", uid)
+	if err != nil {
+		t.Fatalf("create second workspace: %v", err)
+	}
+	p, ok := store.FirstPortfolio(ws1.ID)
+	if !ok {
+		t.Fatal("missing default portfolio")
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{})
+	payload := `{"portfolioId":"` + string(p.ID) + `","name":"Cash","type":"cash","currency":"VND"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(resp)
+	c.Request = req
+	c.Set("workspace_id", string(ws1.ID))
+	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(uid))
+	h.CreateAccount(c)
+	if resp.Result().StatusCode != http.StatusCreated {
+		t.Fatalf("seed account: expected 201, got %d", resp.Result().StatusCode)
+	}
+
+	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/audit-logs", nil)
+	respList := httptest.NewRecorder()
+	cList, _ := gin.CreateTestContext(respList)
+	cList.Request = reqList
+	cList.Set("workspace_id", string(ws1.ID))
+	cList.Set("workspace_role", "owner")
+	cList.Set("user_id", string(uid))
+	h.ListAuditLogs(cList)
+
+	if respList.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", respList.Result().StatusCode)
+	}
+	var logs []domain.AuditLog
+	if err := json.NewDecoder(respList.Result().Body).Decode(&logs); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 log for workspace 1, got %d", len(logs))
+	}
+}

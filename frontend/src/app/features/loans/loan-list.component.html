@@ -1,0 +1,136 @@
+<section class="space-y-4">
+  <h2 class="text-2xl font-semibold">Loans</h2>
+  <p class="text-sm text-slate-500">Manage borrower/lender loans and track interest.</p>
+
+  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
+    This workspace is read-only. You can only view loans and accruals.
+  </p>
+
+  <form
+    (ngSubmit)="submitLoan()"
+    [formGroup]="creationForm"
+    class="bg-white rounded-lg border p-4 grid md:grid-cols-3 gap-3 max-w-4xl"
+  >
+    <input formControlName="counterparty" placeholder="Counterparty" class="border p-2 rounded" />
+    <select formControlName="direction" class="border p-2 rounded">
+      <option value="receivable">Receivable</option>
+      <option value="payable">Payable</option>
+    </select>
+    <input formControlName="principalInitial" placeholder="Initial principal" class="border p-2 rounded" />
+    <input formControlName="annualRate" placeholder="Annual rate (%/year)" class="border p-2 rounded" />
+    <input formControlName="dayCountBasis" placeholder="ACT_365" class="border p-2 rounded" />
+    <input formControlName="portfolioId" placeholder="Portfolio ID (optional)" class="border p-2 rounded" />
+    <label class="md:col-span-3 flex items-center gap-2">
+      <input type="checkbox" formControlName="interestCompounding" />
+      <span>Compound interest</span>
+    </label>
+    <input formControlName="startAt" type="datetime-local" class="border p-2 rounded" />
+    <input formControlName="dueAt" type="datetime-local" class="border p-2 rounded" />
+    <button class="bg-blue-600 text-white rounded px-4 py-2 md:col-span-3" [disabled]="!auth.canMutate">Create loan</button>
+  </form>
+
+  <p class="text-sm text-slate-600">{{ statusMessage }}</p>
+
+  <div class="grid lg:grid-cols-2 gap-4 max-w-5xl">
+    <div *ngFor="let loan of loans" class="bg-white border rounded-lg">
+      <div class="px-4 py-3 border-b flex justify-between">
+        <div>
+          <h3 class="font-semibold">{{ loan.counterparty }}</h3>
+          <p class="text-sm text-slate-600">
+            {{ statusText(loan) }} · {{ loan.principalInitial }} · {{ loan.annualRate }}%
+          </p>
+        </div>
+        <button class="text-xs border px-2 py-1 rounded" (click)="loadAccruals(loan.id)">
+          {{ selectedLoanId === loan.id ? 'Hide accruals' : 'Show accruals' }}
+        </button>
+      </div>
+
+      <div class="p-4 space-y-2">
+        <p class="text-sm">Status: {{ loan.status }}</p>
+        <p class="text-sm">Balance: {{ loan.principalBalance || loan.principalInitial }}</p>
+
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="border px-3 py-1 rounded text-sm"
+            *ngIf="auth.canMutate"
+            (click)="openPayment(loan.id)"
+          >
+            Record repayment
+          </button>
+          <button
+            class="border px-3 py-1 rounded text-sm"
+            *ngIf="auth.canMutate"
+            (click)="openRequest(loan.id)"
+          >
+            Create payment request
+          </button>
+        </div>
+
+        <form
+          *ngIf="selectedLoanForPayment === loan.id"
+          [formGroup]="paymentForm"
+          (ngSubmit)="submitPayment()"
+          class="grid gap-2 border-t pt-3"
+        >
+          <input formControlName="loanId" type="hidden" />
+          <input formControlName="principalAmount" placeholder="principalAmount" class="border p-2 rounded" />
+          <input formControlName="interestAmount" placeholder="interestAmount" class="border p-2 rounded" />
+          <input formControlName="feeAmount" placeholder="feeAmount" class="border p-2 rounded" />
+          <input formControlName="waivedAmount" placeholder="waivedAmount" class="border p-2 rounded" />
+          <input formControlName="occurredAt" type="datetime-local" class="border p-2 rounded" />
+          <div class="flex gap-2">
+            <button class="bg-emerald-700 text-white px-3 py-2 rounded" type="submit" [disabled]="!auth.canMutate">Save</button>
+            <button type="button" class="bg-slate-200 px-3 py-2 rounded" (click)="closePayment()">Close</button>
+          </div>
+        </form>
+
+        <div class="border rounded p-2 bg-slate-50" *ngIf="selectedLoanId === loan.id">
+          <p class="text-sm font-medium mb-2">Accrual</p>
+          <div *ngIf="accrualsMap[loan.id]">
+            <p class="text-sm">Total interest: {{ accrualsMap[loan.id].totalAccruedInterest }}</p>
+            <p class="text-sm">Unpaid interest: {{ accrualsMap[loan.id].unpaidInterest }}</p>
+          </div>
+          <div *ngIf="!accrualsMap[loan.id]" class="text-sm text-slate-500">
+            No accrual data.
+          </div>
+        </div>
+
+        <form [formGroup]="requestForm" class="grid md:grid-cols-3 gap-2 border-t pt-3" *ngIf="auth.canMutate">
+          <input formControlName="loanId" type="hidden" [value]="loan.id" />
+          <input formControlName="amount" placeholder="Requested amount (optional)" class="border p-2 rounded" />
+          <input formControlName="currency" placeholder="VND" class="border p-2 rounded" />
+          <input formControlName="expiresAt" type="datetime-local" class="border p-2 rounded" />
+          <button
+            type="button"
+            class="bg-indigo-700 text-white px-3 py-2 rounded md:col-span-3"
+            (click)="requestCode(loan.id)"
+          >
+            Create payment QR
+          </button>
+        </form>
+
+        <div class="border rounded p-2 bg-slate-50" *ngIf="paymentRequests[loan.id] as paymentRequest">
+          <p class="text-sm font-medium mb-2">Latest payment request</p>
+          <p class="text-sm">Code: {{ paymentRequest.paymentCode }}</p>
+          <p class="text-sm">Amount: {{ paymentRequest.amount }} {{ paymentRequest.currency }}</p>
+          <p class="text-sm">Expires: {{ paymentRequest.expiresAt }}</p>
+          <p class="text-sm">Status: {{ paymentRequest.status }}</p>
+          <a
+            *ngIf="paymentRequest.qr"
+            [href]="paymentRequest.qr"
+            target="_blank"
+            rel="noopener"
+            class="inline-flex text-xs text-blue-700 underline mt-2"
+          >
+            Open QR payment link
+          </a>
+          <p *ngIf="!paymentRequest.qr" class="text-xs text-slate-500 mt-2">QR link is not available.</p>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="!loans.length" class="bg-white border rounded-lg p-4 text-slate-500 col-span-full">
+      No loans.
+    </div>
+  </div>
+</section>

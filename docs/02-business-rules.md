@@ -24,6 +24,9 @@
 2. Chuyển tiền giữa hai account và thu gốc khoản cho vay không được tính là thu nhập/chi tiêu; phải phân loại để dashboard attribution đúng.
 3. Chỉ `posted` đi vào actual; `pending` chỉ phục vụ forecast; `voided` giữ lịch sử và lý do.
 4. Không xóa cứng giao dịch tài chính. Mọi chỉnh sửa sau đối soát là adjustment mới liên kết giao dịch gốc.
+5. Giao dịch ngân hàng từ provider có `transferType = out` được tự ghi `expense` và `posted` sau khi qua dedupe, trừ khi có bằng chứng nó là transfer nội bộ, giải ngân loan hoặc cấp vốn đầu tư; các ngoại lệ này phải được hạch toán theo loại nghiệp vụ đúng.
+6. Giao dịch `in` chỉ tự ghi `income` khi rule/matching có độ tin cậy đủ cao. Ưu tiên nhận diện transfer nội bộ và loan payment trước; tiền vào không đủ bằng chứng phải ở `pending_review`, không mặc định là thu nhập.
+7. Transaction tự ghi từ bank feed phải giữ `source = bank_feed`, provider transaction ID, confidence và evidence. Người dùng có thể sửa category/type; hệ thống tạo adjustment/audit, không sửa hay xóa raw import.
 
 ## Ngân sách và quyền
 
