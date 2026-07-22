@@ -1,37 +1,123 @@
-<section class="space-y-4">
-  <h2 class="text-2xl font-semibold">Forecast</h2>
-  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
-    This workspace is read-only. You can still review scenarios.
-  </p>
-
-  <form [formGroup]="form" (ngSubmit)="submit()" class="grid gap-3 bg-white border rounded-lg p-4 max-w-3xl">
-    <input formControlName="name" class="border p-2 rounded" placeholder="Scenario name" />
-    <textarea formControlName="assumptions" class="border p-2 rounded h-24" placeholder='{"growthRate": 0.08}'></textarea>
-    <button class="bg-indigo-600 text-white px-4 py-2 rounded" type="submit" [disabled]="!auth.canMutate">Create scenario</button>
-  </form>
-
-  <p class="text-sm text-slate-600">{{ statusMessage }}</p>
-
-  <div class="bg-white border rounded-lg">
-    <div class="px-4 py-2 border-b font-semibold">Saved scenarios</div>
-    <ul class="divide-y">
-      <li *ngFor="let item of scenarios" class="px-4 py-3 flex justify-between gap-3">
-        <div>
-          <p class="font-semibold">{{ item.name }}</p>
-          <p class="text-sm text-slate-600">status: {{ item.status || 'pending' }}</p>
-          <p class="text-xs text-slate-500">ID: {{ item.id }}</p>
-        </div>
-        <button
-          class="text-xs px-3 py-1 border rounded"
-          [disabled]="activeScenarioId === item.id || !auth.canMutate"
-          (click)="runScenario(item)"
-        >
-          {{ activeScenarioId === item.id ? 'Running...' : 'Run' }}
-        </button>
-      </li>
-      <li *ngIf="!scenarios.length" class="px-4 py-3 text-slate-500">No scenarios.</li>
-    </ul>
+<section class="space-y-6">
+  <!-- Page Header -->
+  <div class="m3-page-header">
+    <div>
+      <h1 class="m3-page-title">Financial Forecast & Simulation</h1>
+      <p class="m3-page-subtitle">Run growth rate projections, Monte Carlo simulations, and scenario modeling.</p>
+    </div>
   </div>
 
-  <pre class="bg-slate-900 text-green-100 p-4 rounded-lg overflow-auto" *ngIf="lastResult">{{ lastResult | json }}</pre>
+  <!-- Readonly Warning -->
+  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
+    <span class="material-symbols-rounded">lock</span>
+    <span>This workspace is read-only. You can still review forecast scenarios.</span>
+  </div>
+
+  <!-- Create Scenario Card Form (Max 900px) -->
+  <div class="m3-card max-w-4xl">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">analytics</span> Create Simulation Scenario
+        </h3>
+        <p class="m3-card-subtitle">Define simulation assumptions (JSON schema) for future wealth modeling.</p>
+      </div>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
+      <div>
+        <label class="m3-label block mb-1">Scenario Name</label>
+        <input formControlName="name" class="m3-input" placeholder="e.g. Bull Market 10% Annual Growth" />
+      </div>
+
+      <div>
+        <label class="m3-label block mb-1">Assumptions (JSON Object)</label>
+        <textarea formControlName="assumptions" class="m3-textarea font-mono text-xs" placeholder='{"growthRate": 0.08, "inflationRate": 0.03, "horizonMonths": 60}'></textarea>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button class="m3-btn m3-btn-primary" type="submit" [disabled]="!auth.canMutate">
+          <span class="material-symbols-rounded">add</span> Create Scenario
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+
+  <!-- Saved Scenarios Card -->
+  <div class="m3-card">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">tune</span> Saved Scenarios
+        </h3>
+        <p class="m3-card-subtitle">Execute simulations and inspect projection engines.</p>
+      </div>
+      <span class="m3-badge m3-badge-neutral">{{ scenarios.length }} Scenarios</span>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!scenarios.length" class="m3-empty-state">
+      <div class="m3-empty-icon">
+        <span class="material-symbols-rounded">analytics</span>
+      </div>
+      <p class="m3-empty-title">No Forecast Scenarios</p>
+      <p class="m3-empty-desc">Create your first forecast scenario using the form above to model future net worth.</p>
+    </div>
+
+    <!-- Scenarios Table -->
+    <div *ngIf="scenarios.length" class="m3-table-container">
+      <table class="m3-table">
+        <thead>
+          <tr>
+            <th>Scenario Name</th>
+            <th>Status</th>
+            <th>Scenario ID</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of scenarios">
+            <td class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-2">
+              <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">query_stats</span>
+              {{ item.name }}
+            </td>
+            <td>
+              <span class="m3-badge uppercase text-[10px]" [ngClass]="{
+                'm3-badge-success': item.status === 'done',
+                'm3-badge-warning': item.status === 'running',
+                'm3-badge-neutral': !item.status || item.status === 'pending'
+              }">
+                {{ item.status || 'pending' }}
+              </span>
+            </td>
+            <td class="font-mono text-xs text-[var(--m3-on-surface-variant)]">{{ item.id }}</td>
+            <td class="text-right">
+              <button
+                class="m3-btn m3-btn-outlined text-xs py-1 px-3"
+                [disabled]="activeScenarioId === item.id || !auth.canMutate"
+                (click)="runScenario(item)"
+              >
+                <span class="material-symbols-rounded text-sm" [class.animate-spin]="activeScenarioId === item.id">play_arrow</span>
+                {{ activeScenarioId === item.id ? 'Simulating...' : 'Run Simulation' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Simulation Result Viewer -->
+  <div *ngIf="lastResult" class="m3-card bg-slate-900 border-slate-800 text-green-400">
+    <div class="m3-card-header text-white mb-2">
+      <div>
+        <h4 class="m3-card-title text-white flex items-center gap-2">
+          <span class="material-symbols-rounded text-green-400">terminal</span> Simulation Output Log
+        </h4>
+      </div>
+    </div>
+    <pre class="p-4 rounded-xl bg-slate-950 font-mono text-xs text-green-300 overflow-x-auto leading-relaxed border border-slate-800">{{ lastResult | json }}</pre>
+  </div>
 </section>

@@ -1,74 +1,138 @@
-<section class="space-y-5">
-  <h2 class="text-2xl font-semibold">Assistant commands</h2>
-  <p class="text-sm text-slate-500">Send command to Assistant and review approval states.</p>
-  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
-    This workspace is read-only. Assistant actions are disabled.
-  </p>
+<section class="space-y-6">
+  <!-- Page Header -->
+  <div class="m3-page-header">
+    <div>
+      <h1 class="m3-page-title">AI Hermes Assistant Gateway</h1>
+      <p class="m3-page-subtitle">Send natural language financial commands, inspect execution plans, and issue manual approval policies.</p>
+    </div>
+  </div>
 
-  <form (ngSubmit)="submitCommand()" [formGroup]="form" class="bg-white rounded-lg border p-4 grid md:grid-cols-2 gap-3">
-    <label class="md:col-span-2">
-      <span class="text-sm text-slate-600">Command</span>
-      <textarea
-        formControlName="command"
-        class="border p-2 rounded w-full"
-        rows="3"
-        placeholder='Example: "Create expense 500000 for Food"'
-      ></textarea>
-    </label>
-    <label class="md:col-span-2">
-      <span class="text-sm text-slate-600">Plan (optional)</span>
-      <input formControlName="plan" placeholder="Optional action plan" class="border p-2 rounded w-full" />
-    </label>
-    <button type="submit" class="bg-blue-700 text-white px-4 py-2 md:col-span-2" [disabled]="loading || !auth.canMutate">
-      {{ loading ? 'Sending...' : 'Send command' }}
-    </button>
-  </form>
+  <!-- Readonly Warning -->
+  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
+    <span class="material-symbols-rounded">lock</span>
+    <span>This workspace is read-only. Assistant actions are disabled.</span>
+  </div>
 
-  <p class="text-sm text-slate-600">{{ statusMessage }}</p>
+  <!-- Send Command Form Card (Max 900px) -->
+  <div class="m3-card max-w-4xl">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">smart_toy</span> Send Assistant Command
+        </h3>
+        <p class="m3-card-subtitle">Type natural language prompts or structured execution plans.</p>
+      </div>
+    </div>
 
-  <div class="bg-white border rounded-lg">
-    <div class="px-4 py-2 border-b font-semibold">Command history</div>
-    <ul class="divide-y">
-      <li *ngFor="let item of commands" class="px-4 py-3">
-        <div class="flex justify-between gap-4">
-          <div>
-            <p class="font-semibold">{{ item.command }}</p>
-            <p class="text-sm text-slate-600">Status: {{ item.status || 'received' }}</p>
-            <p class="text-xs text-slate-500">ID: {{ item.id }} · plan: {{ item.plan || '-' }}</p>
-            <p class="text-xs text-slate-500" *ngIf="item.approvalId">
-              Approval ID: {{ item.approvalId }} · Expires: {{ item.approvalExpiresAt || 'n/a' }}
-            </p>
-            <pre *ngIf="selectedCommandId === item.id" class="mt-2 text-xs bg-slate-900 text-green-100 p-2 rounded">{{ item | json }}</pre>
+    <form (ngSubmit)="submitCommand()" [formGroup]="form" class="space-y-4">
+      <div>
+        <label class="m3-label block mb-1">Natural Language Command Prompt</label>
+        <textarea
+          formControlName="command"
+          class="m3-textarea text-xs font-mono"
+          rows="3"
+          placeholder='e.g. "Record an expense of 500,000 VND for Client Lunch from Cash Account"'
+        ></textarea>
+      </div>
+
+      <div>
+        <label class="m3-label block mb-1">Execution Plan (Optional)</label>
+        <input formControlName="plan" placeholder="Optional structured action plan..." class="m3-input" />
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button type="submit" class="m3-btn m3-btn-primary" [disabled]="loading || !auth.canMutate">
+          <span class="material-symbols-rounded" [class.animate-spin]="loading">send</span>
+          {{ loading ? 'Dispatching Command...' : 'Send Command' }}
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+
+  <!-- Command History List Card -->
+  <div class="m3-card">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">forum</span> Command Journal & Approvals
+        </h3>
+        <p class="m3-card-subtitle">History of dispatched commands and pending policy approvals.</p>
+      </div>
+      <span class="m3-badge m3-badge-neutral">{{ commands.length }} Commands</span>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!commands.length" class="m3-empty-state">
+      <div class="m3-empty-icon">
+        <span class="material-symbols-rounded">smart_toy</span>
+      </div>
+      <p class="m3-empty-title">No Commands Dispatched</p>
+      <p class="m3-empty-desc">Send your first prompt to the AI Assistant above to automate ledger entries.</p>
+    </div>
+
+    <!-- Commands Table / Cards List -->
+    <div *ngIf="commands.length" class="space-y-3">
+      <div *ngFor="let item of commands" class="p-4 rounded-2xl border border-[var(--m3-outline)] bg-[var(--m3-surface)] hover:shadow-md transition-all flex flex-wrap items-start justify-between gap-4">
+        <div class="space-y-1.5 max-w-xl">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-sm text-[var(--m3-on-surface)] flex items-center gap-1">
+              <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">terminal</span> {{ item.command }}
+            </span>
+            <span class="m3-badge uppercase text-[10px]" [ngClass]="{
+              'm3-badge-success': item.status === 'executed' || item.status === 'approved',
+              'm3-badge-warning': item.status === 'pending_approval' || item.status === 'received',
+              'm3-badge-danger': item.status === 'cancelled' || item.status === 'rejected'
+            }">
+              {{ item.status || 'received' }}
+            </span>
           </div>
-          <div class="flex flex-col gap-2">
-            <button class="text-xs px-3 py-1 border rounded" (click)="inspect(item)">Details</button>
+
+          <p class="text-xs text-[var(--m3-on-surface-variant)]">ID: <span class="font-mono">{{ item.id }}</span> · Plan: {{ item.plan || 'Direct execution' }}</p>
+
+          <p *ngIf="item.approvalId" class="text-xs text-[var(--m3-warning)] font-medium flex items-center gap-1">
+            <span class="material-symbols-rounded text-sm">lock_clock</span> Approval ID: {{ item.approvalId }} · Expires: {{ item.approvalExpiresAt || 'n/a' }}
+          </p>
+
+          <div *ngIf="selectedCommandId === item.id" class="mt-3 p-3 rounded-xl bg-slate-900 text-green-300 font-mono text-xs overflow-x-auto border border-slate-800">
+            <pre>{{ item | json }}</pre>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2 items-end">
+          <button class="m3-btn m3-btn-outlined text-xs py-1 px-3" (click)="inspect(item)">
+            <span class="material-symbols-rounded text-sm">info</span> {{ selectedCommandId === item.id ? 'Close Details' : 'Details' }}
+          </button>
+
+          <ng-container *ngIf="canApprove(item)">
             <input
-              *ngIf="canApprove(item)"
-              class="text-xs p-2 border rounded"
+              class="m3-input text-xs h-8 py-1 px-2.5 w-48 font-mono"
               type="text"
-              placeholder="approvalId (auto-fill if available)"
+              placeholder="approvalId"
               [value]="approvalInputs[item.id] || ''"
               (input)="setApprovalInput(item.id, $any($event.target).value)"
             />
-            <button
-              class="text-xs px-3 py-1 border rounded"
-              *ngIf="canApprove(item) && auth.canMutate"
-              [disabled]="requiresApproval(item)"
-              (click)="approve(item.id)"
-            >
-              Approve
-            </button>
-            <button
-              class="text-xs px-3 py-1 border rounded"
-              *ngIf="canApprove(item) && auth.canMutate"
-              (click)="cancel(item.id)"
-            >
-              Cancel
-            </button>
-          </div>
+            <div class="flex gap-1.5">
+              <button
+                class="m3-btn m3-btn-primary text-xs py-1 px-3"
+                *ngIf="auth.canMutate"
+                [disabled]="requiresApproval(item)"
+                (click)="approve(item.id)"
+              >
+                Approve
+              </button>
+              <button
+                class="m3-btn m3-btn-outlined text-xs py-1 px-3 text-[var(--m3-danger)] border-[var(--m3-danger)]"
+                *ngIf="auth.canMutate"
+                (click)="cancel(item.id)"
+              >
+                Cancel
+              </button>
+            </div>
+          </ng-container>
         </div>
-      </li>
-      <li *ngIf="!commands.length" class="px-4 py-3 text-slate-500">No commands.</li>
-    </ul>
+      </div>
+    </div>
   </div>
 </section>

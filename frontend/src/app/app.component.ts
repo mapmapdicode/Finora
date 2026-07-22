@@ -7,7 +7,7 @@ import { ApiService } from './core/services/api.service';
 import { ToastService, ToastMessage } from './core/services/toast.service';
 import { Workspace } from './shared/models';
 
-type NavItem = { path: string; label: string };
+type NavItem = { path: string; label: string; icon: string };
 
 @Component({
   selector: 'app-root',
@@ -21,24 +21,26 @@ export class AppComponent implements OnDestroy {
   workspaces: Workspace[] = [];
   selectedWorkspaceId: string | null = null;
   toasts$: Observable<ToastMessage[]>;
+  sidebarOpen = true;
+  isDarkMode = false;
   private tokenSub: Subscription | null = null;
   private readonly viewerMessage = 'This workspace is read-only. You can only view data.';
   private readonly roleMessageShown = new Set<string>();
 
   navItems: NavItem[] = [
-    { path: '/dashboard', label: 'Dashboard' },
-    { path: '/accounts', label: 'Accounts' },
-    { path: '/transactions', label: 'Transactions' },
-    { path: '/loans', label: 'Loans' },
-    { path: '/assets', label: 'Assets' },
-    { path: '/properties', label: 'Properties' },
-    { path: '/budgets', label: 'Budgets' },
-    { path: '/forecast', label: 'Forecast' },
-    { path: '/portfolios', label: 'Portfolios' },
-    { path: '/audit-logs', label: 'Audit Logs' },
-    { path: '/sepay', label: 'Inbox SePay' },
-    { path: '/automation', label: 'Automation Rules' },
-    { path: '/assistant', label: 'Assistant' },
+    { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { path: '/accounts', label: 'Accounts', icon: 'account_balance' },
+    { path: '/transactions', label: 'Transactions', icon: 'payments' },
+    { path: '/loans', label: 'Loans', icon: 'request_quote' },
+    { path: '/assets', label: 'Assets', icon: 'savings' },
+    { path: '/properties', label: 'Properties', icon: 'home' },
+    { path: '/budgets', label: 'Budgets', icon: 'pie_chart' },
+    { path: '/forecast', label: 'Forecast', icon: 'analytics' },
+    { path: '/portfolios', label: 'Portfolios', icon: 'donut_large' },
+    { path: '/audit-logs', label: 'Audit Logs', icon: 'history' },
+    { path: '/sepay', label: 'Inbox SePay', icon: 'inbox' },
+    { path: '/automation', label: 'Automation Rules', icon: 'auto_awesome' },
+    { path: '/assistant', label: 'Assistant', icon: 'smart_toy' },
   ];
 
   constructor(
@@ -68,14 +70,27 @@ export class AppComponent implements OnDestroy {
     this.tokenSub?.unsubscribe();
   }
 
+  toggleSidebar() {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  toggleDarkMode() {
+    this.isDarkMode = !this.isDarkMode;
+    if (this.isDarkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }
+
   toastClass(type: 'info' | 'success' | 'error') {
     if (type === 'success') {
-      return 'bg-emerald-50 border-emerald-300 text-emerald-900';
+      return 'bg-emerald-50 text-emerald-900 border-emerald-300';
     }
     if (type === 'error') {
-      return 'bg-rose-50 border-rose-300 text-rose-900';
+      return 'bg-rose-50 text-rose-900 border-rose-300';
     }
-    return 'bg-sky-50 border-sky-300 text-sky-900';
+    return 'bg-sky-50 text-sky-900 border-sky-300';
   }
 
   closeToast(id: number) {

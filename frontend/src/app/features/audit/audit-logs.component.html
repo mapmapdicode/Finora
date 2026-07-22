@@ -1,121 +1,146 @@
-<section class="mx-auto max-w-6xl">
-  <header class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+<section class="space-y-6">
+  <!-- Page Header -->
+  <div class="m3-page-header">
     <div>
-      <h1 class="text-2xl font-semibold">Audit Logs</h1>
-      <p class="text-sm text-slate-600 mt-1">
-        Lịch sử thay đổi theo workspace hiện tại, dùng cho điều tra hành vi và kiểm toán dữ liệu.
-      </p>
+      <h1 class="m3-page-title">Workspace Audit Logs</h1>
+      <p class="m3-page-subtitle">Security and operational audit history for compliance, data integrity, and actor tracing.</p>
     </div>
-    <div class="flex flex-wrap items-end gap-2">
-      <label class="text-sm">
-        Action
+
+    <!-- Filters & Action Bar -->
+    <div class="flex flex-wrap items-center gap-3 bg-[var(--m3-surface)] p-2 rounded-2xl border border-[var(--m3-outline)] shadow-sm">
+      <div class="flex items-center gap-2 px-2 text-xs">
+        <span class="text-[var(--m3-on-surface-variant)] font-medium">Action:</span>
         <select
-          class="block mt-1 rounded-lg border border-slate-300 px-2 py-2 bg-white text-sm"
+          class="bg-transparent text-xs font-medium text-[var(--m3-on-surface)] focus:outline-none cursor-pointer"
           (change)="onActionFilterChange($event)"
         >
-          <option value="">Tất cả</option>
+          <option value="">All Actions</option>
           @for (action of uniqueActions(); track action) {
             <option [value]="action">{{ action }}</option>
           }
         </select>
-      </label>
-      <label class="text-sm">
-        Target
+      </div>
+
+      <div class="h-5 w-px bg-[var(--m3-outline)]"></div>
+
+      <div class="flex items-center gap-2 px-2 text-xs">
+        <span class="text-[var(--m3-on-surface-variant)] font-medium">Target:</span>
         <select
-          class="block mt-1 rounded-lg border border-slate-300 px-2 py-2 bg-white text-sm"
+          class="bg-transparent text-xs font-medium text-[var(--m3-on-surface)] focus:outline-none cursor-pointer"
           (change)="onTargetFilterChange($event)"
         >
-          <option value="">Tất cả</option>
+          <option value="">All Targets</option>
           @for (target of uniqueTargets(); track target) {
             <option [value]="target">{{ target }}</option>
           }
         </select>
-      </label>
+      </div>
+
       <button
         type="button"
         (click)="refresh()"
-        class="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+        class="m3-btn m3-btn-outlined text-xs py-1 px-3"
       >
-        Làm mới
+        <span class="material-symbols-rounded text-sm" [class.animate-spin]="loading">refresh</span> Refresh Logs
       </button>
     </div>
-  </header>
-
-  <div *ngIf="loading" class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
-    Đang tải nhật ký...
   </div>
 
-  <div *ngIf="error" class="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+  <div *ngIf="loading" class="p-8 text-center text-xs text-[var(--m3-on-surface-variant)] flex items-center justify-center gap-2 m3-card">
+    <span class="material-symbols-rounded animate-spin">history</span> Loading audit log journal...
+  </div>
+
+  <div *ngIf="error" class="p-4 rounded-2xl bg-[var(--m3-danger-container)] text-[var(--m3-on-danger-container)] text-xs border border-[var(--m3-danger)]">
     {{ error }}
   </div>
 
-  <div *ngIf="!loading && !error && filteredLogs.length === 0" class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-600">
-    Chưa có sự kiện nào ghi nhận cho workspace này.
-  </div>
+  <!-- Audit Log List Card -->
+  <div *ngIf="!loading && !error" class="m3-card">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">history</span> Security Audit Events
+        </h3>
+        <p class="m3-card-subtitle">Showing {{ filteredLogs.length }} recorded events</p>
+      </div>
+      <span class="m3-badge m3-badge-neutral">{{ filteredLogs.length }} Events</span>
+    </div>
 
-  <div *ngIf="!loading && !error && filteredLogs.length > 0" class="overflow-x-auto">
-    <table class="min-w-full bg-white rounded-lg border border-slate-200 overflow-hidden">
-      <thead>
-        <tr class="bg-slate-50 text-left text-sm text-slate-600">
-          <th class="px-3 py-2 font-medium">Thời điểm</th>
-          <th class="px-3 py-2 font-medium">Actor</th>
-          <th class="px-3 py-2 font-medium">Action</th>
-          <th class="px-3 py-2 font-medium">Target</th>
-          <th class="px-3 py-2 font-medium">Kết quả</th>
-          <th class="px-3 py-2 font-medium">Path</th>
-          <th class="px-3 py-2 font-medium">Request</th>
-          <th class="px-3 py-2 font-medium">Trace</th>
-        </tr>
-      </thead>
-      <tbody class="text-sm">
-        @for (item of filteredLogs; track item.id) {
-          <tr class="border-t border-slate-100 align-top">
-            <td class="px-3 py-2 text-slate-700 whitespace-nowrap">{{ formatAsDate(item.createdAt) }}</td>
-            <td class="px-3 py-2">
-              <div class="font-medium text-slate-900">{{ item.actorId || '-' }}</div>
-              <div class="text-xs text-slate-500">{{ item.actorRole || '-' }}</div>
-            </td>
-            <td class="px-3 py-2">
-              <span class="rounded-full border border-sky-100 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
-                {{ item.action }}
-              </span>
-            </td>
-            <td class="px-3 py-2">
-              <div>{{ item.targetType }}{{ item.targetId ? `:${item.targetId}` : '' }}</div>
-            </td>
-            <td class="px-3 py-2">
-              <div class="rounded-md border border-slate-200 px-2 py-1 inline-block text-xs">
-                {{ item.policyDecision }} / {{ item.result }}
-              </div>
-            </td>
-            <td class="px-3 py-2">
-              <div class="font-mono text-xs">{{ item.method }}</div>
-              <div class="text-xs text-slate-600">{{ item.path }}</div>
-            </td>
-            <td class="px-3 py-2">
-              <div class="text-xs font-mono" title="{{ item.requestId }}">{{ item.requestId || '-' }}</div>
-            </td>
-            <td class="px-3 py-2">
-              <div class="text-xs font-mono" title="{{ item.correlationId }}">{{ item.correlationId || '-' }}</div>
-            </td>
+    <!-- Empty State -->
+    <div *ngIf="filteredLogs.length === 0" class="m3-empty-state">
+      <div class="m3-empty-icon">
+        <span class="material-symbols-rounded">history</span>
+      </div>
+      <p class="m3-empty-title">No Audit Events Logged</p>
+      <p class="m3-empty-desc">No security or state modification events have been recorded for this workspace filter.</p>
+    </div>
+
+    <!-- Audit Logs Table -->
+    <div *ngIf="filteredLogs.length > 0" class="m3-table-container">
+      <table class="m3-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Actor</th>
+            <th>Action</th>
+            <th>Target</th>
+            <th>Policy / Result</th>
+            <th>Method & Path</th>
+            <th>Trace Identifiers</th>
           </tr>
-          <tr class="border-t border-slate-100 bg-slate-50">
-            <td class="px-3 py-2 text-xs text-slate-600">Reason</td>
-            <td colspan="7" class="px-3 py-2">
-              <div class="text-xs text-slate-600 mb-1">{{ item.reason || '-' }}</div>
-              <details>
-                <summary class="cursor-pointer text-xs text-slate-500">Xem thay đổi JSON</summary>
-                <pre class="mt-2 whitespace-pre-wrap text-[11px] text-slate-700 bg-white p-2 rounded border border-slate-200 overflow-auto">
-{{ prettyJson(item.beforeJson) }}
-                </pre>
-                <pre class="mt-2 whitespace-pre-wrap text-[11px] text-slate-700 bg-white p-2 rounded border border-slate-200 overflow-auto">
-{{ prettyJson(item.afterJson) }}
-                </pre>
-              </details>
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (item of filteredLogs; track item.id) {
+            <tr class="align-top">
+              <td class="font-medium text-xs whitespace-nowrap">{{ formatAsDate(item.createdAt) }}</td>
+              <td>
+                <div class="font-semibold text-xs text-[var(--m3-on-surface)]">{{ item.actorId || 'System' }}</div>
+                <div class="text-[10px] text-[var(--m3-on-surface-variant)] uppercase">{{ item.actorRole || '-' }}</div>
+              </td>
+              <td>
+                <span class="m3-badge m3-badge-primary uppercase text-[10px]">
+                  {{ item.action }}
+                </span>
+              </td>
+              <td class="font-mono text-xs">
+                {{ item.targetType }}{{ item.targetId ? `:${item.targetId}` : '' }}
+              </td>
+              <td>
+                <span class="m3-badge m3-badge-neutral text-[10px]">
+                  {{ item.policyDecision }} / {{ item.result }}
+                </span>
+              </td>
+              <td>
+                <span class="font-mono text-[10px] uppercase font-bold text-[var(--m3-primary)]">{{ item.method }}</span>
+                <div class="text-xs text-[var(--m3-on-surface-variant)] truncate max-w-[180px]">{{ item.path }}</div>
+              </td>
+              <td>
+                <div class="text-[10px] font-mono text-[var(--m3-on-surface-variant)]" title="{{ item.requestId }}">Req: {{ item.requestId || '-' }}</div>
+                <div class="text-[10px] font-mono text-[var(--m3-on-surface-variant)]" title="{{ item.correlationId }}">Trace: {{ item.correlationId || '-' }}</div>
+              </td>
+            </tr>
+            <tr class="bg-[var(--m3-surface-variant)]/50 text-xs border-b border-[var(--m3-outline)]">
+              <td class="font-semibold text-[var(--m3-on-surface-variant)] px-4 py-2">Details</td>
+              <td colspan="6" class="px-4 py-2">
+                <div class="text-xs text-[var(--m3-on-surface-variant)] mb-1">Reason: {{ item.reason || 'None specified' }}</div>
+                <details class="cursor-pointer">
+                  <summary class="text-xs font-semibold text-[var(--m3-primary)]">Inspect JSON Payload Diffs</summary>
+                  <div class="grid grid-cols-2 gap-2 mt-2">
+                    <div>
+                      <span class="text-[10px] font-semibold text-[var(--m3-on-surface-variant)]">State Before</span>
+                      <pre class="whitespace-pre-wrap text-[10px] font-mono text-[var(--m3-on-surface)] bg-[var(--m3-surface)] p-2 rounded-xl border border-[var(--m3-outline)] overflow-auto max-h-32">{{ prettyJson(item.beforeJson) }}</pre>
+                    </div>
+                    <div>
+                      <span class="text-[10px] font-semibold text-[var(--m3-on-surface-variant)]">State After</span>
+                      <pre class="whitespace-pre-wrap text-[10px] font-mono text-[var(--m3-on-surface)] bg-[var(--m3-surface)] p-2 rounded-xl border border-[var(--m3-outline)] overflow-auto max-h-32">{{ prettyJson(item.afterJson) }}</pre>
+                    </div>
+                  </div>
+                </details>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   </div>
 </section>

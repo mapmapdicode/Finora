@@ -1,39 +1,111 @@
-<section class="space-y-4">
-  <h2 class="text-2xl font-semibold">Monthly budget</h2>
-  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
-    This workspace is read-only. You can still browse budget rows.
-  </p>
+<section class="space-y-6">
+  <!-- Page Header -->
+  <div class="m3-page-header">
+    <div>
+      <h1 class="m3-page-title">Monthly Budgets</h1>
+      <p class="m3-page-subtitle">Set monthly spending targets and monitor actual vs budgeted expenses.</p>
+    </div>
 
-  <form (ngSubmit)="submit()" [formGroup]="form" class="grid md:grid-cols-3 gap-3 bg-white p-4 rounded-lg border">
-    <input formControlName="period" placeholder="2026-07" class="border p-2 rounded" />
-    <input formControlName="categoryId" placeholder="Category (optional)" class="border p-2 rounded" />
-    <input formControlName="limit" placeholder="Limit (e.g. 5000000)" class="border p-2 rounded" />
-    <button class="md:col-span-3 bg-blue-600 text-white rounded px-4 py-2" [disabled]="!auth.canMutate">Save budget</button>
-  </form>
+    <button
+      type="button"
+      class="m3-btn m3-btn-outlined"
+      (click)="loadBudget()"
+      [disabled]="loading"
+    >
+      <span class="material-symbols-rounded" [class.animate-spin]="loading">refresh</span>
+      {{ loading ? 'Loading...' : 'Refresh Budget' }}
+    </button>
+  </div>
 
-  <button
-    type="button"
-    class="bg-slate-900 text-white px-4 py-2 rounded"
-    (click)="loadBudget()"
-    [disabled]="loading"
-  >
-    {{ loading ? 'Loading...' : 'Refresh' }}
-  </button>
+  <!-- Readonly Warning -->
+  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
+    <span class="material-symbols-rounded">lock</span>
+    <span>This workspace is read-only. You can still browse budget rows.</span>
+  </div>
 
-  <p class="text-sm text-slate-600">{{ statusMessage }}</p>
+  <!-- Create Budget Form Card (Max 900px) -->
+  <div class="m3-card max-w-4xl">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">pie_chart</span> Budget Limit Configuration
+        </h3>
+        <p class="m3-card-subtitle">Set category budget caps for a specific period (YYYY-MM).</p>
+      </div>
+    </div>
 
-  <div class="bg-white border rounded-lg">
-    <div class="px-4 py-2 border-b font-semibold">Period: {{ summary?.period || form.value.period }}</div>
-    <ul class="divide-y">
-      <li *ngFor="let row of summary?.rows || []" class="px-4 py-2 grid grid-cols-4 gap-2">
-        <span class="font-mono">#{{ row.categoryId || 'uncategorized' }}</span>
-        <span>Limit: {{ row.limit }}</span>
-        <span>Spent: {{ row.spent }}</span>
-        <span>Currency: {{ row.currency || 'VND' }}</span>
-      </li>
-      <li *ngIf="!summary?.rows?.length" class="px-4 py-2 text-slate-500">
-        No budget items in this period.
-      </li>
-    </ul>
+    <form (ngSubmit)="submit()" [formGroup]="form" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="m3-label block mb-1">Period (YYYY-MM)</label>
+          <input formControlName="period" placeholder="e.g. 2026-07" class="m3-input" />
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Category (Optional)</label>
+          <input formControlName="categoryId" placeholder="Category ID or Name" class="m3-input" />
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Spending Limit</label>
+          <input formControlName="limit" placeholder="e.g. 5000000" class="m3-input" />
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
+          <span class="material-symbols-rounded">save</span> Save Budget Limit
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+
+  <!-- Budget Breakdown Card -->
+  <div class="m3-card">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">bar_chart</span> Budget Overview: {{ summary?.period || form.value.period }}
+        </h3>
+        <p class="m3-card-subtitle">Category breakdown vs actual expenditures.</p>
+      </div>
+      <span class="m3-badge m3-badge-primary">{{ summary?.rows?.length || 0 }} Categories</span>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!summary?.rows?.length" class="m3-empty-state">
+      <div class="m3-empty-icon">
+        <span class="material-symbols-rounded">pie_chart</span>
+      </div>
+      <p class="m3-empty-title">No Budget Items</p>
+      <p class="m3-empty-desc">No category budget limits have been created for {{ summary?.period || form.value.period }}.</p>
+    </div>
+
+    <!-- Budget Table -->
+    <div *ngIf="summary?.rows?.length" class="m3-table-container">
+      <table class="m3-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Spending Limit</th>
+            <th>Actual Spent</th>
+            <th>Currency</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of summary?.rows || []">
+            <td class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-2">
+              <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">folder</span>
+              #{{ row.categoryId || 'uncategorized' }}
+            </td>
+            <td class="font-bold text-[var(--m3-on-surface)]">{{ row.limit }}</td>
+            <td class="font-bold text-[var(--m3-danger)]">{{ row.spent }}</td>
+            <td class="font-mono text-xs">{{ row.currency || 'VND' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </section>

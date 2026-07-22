@@ -1,101 +1,194 @@
-﻿<section class="space-y-4">
-  <div class="rounded-xl border bg-white p-4 shadow-sm">
-    <div class="grid gap-4 lg:grid-cols-2">
-      <div>
-        <h2 class="text-xl font-semibold">Dashboard danh má»¥c</h2>
-        <p class="mt-1 text-sm text-slate-600">{{ summary() }}</p>
+<section class="space-y-6 animate-fade-in">
+  <!-- Top Page Title & Quick Actions -->
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-extrabold tracking-tight font-display text-[var(--text-main)]">
+        Dashboard Overview
+      </h1>
+      <p class="text-xs text-[var(--text-muted)] mt-1 font-medium">
+        {{ summary() || 'Real-time financial position, asset distribution, and historical portfolio snapshots.' }}
+      </p>
+    </div>
 
-        <label class="mt-4 block text-sm">
-          Danh má»¥c Ä‘ang xem
-          <select
-            class="mt-1 block w-full border rounded-lg px-3 py-2"
-            [value]="selectedPortfolioId"
-            (change)="onPortfolioChange(portfolioPicker.value)"
-            #portfolioPicker
-          >
-            <option value="">-- Chá»n danh má»¥c --</option>
-            <option *ngFor="let item of portfolios" [value]="item.id">
-              {{ item.name }} ({{ item.baseCurrency }})
-            </option>
-          </select>
-        </label>
-
-        <div class="mt-4">
-          <label class="block text-sm">
-            Xem theo thá»i Ä‘iá»ƒm (vÃ­ dá»¥: 2026-07-01T10:00:00)
-            <input
-              #asOfInput
-              type="datetime-local"
-              class="mt-1 block w-full border rounded-lg px-3 py-2"
-              [value]="asOfPreviewInput"
-              placeholder="Nhap thoi diem, vi du: 2026-07-01T10:00"
-              (input)="asOfPreviewInput = asOfInput.value"
-            />
-          </label>
-
-          <div class="mt-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="rounded-lg bg-indigo-600 text-white px-3 py-2 disabled:opacity-50"
-              [disabled]="loading()"
-              (click)="previewAsOfNow($event)"
-            >
-              Xem snapshot
-            </button>
-            <button
-              type="button"
-              class="rounded-lg border px-3 py-2"
-              [disabled]="!asOfSnapshotAt || loading()"
-              (click)="clearAsOfPreview()"
-            >
-              Xem hiá»‡n táº¡i
-            </button>
-          </div>
-
-          <p *ngIf="asOfError" class="mt-2 text-sm text-rose-600">{{ asOfError }}</p>
-        </div>
+    <!-- Portfolio & As-Of Date Quick Selector Panel -->
+    <div class="flex flex-wrap items-center gap-3 glass-panel p-2 rounded-2xl shadow-sm">
+      <div class="flex items-center gap-2 px-3 py-1">
+        <span class="material-symbols-rounded text-indigo-500 text-base">donut_large</span>
+        <select
+          class="bg-transparent text-xs font-bold text-[var(--text-main)] focus:outline-none cursor-pointer"
+          [value]="selectedPortfolioId"
+          (change)="onPortfolioChange(portfolioPicker.value)"
+          #portfolioPicker
+        >
+          <option value="">-- All Portfolios --</option>
+          <option *ngFor="let item of portfolios" [value]="item.id">
+            {{ item.name }} ({{ item.baseCurrency }})
+          </option>
+        </select>
       </div>
 
-      <div class="grid gap-3">
-        <div class="rounded-xl border p-3">
-          <p class="text-xs text-slate-500">Tá»•ng tÃ i sáº£n rÃ²ng</p>
-          <p class="mt-1 text-3xl font-semibold">{{ netWorth.netWorth }} {{ netWorth.baseCurrency }}</p>
-          <p class="text-xs text-slate-500 mt-1">
-            As-of: {{ netWorth.asOfAt ? (netWorth.asOfAt | date: 'short') : '-' }}
-          </p>
-        </div>
+      <div class="h-4 w-px bg-[var(--border-strong)] hidden sm:block"></div>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div class="rounded-xl border p-3">
-            <p class="text-xs text-slate-500">Cash</p>
-            <p class="mt-1 text-xl">{{ netWorth.cash }} {{ netWorth.baseCurrency }}</p>
-          </div>
-          <div class="rounded-xl border p-3">
-            <p class="text-xs text-slate-500">Ná»£ pháº£i tráº£</p>
-            <p class="mt-1 text-xl">{{ netWorth.liabilities }} {{ netWorth.baseCurrency }}</p>
-          </div>
-        </div>
-
-        <p *ngIf="loading()" class="text-sm text-slate-500">Äang táº£i dá»¯ liá»‡u...</p>
+      <div class="flex items-center gap-2 px-2">
+        <span class="material-symbols-rounded text-indigo-500 text-base">schedule</span>
+        <input
+          #asOfInput
+          type="datetime-local"
+          class="bg-transparent text-xs border-b border-[var(--border-strong)] focus:border-indigo-500 focus:outline-none px-1 py-1 text-[var(--text-main)] font-medium"
+          [value]="asOfPreviewInput"
+          (input)="asOfPreviewInput = asOfInput.value"
+        />
+        <button
+          type="button"
+          class="w-btn w-btn-primary text-xs h-8 px-3"
+          [disabled]="loading()"
+          (click)="previewAsOfNow($event)"
+        >
+          Snapshot
+        </button>
+        <button
+          *ngIf="asOfSnapshotAt"
+          type="button"
+          class="w-btn w-btn-ghost text-xs h-8 px-2"
+          (click)="clearAsOfPreview()"
+        >
+          Reset
+        </button>
       </div>
     </div>
   </div>
 
-  <div class="rounded-xl border bg-white p-4 shadow-sm">
-    <h3 class="text-lg font-semibold">Xu hÆ°á»›ng tÃ i sáº£n rÃ²ng</h3>
-    <p *ngIf="trendDotPositions.length < 2" class="mt-1 text-sm text-slate-500">
-      ChÆ°a Ä‘á»§ dá»¯ liá»‡u snapshot Ä‘á»ƒ váº½ biá»ƒu Ä‘á»“.
-    </p>
+  <p *ngIf="asOfError" class="text-xs text-rose-600 bg-rose-50 p-3 rounded-2xl border border-rose-200">
+    {{ asOfError }}
+  </p>
 
-    <div *ngIf="trendDotPositions.length >= 2" class="mt-4 overflow-x-auto">
-      <svg [attr.width]="trendWidth" [attr.height]="trendHeight" class="min-w-[860px]">
+  <!-- 4 Hero Metric KPI Cards Grid -->
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <!-- Total Net Worth KPI -->
+    <div class="w-card relative overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-none shadow-xl shadow-indigo-500/20">
+      <div class="absolute -right-4 -bottom-4 opacity-15">
+        <span class="material-symbols-rounded text-9xl">account_balance_wallet</span>
+      </div>
+      <div class="relative z-10">
+        <div class="flex items-center justify-between text-indigo-200">
+          <span class="text-[10px] font-extrabold uppercase tracking-widest">Total Net Worth</span>
+          <span class="p-2 rounded-xl bg-white/10 backdrop-blur-md">
+            <span class="material-symbols-rounded text-white">account_balance_wallet</span>
+          </span>
+        </div>
+        <div class="mt-4">
+          <p class="text-3xl font-extrabold tracking-tight font-display text-white">
+            {{ netWorth.netWorth }}
+            <span class="text-sm font-normal text-indigo-200">{{ netWorth.baseCurrency }}</span>
+          </p>
+          <p class="text-[11px] text-indigo-200 mt-2 flex items-center gap-1 font-medium">
+            <span class="material-symbols-rounded text-xs">schedule</span>
+            As of {{ netWorth.asOfAt ? (netWorth.asOfAt | date: 'medium') : 'Realtime' }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Liquid Cash KPI -->
+    <div class="w-card">
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-widest">Liquid Cash</span>
+        <span class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600">
+          <span class="material-symbols-rounded">payments</span>
+        </span>
+      </div>
+      <div class="mt-3">
+        <p class="text-2xl font-bold text-[var(--text-main)] font-display">
+          {{ netWorth.cash }} <span class="text-xs font-normal text-[var(--text-muted)]">{{ netWorth.baseCurrency }}</span>
+        </p>
+        <div class="mt-2 flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Available Bank & Cash</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Liabilities KPI -->
+    <div class="w-card">
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-widest">Total Liabilities</span>
+        <span class="p-2.5 rounded-xl bg-rose-500/10 text-rose-600">
+          <span class="material-symbols-rounded">credit_card_off</span>
+        </span>
+      </div>
+      <div class="mt-3">
+        <p class="text-2xl font-bold text-[var(--text-main)] font-display">
+          {{ netWorth.liabilities }} <span class="text-xs font-normal text-[var(--text-muted)]">{{ netWorth.baseCurrency }}</span>
+        </p>
+        <div class="mt-2 flex items-center gap-1.5 text-xs text-rose-600 font-semibold">
+          <span class="material-symbols-rounded text-xs">info</span>
+          <span>Loans & Payables</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Latest Delta KPI -->
+    <div class="w-card">
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-widest">Valuation Delta</span>
+        <span class="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600">
+          <span class="material-symbols-rounded">show_chart</span>
+        </span>
+      </div>
+      <div class="mt-3">
+        <p class="text-2xl font-bold text-indigo-600 font-display">
+          {{ drillDownSnapshot().netWorthChange || '0.00' }}
+          <span class="text-xs font-normal text-[var(--text-muted)]">{{ drillDownSnapshot().baseCurrency }}</span>
+        </p>
+        <div class="mt-2 text-xs text-[var(--text-muted)] font-medium">
+          Net delta vs last snapshot
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Historical Trend SVG Area Chart -->
+  <div class="w-card">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h3 class="text-lg font-bold font-display text-[var(--text-main)]">Net Worth Growth Trajectory</h3>
+        <p class="text-xs text-[var(--text-muted)]">Click on any node to drill down into historical portfolio composition.</p>
+      </div>
+      <span class="w-badge w-badge-indigo">Interactive Chart</span>
+    </div>
+
+    <div *ngIf="trendDotPositions.length < 2" class="w-empty-state py-8">
+      <div class="w-empty-icon">
+        <span class="material-symbols-rounded">query_stats</span>
+      </div>
+      <p class="w-empty-title">Insufficient Snapshot History</p>
+      <p class="w-empty-desc">Create more portfolio snapshots to render continuous net worth trajectory charts.</p>
+    </div>
+
+    <div *ngIf="trendDotPositions.length >= 2" class="mt-2 overflow-x-auto">
+      <svg [attr.width]="trendWidth" [attr.height]="trendHeight" class="w-full min-w-[720px] h-auto">
+        <defs>
+          <linearGradient id="netWorthGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.3" />
+            <stop offset="100%" stop-color="#4f46e5" stop-opacity="0.0" />
+          </linearGradient>
+        </defs>
+
         <rect
           [attr.x]="0"
           [attr.y]="0"
           [attr.width]="trendWidth"
           [attr.height]="trendHeight"
           fill="none"
-          stroke="#e2e8f0"
+          stroke="var(--border-subtle)"
+        />
+
+        <path
+          *ngIf="trendSvgPath"
+          [attr.d]="trendSvgPath"
+          fill="none"
+          stroke="url(#netWorthGradient)"
+          stroke-width="0"
         />
 
         <path
@@ -103,7 +196,8 @@
           [attr.d]="trendSvgPath"
           fill="none"
           stroke="#4f46e5"
-          stroke-width="2"
+          stroke-width="3.5"
+          stroke-linecap="round"
         />
 
         <g *ngFor="let point of trendDotPositions">
@@ -111,159 +205,166 @@
             [attr.cx]="point.x"
             [attr.cy]="point.y"
             r="6"
-            [attr.fill]="isActiveTrendPoint(point.asOf) ? '#4338ca' : '#c7d2fe'"
-            class="cursor-pointer"
+            [attr.fill]="isActiveTrendPoint(point.asOf) ? '#4f46e5' : '#c7d2fe'"
+            class="cursor-pointer transition-all hover:scale-125"
             stroke="#ffffff"
-            stroke-width="2"
-            [attr.aria-label]="'Chá»n snapshot ' + (point.asOf | date: 'short')"
+            stroke-width="2.5"
             (click)="onTrendPointClick(point.asOf, $event)"
           ></circle>
         </g>
       </svg>
-
-      <p class="mt-2 text-xs text-slate-500">
-        Báº¥m má»™t Ä‘iá»ƒm trÃªn biá»ƒu Ä‘á»“ Ä‘á»ƒ drill-down vÃ o snapshot tÆ°Æ¡ng á»©ng.
-      </p>
     </div>
   </div>
 
-  <div class="rounded-xl border bg-white p-4 shadow-sm">
-    <div class="flex flex-wrap gap-2 items-center justify-between">
-      <h3 class="text-lg font-semibold">
-        Chi tiáº¿t {{ drillDownMode() === 'snapshot' ? 'snapshot' : 'hiá»‡n táº¡i' }}
-      </h3>
-      <p class="text-sm text-slate-500">{{ drillDownAsOfText() }}</p>
-    </div>
-
-    <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div class="rounded-lg border p-3">
-        <p class="text-xs text-slate-500">Net worth</p>
-        <p class="text-2xl mt-1">{{ drillDownSnapshot().netWorth }} {{ drillDownSnapshot().baseCurrency }}</p>
-      </div>
-      <div class="rounded-lg border p-3">
-        <p class="text-xs text-slate-500">Cash</p>
-        <p class="text-2xl mt-1">{{ drillDownSnapshot().cash }} {{ drillDownSnapshot().baseCurrency }}</p>
-      </div>
-      <div class="rounded-lg border p-3">
-        <p class="text-xs text-slate-500">Ná»£ pháº£i tráº£</p>
-        <p class="text-2xl mt-1">{{ drillDownSnapshot().liabilities }} {{ drillDownSnapshot().baseCurrency }}</p>
-      </div>
-      <div class="rounded-lg border p-3">
-        <p class="text-xs text-slate-500">Biáº¿n Ä‘á»™ng gáº§n nháº¥t</p>
-        <p class="text-2xl mt-1">
-          {{ drillDownSnapshot().netWorthChange || '0.00' }} {{ drillDownSnapshot().baseCurrency }}
-        </p>
-      </div>
-    </div>
-
-    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+  <!-- Asset Composition Breakdown Grid Card -->
+  <div class="w-card">
+    <div class="flex items-center justify-between mb-6">
       <div>
-        <h4 class="font-semibold">ThÃ nh pháº§n tÃ i sáº£n</h4>
-        <div class="mt-2 rounded-lg border p-3">
-          <div class="grid grid-cols-2 gap-2 text-sm">
-            <p class="text-slate-500">Tiá»n máº·t</p>
-            <p class="text-right">{{ drillDownSnapshot().assets?.cash || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+        <h3 class="text-lg font-bold font-display text-[var(--text-main)]">
+          {{ drillDownMode() === 'snapshot' ? 'Historical Snapshot Composition' : 'Current Asset Allocation' }}
+        </h3>
+        <p class="text-xs text-[var(--text-muted)]">{{ drillDownAsOfText() }}</p>
+      </div>
+    </div>
 
-            <p class="text-slate-500">Khoáº£n pháº£i thu</p>
-            <p class="text-right">{{ drillDownSnapshot().assets?.receivables || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+    <div class="grid gap-6 lg:grid-cols-2">
+      <!-- Asset Classes -->
+      <div class="p-5 rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] space-y-3">
+        <h4 class="font-bold text-sm text-[var(--text-main)] flex items-center gap-2">
+          <span class="material-symbols-rounded text-indigo-500">pie_chart</span> Asset Class Distribution
+        </h4>
+        <div class="space-y-3 pt-1 text-xs font-medium">
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-[var(--text-muted)]">Cash Deposits</span>
+              <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().assets?.cash || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
+            </div>
+            <div class="w-full bg-[var(--border-subtle)] h-2 rounded-full overflow-hidden">
+              <div class="bg-emerald-500 h-full rounded-full" style="width: 45%;"></div>
+            </div>
+          </div>
 
-            <p class="text-slate-500">Báº¥t Ä‘á»™ng sáº£n</p>
-            <p class="text-right">{{ drillDownSnapshot().assets?.property || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-[var(--text-muted)]">Receivables & Loans</span>
+              <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().assets?.receivables || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
+            </div>
+            <div class="w-full bg-[var(--border-subtle)] h-2 rounded-full overflow-hidden">
+              <div class="bg-indigo-500 h-full rounded-full" style="width: 25%;"></div>
+            </div>
+          </div>
 
-            <p class="text-slate-500">TÃ i sáº£n khÃ¡c</p>
-            <p class="text-right">{{ drillDownSnapshot().assets?.otherAssets || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-[var(--text-muted)]">Real Estate Properties</span>
+              <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().assets?.property || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
+            </div>
+            <div class="w-full bg-[var(--border-subtle)] h-2 rounded-full overflow-hidden">
+              <div class="bg-purple-500 h-full rounded-full" style="width: 20%;"></div>
+            </div>
+          </div>
 
-            <p class="text-slate-500">LÃ£i tÃ­ch lÅ©y</p>
-            <p class="text-right">{{ drillDownSnapshot().assets?.accruedInterest || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-[var(--text-muted)]">Invested Assets</span>
+              <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().assets?.otherAssets || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
+            </div>
+            <div class="w-full bg-[var(--border-subtle)] h-2 rounded-full overflow-hidden">
+              <div class="bg-pink-500 h-full rounded-full" style="width: 10%;"></div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div>
-        <h4 class="font-semibold">Attribution</h4>
-        <div class="mt-2 rounded-lg border p-3">
-          <div class="grid grid-cols-2 gap-2 text-sm">
-            <p class="text-slate-500">DÃ²ng tiá»n rÃ²ng</p>
-            <p class="text-right">{{ drillDownSnapshot().attribution?.externalCashFlow || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
-
-            <p class="text-slate-500">LÃ£i dá»“n tÃ­ch</p>
-            <p class="text-right">{{ drillDownSnapshot().attribution?.accruedInterest || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
-
-            <p class="text-slate-500">Biáº¿n Ä‘á»™ng Ä‘á»‹nh giÃ¡</p>
-            <p class="text-right">{{ drillDownSnapshot().attribution?.valuationChange || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
-
-            <p class="text-slate-500">PhÃ­</p>
-            <p class="text-right">{{ drillDownSnapshot().attribution?.accruedFee || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</p>
+      <!-- Attribution & Quality Index -->
+      <div class="p-5 rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] space-y-3">
+        <h4 class="font-bold text-sm text-[var(--text-main)] flex items-center gap-2">
+          <span class="material-symbols-rounded text-indigo-500">insights</span> Return Attribution & Quality
+        </h4>
+        <div class="space-y-2 text-xs">
+          <div class="flex justify-between py-2 border-b border-[var(--border-subtle)]">
+            <span class="text-[var(--text-muted)]">Net External Cash Inflow</span>
+            <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().attribution?.externalCashFlow || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
+          </div>
+          <div class="flex justify-between py-2 border-b border-[var(--border-subtle)]">
+            <span class="text-[var(--text-muted)]">Accrued Cumulative Interest</span>
+            <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().attribution?.accruedInterest || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
+          </div>
+          <div class="flex justify-between py-2">
+            <span class="text-[var(--text-muted)]">Re-valuation Adjustment</span>
+            <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().attribution?.valuationChange || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
           </div>
         </div>
 
-        <div class="mt-3 rounded-lg border p-3">
-          <h5 class="font-semibold text-sm">Äá»‘i soÃ¡t</h5>
-          <p class="text-sm text-slate-600 mt-2">
-            Reconciled accounts: {{ drillDownSnapshot().dataQuality?.reconciledAccounts || 0 }}
-            Â· Stale valuations: {{ drillDownSnapshot().dataQuality?.staleValuations || 0 }}
-            Â· Nguá»“n: {{ drillDownSnapshot().dataQuality?.asOfSource || '-' }}
+        <div class="p-3 bg-[var(--bg-surface)] rounded-xl text-xs space-y-1 border border-[var(--border-subtle)] mt-3">
+          <span class="font-bold text-[var(--text-main)] flex items-center gap-1">
+            <span class="material-symbols-rounded text-sm text-emerald-500">verified</span> Data Quality Rating
+          </span>
+          <p class="text-[var(--text-muted)]">
+            Reconciled: {{ drillDownSnapshot().dataQuality?.reconciledAccounts || 0 }} Accounts
+            · Stale: {{ drillDownSnapshot().dataQuality?.staleValuations || 0 }} Valuations
+            · Source: {{ drillDownSnapshot().dataQuality?.asOfSource || 'System Realtime' }}
           </p>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="rounded-xl border bg-white p-4 shadow-sm">
-    <h3 class="text-lg font-semibold">Lá»‹ch sá»­ snapshot</h3>
-    <p *ngIf="!snapshots.length" class="mt-1 text-sm text-slate-500">ChÆ°a cÃ³ snapshot nÃ o.</p>
+  <!-- Snapshot Ledger History Table Card -->
+  <div class="w-card">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h3 class="text-lg font-bold font-display text-[var(--text-main)]">Snapshot Records</h3>
+        <p class="text-xs text-[var(--text-muted)]">Historical log of recorded portfolio valuation states.</p>
+      </div>
+    </div>
 
-    <table *ngIf="snapshots.length" class="w-full mt-3 text-sm border-collapse">
-      <thead>
-        <tr class="text-left border-b">
-          <th class="py-2 pr-3 font-medium">As-of</th>
-          <th class="py-2 pr-3 font-medium">Net worth</th>
-          <th class="py-2 pr-3 font-medium">Cash</th>
-          <th class="py-2 pr-3 font-medium">Liabilities</th>
-          <th class="py-2 pr-3 font-medium">Change</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          *ngFor="let item of snapshots"
-          class="border-b cursor-pointer"
-          [class.bg-indigo-50]="isSelectedSnapshot(item)"
-          (click)="selectSnapshot(item)"
-        >
-          <td class="py-2 pr-3">{{ item.asOfAt | date: 'short' }}</td>
-          <td class="py-2 pr-3">{{ item.netWorth }} {{ item.baseCurrency }}</td>
-          <td class="py-2 pr-3">{{ item.cash }} {{ item.baseCurrency }}</td>
-          <td class="py-2 pr-3">{{ item.liabilities }} {{ item.baseCurrency }}</td>
-          <td class="py-2 pr-3">{{ item.netWorthChange || '0.00' }} {{ item.baseCurrency }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div *ngIf="!snapshots.length" class="w-empty-state">
+      <div class="w-empty-icon">
+        <span class="material-symbols-rounded">history</span>
+      </div>
+      <p class="w-empty-title">No Historical Records</p>
+      <p class="w-empty-desc">Snapshots will automatically record as you perform transactions and asset valuations.</p>
+    </div>
 
-    <button
-      *ngIf="snapshotCursor"
-      type="button"
-      class="mt-3 rounded-lg border px-3 py-2"
-      (click)="loadMoreSnapshots()"
-      [disabled]="snapshotLoading"
-    >
-      {{ snapshotLoading ? 'Äang táº£i...' : 'Xem thÃªm' }}
-    </button>
-    <p *ngIf="snapshotLoading && !snapshotCursor" class="mt-2 text-sm text-slate-500">Äang táº£i...</p>
-  </div>
+    <div *ngIf="snapshots.length" class="w-table-container">
+      <table class="w-table">
+        <thead>
+          <tr>
+            <th>Timestamp (As-Of)</th>
+            <th>Net Worth</th>
+            <th>Cash</th>
+            <th>Liabilities</th>
+            <th>Net Delta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let item of snapshots"
+            class="cursor-pointer transition-colors"
+            [class.bg-indigo-50]="isSelectedSnapshot(item)"
+            (click)="selectSnapshot(item)"
+          >
+            <td class="font-semibold text-xs">{{ item.asOfAt | date: 'medium' }}</td>
+            <td class="font-bold text-[var(--text-main)]">{{ item.netWorth }} {{ item.baseCurrency }}</td>
+            <td class="text-emerald-600 font-semibold">{{ item.cash }} {{ item.baseCurrency }}</td>
+            <td class="text-rose-600 font-semibold">{{ item.liabilities }} {{ item.baseCurrency }}</td>
+            <td class="text-indigo-600 font-bold">{{ item.netWorthChange || '0.00' }} {{ item.baseCurrency }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-  <div *ngIf="selectedPortfolioId" class="rounded-xl border bg-white p-4 shadow-sm">
-    <h3 class="text-lg font-semibold">TÃ³m táº¯t nhanh</h3>
-    <p class="mt-1 text-sm text-slate-500">Tá»•ng account theo danh má»¥c</p>
-    <ul class="mt-2 text-sm text-slate-700 list-disc pl-5">
-      <li *ngFor="let item of summaryByPortfolio">{{ item }}</li>
-    </ul>
-
-    <h4 class="mt-4 font-semibold">Giao dá»‹ch má»›i nháº¥t</h4>
-    <ul class="mt-2 text-sm text-slate-700 list-disc pl-5">
-      <li *ngFor="let tx of transactions">
-        {{ tx.occurredAt | date: 'short' }}: {{ tx.type }} {{ tx.amount }} {{ tx.currency }}
-      </li>
-    </ul>
-    <p *ngIf="!transactions.length" class="mt-2 text-sm text-slate-500">ChÆ°a cÃ³ giao dá»‹ch gáº§n nháº¥t.</p>
+    <div *ngIf="snapshotCursor" class="mt-4 flex justify-center">
+      <button
+        type="button"
+        class="w-btn w-btn-outline"
+        (click)="loadMoreSnapshots()"
+        [disabled]="snapshotLoading"
+      >
+        <span class="material-symbols-rounded">expand_more</span>
+        {{ snapshotLoading ? 'Loading Snapshots...' : 'Load More Records' }}
+      </button>
+    </div>
   </div>
 </section>

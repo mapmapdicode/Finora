@@ -1,61 +1,155 @@
-<section class="space-y-5">
-  <h2 class="text-2xl font-semibold">Assets</h2>
-
-  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
-    This workspace is read-only. You can only view assets.
-  </p>
-
-  <form (ngSubmit)="submitAsset()" [formGroup]="assetForm" class="grid md:grid-cols-3 gap-3 bg-white p-4 rounded-lg border">
-    <input formControlName="name" placeholder="Asset name" class="border p-2 rounded" />
-    <input formControlName="assetType" placeholder="investment / fixed_income / crypto..." class="border p-2 rounded" />
-    <input formControlName="portfolioId" placeholder="Portfolio ID (optional)" class="border p-2 rounded" />
-    <button class="bg-blue-600 text-white rounded px-4 py-2 md:col-span-3" [disabled]="!auth.canMutate">
-      Create asset
-    </button>
-  </form>
-
-  <p class="text-sm text-slate-600">{{ statusMessage }}</p>
-
-  <div class="bg-white border rounded-lg">
-    <div class="px-4 py-2 border-b font-semibold">List</div>
-    <ul class="divide-y">
-      <li *ngFor="let item of assets" class="px-4 py-2">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="font-semibold">{{ item.name }}</p>
-            <p class="text-sm text-slate-600">Type: {{ item.assetType }}</p>
-          </div>
-          <button
-            *ngIf="auth.canMutate"
-            type="button"
-            class="text-xs px-3 py-1 rounded border"
-            (click)="openValuation(item.id)"
-          >
-            Add valuation
-          </button>
-        </div>
-      </li>
-      <li *ngIf="!assets.length" class="px-4 py-3 text-slate-500">No assets.</li>
-    </ul>
+<section class="space-y-6">
+  <!-- Page Header -->
+  <div class="m3-page-header">
+    <div>
+      <h1 class="m3-page-title">Investment Assets</h1>
+      <p class="m3-page-subtitle">Track portfolios of stocks, crypto, fixed income, and custom investments.</p>
+    </div>
   </div>
 
-  <div *ngIf="selectedAssetId" class="bg-white p-4 border rounded-lg space-y-2">
-    <h4 class="font-semibold">Valuation for: {{ selectedAssetId }}</h4>
-    <form [formGroup]="valuationForm" (ngSubmit)="submitValuation()" class="grid md:grid-cols-2 gap-2">
-      <input formControlName="valuationAmount" placeholder="Value" class="border p-2 rounded" />
-      <input formControlName="currency" placeholder="VND" class="border p-2 rounded" />
-      <input formControlName="source" placeholder="Source" class="border p-2 rounded md:col-span-2" />
-      <input formControlName="effectiveAt" type="datetime-local" class="border p-2 rounded md:col-span-2" />
-      <div class="md:col-span-2 flex gap-2">
-        <button
-          type="submit"
-          class="bg-emerald-700 text-white px-4 py-2 rounded"
-          [disabled]="!auth.canMutate"
-        >
-          Save valuation
+  <!-- Readonly Warning -->
+  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
+    <span class="material-symbols-rounded">lock</span>
+    <span>This workspace is read-only. You can only view assets and valuations.</span>
+  </div>
+
+  <!-- Create Asset Card Form (Max 900px) -->
+  <div class="m3-card max-w-4xl">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">savings</span> Create Asset Entry
+        </h3>
+        <p class="m3-card-subtitle">Register investment instruments for tracking valuations.</p>
+      </div>
+    </div>
+
+    <form (ngSubmit)="submitAsset()" [formGroup]="assetForm" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="m3-label block mb-1">Asset Name</label>
+          <input formControlName="name" placeholder="e.g. BTC, Tech Stock Fund" class="m3-input" />
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Asset Category / Type</label>
+          <input formControlName="assetType" placeholder="investment / crypto / stock..." class="m3-input" />
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Portfolio ID (Optional)</label>
+          <input formControlName="portfolioId" placeholder="Portfolio ID" class="m3-input" />
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
+          <span class="material-symbols-rounded">add</span> Create Asset
         </button>
-        <button type="button" class="bg-slate-200 px-4 py-2 rounded" (click)="closeValuation()">Close</button>
       </div>
     </form>
+  </div>
+
+  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+
+  <!-- Asset Valuation Modal / Form Card -->
+  <div *ngIf="selectedAssetId" class="m3-card max-w-4xl border-2 border-[var(--m3-primary)]">
+    <div class="m3-card-header">
+      <div>
+        <h4 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">rate_review</span> Add Valuation for: {{ selectedAssetId }}
+        </h4>
+        <p class="m3-card-subtitle">Record updated valuation estimate for asset snapshot calculations.</p>
+      </div>
+    </div>
+
+    <form [formGroup]="valuationForm" (ngSubmit)="submitValuation()" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="m3-label block mb-1">Valuation Amount</label>
+          <input formControlName="valuationAmount" placeholder="0.00" class="m3-input" />
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Currency</label>
+          <input formControlName="currency" placeholder="VND" class="m3-input" />
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="m3-label block mb-1">Valuation Source / Provider</label>
+          <input formControlName="source" placeholder="e.g. Binance API, Market Appraisal, Manual Estimate" class="m3-input" />
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="m3-label block mb-1">Effective Timestamp</label>
+          <input formControlName="effectiveAt" type="datetime-local" class="m3-input" />
+        </div>
+      </div>
+
+      <div class="flex gap-3 justify-end pt-2">
+        <button type="button" class="m3-btn m3-btn-text" (click)="closeValuation()">Cancel</button>
+        <button type="submit" class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
+          <span class="material-symbols-rounded">check</span> Save Valuation
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Assets List Card -->
+  <div class="m3-card">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">trending_up</span> Registered Asset Holdings
+        </h3>
+        <p class="m3-card-subtitle">Active financial assets in your portfolio.</p>
+      </div>
+      <span class="m3-badge m3-badge-neutral">{{ assets.length }} Assets</span>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!assets.length" class="m3-empty-state">
+      <div class="m3-empty-icon">
+        <span class="material-symbols-rounded">savings</span>
+      </div>
+      <p class="m3-empty-title">No Assets Recorded</p>
+      <p class="m3-empty-desc">Add investment holdings using the form above to track asset appreciation.</p>
+    </div>
+
+    <!-- Assets Table -->
+    <div *ngIf="assets.length" class="m3-table-container">
+      <table class="m3-table">
+        <thead>
+          <tr>
+            <th>Asset Name</th>
+            <th>Type</th>
+            <th>Asset ID</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of assets">
+            <td class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-2">
+              <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">token</span>
+              {{ item.name }}
+            </td>
+            <td>
+              <span class="m3-badge m3-badge-primary uppercase text-[10px]">{{ item.assetType }}</span>
+            </td>
+            <td class="font-mono text-xs text-[var(--m3-on-surface-variant)]">{{ item.id }}</td>
+            <td class="text-right">
+              <button
+                *ngIf="auth.canMutate"
+                type="button"
+                class="m3-btn m3-btn-outlined text-xs py-1 px-3"
+                (click)="openValuation(item.id)"
+              >
+                <span class="material-symbols-rounded text-sm">add_chart</span> Add Valuation
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </section>

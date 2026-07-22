@@ -8,6 +8,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/wealthos-backend ./cm
 FROM alpine:3.21
 WORKDIR /app
 COPY --from=builder /bin/wealthos-backend /usr/local/bin/wealthos-backend
+COPY --from=builder /app/internal/db/migrations /app/internal/db/migrations
 EXPOSE 8080
 ENTRYPOINT ["wealthos-backend"]
 

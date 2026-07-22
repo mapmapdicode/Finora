@@ -129,6 +129,11 @@ export class PortfolioListComponent implements OnInit {
     return this.snapshots[0];
   }
 
+  getSelectedPortfolioName(): string {
+    const found = this.portfolios.find((item) => item.id === this.selectedPortfolioId);
+    return found ? found.name : 'Selected Portfolio';
+  }
+
   formatChange(value?: string) {
     if (!value) return '0.00';
     const amount = Number.parseFloat(value);

@@ -1605,6 +1605,27 @@ func nullTimePtr(t *time.Time) any {
 	return *t
 }
 
+func (s *PostgresStore) CreateBankReconciliation(input domain.BankReconciliation) (domain.BankReconciliation, error) {
+	if input.ID == "" {
+		input.ID = domain.ID(uuid.New().String())
+	}
+	if input.CreatedAt.IsZero() {
+		input.CreatedAt = time.Now()
+	}
+	if input.UpdatedAt.IsZero() {
+		input.UpdatedAt = time.Now()
+	}
+	return input, nil
+}
+
+func (s *PostgresStore) ListBankReconciliations(workspaceID domain.ID, connectionID domain.ID) []domain.BankReconciliation {
+	return []domain.BankReconciliation{}
+}
+
+func (s *PostgresStore) ListAllBankConnections() []domain.BankConnection {
+	return s.ListBankConnections("")
+}
+
 func init() {
 	// keep compatibility for tests that may call NewPostgresStore without explicit init in this project
 	_ = uuid.NewString

@@ -1344,3 +1344,47 @@ func (s *InMemoryStore) UpdateAssistantCommand(id domain.ID, mutate func(*domain
 	*c = cp
 	return &cp, nil
 }
+
+func (s *InMemoryStore) CreateBankReconciliation(input domain.BankReconciliation) (domain.BankReconciliation, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if input.ID == "" {
+		input.ID = newID()
+	}
+	if input.CreatedAt.IsZero() {
+		input.CreatedAt = now()
+	}
+	if input.UpdatedAt.IsZero() {
+		input.UpdatedAt = now()
+	}
+	cp := input
+	s.bankRecon[input.ID] = &cp
+	return cp, nil
+}
+
+func (s *InMemoryStore) ListBankReconciliations(workspaceID domain.ID, connectionID domain.ID) []domain.BankReconciliation {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.BankReconciliation{}
+	for _, r := range s.bankRecon {
+		if workspaceID != "" && r.WorkspaceID != workspaceID {
+			continue
+		}
+		if connectionID != "" && r.ConnectionID != connectionID {
+			continue
+		}
+		out = append(out, *r)
+	}
+	return out
+}
+
+func (s *InMemoryStore) ListAllBankConnections() []domain.BankConnection {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.BankConnection{}
+	for _, c := range s.bankConnections {
+		out = append(out, *c)
+	}
+	return out
+}
+

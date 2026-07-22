@@ -1,219 +1,296 @@
-<section class="space-y-4">
-  <h2 class="text-2xl font-semibold">SePay Bank Inbox</h2>
-  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
-    This workspace is read-only. You can review bank transactions but not make changes.
-  </p>
+<section class="space-y-6">
+  <!-- Page Header -->
+  <div class="m3-page-header">
+    <div>
+      <h1 class="m3-page-title">SePay Bank Hub & Feed Inbox</h1>
+      <p class="m3-page-subtitle">Realtime bank webhook feed, automated classification, and ledger reconciliation inbox.</p>
+    </div>
 
-  <div class="space-x-2">
-    <button
-      (click)="connect()"
-      class="bg-blue-700 text-white px-4 py-2 rounded"
-      [disabled]="isBusy || !auth.canMutate"
-    >
-      {{ isBusy ? 'Connecting...' : 'Connect SePay' }}
-    </button>
-    <button (click)="preview()" class="bg-emerald-700 text-white px-4 py-2 rounded">Preview rule</button>
-    <span class="text-sm text-slate-500">
-      Pending: {{ pendingCount }} / Auto: {{ autoReadyCount }} / Posted: {{ postedCount }} / Ignored: {{ ignoredCount }}
-    </span>
+    <div class="flex items-center gap-2">
+      <button
+        (click)="connect()"
+        class="m3-btn m3-btn-primary"
+        [disabled]="isBusy || !auth.canMutate"
+      >
+        <span class="material-symbols-rounded" [class.animate-spin]="isBusy">link</span>
+        {{ isBusy ? 'Connecting SePay...' : 'Connect SePay Bank' }}
+      </button>
+      <button (click)="preview()" class="m3-btn m3-btn-outlined">
+        <span class="material-symbols-rounded">preview</span> Preview Rule Engine
+      </button>
+    </div>
   </div>
 
-  <div *ngIf="lastConnect" class="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-    <p class="font-semibold">Latest SePay connect session</p>
-    <p class="mt-1">Connection ID: {{ lastConnect.connectionId }}</p>
-    <p>Callback State: {{ lastConnect.callbackState }}</p>
-    <p>External ID: {{ lastConnect.externalId || 'auto-generated' }}</p>
+  <!-- Readonly Warning -->
+  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
+    <span class="material-symbols-rounded">lock</span>
+    <span>This workspace is read-only. You can review bank feed items but not perform mutations.</span>
+  </div>
+
+  <!-- Feed Status Counter Banner -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div class="p-3.5 bg-[var(--m3-surface)] border border-[var(--m3-outline)] rounded-2xl flex items-center justify-between shadow-sm">
+      <div>
+        <span class="text-xs text-[var(--m3-on-surface-variant)] block">Pending Inbox</span>
+        <span class="text-xl font-bold text-[var(--m3-warning)]">{{ pendingCount }}</span>
+      </div>
+      <span class="material-symbols-rounded text-[var(--m3-warning)]">pending_actions</span>
+    </div>
+
+    <div class="p-3.5 bg-[var(--m3-surface)] border border-[var(--m3-outline)] rounded-2xl flex items-center justify-between shadow-sm">
+      <div>
+        <span class="text-xs text-[var(--m3-on-surface-variant)] block">Auto Ready</span>
+        <span class="text-xl font-bold text-[var(--m3-primary)]">{{ autoReadyCount }}</span>
+      </div>
+      <span class="material-symbols-rounded text-[var(--m3-primary)]">auto_awesome</span>
+    </div>
+
+    <div class="p-3.5 bg-[var(--m3-surface)] border border-[var(--m3-outline)] rounded-2xl flex items-center justify-between shadow-sm">
+      <div>
+        <span class="text-xs text-[var(--m3-on-surface-variant)] block">Posted Ledger</span>
+        <span class="text-xl font-bold text-[var(--m3-success)]">{{ postedCount }}</span>
+      </div>
+      <span class="material-symbols-rounded text-[var(--m3-success)]">check_circle</span>
+    </div>
+
+    <div class="p-3.5 bg-[var(--m3-surface)] border border-[var(--m3-outline)] rounded-2xl flex items-center justify-between shadow-sm">
+      <div>
+        <span class="text-xs text-[var(--m3-on-surface-variant)] block">Skipped / Ignored</span>
+        <span class="text-xl font-bold text-[var(--m3-on-surface-variant)]">{{ ignoredCount }}</span>
+      </div>
+      <span class="material-symbols-rounded text-[var(--m3-on-surface-variant)]">do_not_disturb_on</span>
+    </div>
+  </div>
+
+  <!-- Connect Session Info Box -->
+  <div *ngIf="lastConnect" class="p-4 rounded-2xl bg-[var(--m3-success-container)] text-[var(--m3-on-success-container)] border border-[var(--m3-success)] text-xs space-y-1">
+    <p class="font-semibold flex items-center gap-1">
+      <span class="material-symbols-rounded text-sm">link</span> Latest SePay Connection Session
+    </p>
+    <p>Connection ID: <strong class="font-mono">{{ lastConnect.connectionId }}</strong></p>
+    <p>Callback State: <strong class="font-mono">{{ lastConnect.callbackState }}</strong></p>
     <a
-      class="inline-block mt-2 text-emerald-900 underline"
+      class="m3-btn m3-btn-primary text-xs py-1 px-3 mt-2 inline-flex items-center gap-1"
       [href]="lastConnect.connectUrl"
       target="_blank"
       rel="noopener noreferrer"
     >
-      Open SePay connect URL
+      <span class="material-symbols-rounded text-sm">open_in_new</span> Open SePay OAuth Consent Page
     </a>
   </div>
 
-  <div *ngIf="!hasConnected" class="text-sm text-slate-500">No SePay connection yet.</div>
-
-  <div *ngIf="hasConnected" class="space-y-2">
-    <div *ngFor="let connection of connections" class="rounded border bg-white p-4">
-      <p class="font-semibold">{{ connection.provider }} {{ connection.status }}</p>
-      <p class="text-sm text-slate-600">ID: {{ connection.id }} / External: {{ connection.externalId || 'none' }}</p>
-      <p class="text-sm text-slate-600">
-        Sync: {{ connection.syncStatus || 'idle' }} | Last requested: {{ syncLabel(connection) }} | Callback: {{ callbackLabel(connection) }}
-      </p>
-      <p class="text-xs text-slate-500">Callback state: {{ connection.callbackState || 'not_called' }}</p>
-      <div class="mt-2 flex gap-2">
-        <button
-          *ngIf="auth.canMutate"
-          class="text-xs px-3 py-1 rounded bg-amber-600 text-white"
-          (click)="sync(connection.id)"
-        >
-          Sync
-        </button>
-        <button
-          *ngIf="auth.canMutate"
-          class="text-xs px-3 py-1 rounded bg-red-600 text-white"
-          (click)="revoke(connection.id)"
-        >
-          Revoke
-        </button>
+  <!-- Connected Bank Connections List -->
+  <div *ngIf="hasConnected" class="m3-card space-y-4">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">account_balance</span> Bank Feed Connections
+        </h3>
+        <p class="m3-card-subtitle">Active OAuth / API integrations with SePay Provider.</p>
       </div>
     </div>
 
-    <div class="inline-flex gap-2">
-      <button
-        *ngFor="let tab of postingTabs"
-        (click)="setTab(tab.key)"
-        [class.bg-slate-900]="activeTab === tab.key"
-        [class.text-white]="activeTab === tab.key"
-        class="px-3 py-2 text-sm rounded border"
-      >
-        {{ tab.label }}
-      </button>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div *ngFor="let connection of connections" class="p-4 rounded-2xl border border-[var(--m3-outline)] bg-[var(--m3-surface-variant)]/40 space-y-2 text-xs">
+        <div class="flex justify-between items-start">
+          <span class="font-bold text-sm text-[var(--m3-on-surface)] flex items-center gap-1">
+            <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">hub</span> {{ connection.provider }}
+          </span>
+          <span class="m3-badge m3-badge-primary uppercase text-[10px]">{{ connection.status }}</span>
+        </div>
+        <p class="text-[var(--m3-on-surface-variant)]">ID: <span class="font-mono">{{ connection.id }}</span></p>
+        <p class="text-[var(--m3-on-surface-variant)]">
+          Sync Status: <strong>{{ connection.syncStatus || 'idle' }}</strong> | Last Sync: {{ syncLabel(connection) }}
+        </p>
+
+        <div class="flex gap-2 pt-1">
+          <button
+            *ngIf="auth.canMutate"
+            class="m3-btn m3-btn-outlined text-xs py-1 px-3"
+            (click)="sync(connection.id)"
+          >
+            <span class="material-symbols-rounded text-sm">sync</span> Sync
+          </button>
+          <button
+            *ngIf="auth.canMutate"
+            class="m3-btn m3-btn-outlined text-xs py-1 px-3 text-[var(--m3-danger)] border-[var(--m3-danger)]"
+            (click)="revoke(connection.id)"
+          >
+            <span class="material-symbols-rounded text-sm">link_off</span> Revoke
+          </button>
+        </div>
+      </div>
     </div>
 
-    <div class="pt-2 space-y-2 sm:flex sm:items-end sm:space-x-2 sm:space-y-0">
-      <label class="block text-sm text-slate-600">
-        Lọc theo tài khoản
+    <!-- Filter Tabs & Account Select -->
+    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--m3-outline)] pt-4">
+      <div class="flex flex-wrap gap-2">
+        <button
+          *ngFor="let tab of postingTabs"
+          (click)="setTab(tab.key)"
+          class="px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all"
+          [class.bg-[var(--m3-primary-container)]]="activeTab === tab.key"
+          [class.text-[var(--m3-on-primary-container)]]="activeTab === tab.key"
+          [class.border-[var(--m3-primary)]]="activeTab === tab.key"
+          [class.border-[var(--m3-outline)]]="activeTab !== tab.key"
+          [class.text-[var(--m3-on-surface-variant)]]="activeTab !== tab.key"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-[var(--m3-on-surface-variant)]">Filter Account:</span>
         <select
-          class="mt-1 block border rounded p-2"
+          class="m3-select text-xs h-9 py-1 px-3"
           [value]="accountIdFilter"
           (change)="setAccountFilter(($any($event.target).value))"
         >
-          <option value="">Tất cả tài khoản</option>
+          <option value="">All Bank Accounts</option>
           <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
         </select>
-      </label>
-      <button
-        class="px-3 py-2 rounded border text-sm"
-        *ngIf="accountIdFilter"
-        (click)="clearAccountFilter()"
-      >
-        Hủy lọc
-      </button>
+        <button
+          class="m3-btn m3-btn-text text-xs py-1 px-2"
+          *ngIf="accountIdFilter"
+          (click)="clearAccountFilter()"
+        >
+          Reset
+        </button>
+      </div>
     </div>
   </div>
 
-  <h3 class="font-medium mt-4">Bank feed inbox</h3>
-  <div class="text-sm text-slate-500" *ngIf="activeFeed">
-    Đang xem chi tiết: <span class="font-medium">{{ activeFeed.id }}</span>
-  </div>
+  <!-- Feed Inbox List Card -->
+  <div class="m3-card">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">inbox</span> Bank Feed Stream
+        </h3>
+        <p class="m3-card-subtitle">Transactions received via bank webhook integrations.</p>
+      </div>
+    </div>
 
-  <div *ngIf="!feed.length" class="text-sm text-slate-500">Không có dữ liệu phù hợp.</div>
+    <!-- Empty State -->
+    <div *ngIf="!filteredFeed.length" class="m3-empty-state">
+      <div class="m3-empty-icon">
+        <span class="material-symbols-rounded">move_to_inbox</span>
+      </div>
+      <p class="m3-empty-title">Inbox Empty</p>
+      <p class="m3-empty-desc">No bank feed items match your active tab or filter selection.</p>
+    </div>
 
-  <ul class="border rounded-lg bg-white divide-y">
-    <li *ngFor="let item of filteredFeed; trackBy: trackByFeedId" class="p-3">
-      <div class="flex justify-between items-start gap-4">
-        <div>
-          <p class="font-semibold">
-            {{ item.occurredAt | date: 'short' }} | {{ item.direction | uppercase }}
-            - {{ item.amount }} {{ item.currency }}
-            <span class="text-slate-500 text-sm">{{ item.direction === 'out' ? 'Expense' : 'Income' }}</span>
-            <span
-              class="ml-2 inline-flex px-2 py-1 rounded-full text-xs"
-              [ngClass]="statusClass(item)"
-            >
+    <!-- Feed Items List -->
+    <div *ngIf="filteredFeed.length" class="space-y-3">
+      <div *ngFor="let item of filteredFeed; trackBy: trackByFeedId" class="p-4 rounded-2xl border border-[var(--m3-outline)] bg-[var(--m3-surface)] hover:shadow-md transition-all flex flex-wrap items-center justify-between gap-4">
+        <div class="space-y-1 max-w-xl">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-bold text-sm text-[var(--m3-on-surface)]">{{ item.occurredAt | date: 'medium' }}</span>
+            <span class="m3-badge uppercase text-[10px]" [ngClass]="item.direction === 'out' ? 'm3-badge-danger' : 'm3-badge-success'">
+              {{ item.direction === 'out' ? 'Expense' : 'Income' }}
+            </span>
+            <span class="m3-badge uppercase text-[10px]" [ngClass]="statusClass(item)">
               {{ statusText(item) }}
             </span>
-          </p>
-          <p class="text-sm text-slate-600">
+            <span *ngIf="isTransferLike(item)" class="m3-badge m3-badge-warning text-[10px]">Transfer-like</span>
+            <span *ngIf="item.autoClassified" class="m3-badge m3-badge-primary text-[10px]">Auto Classified</span>
+          </div>
+
+          <p class="text-xs font-semibold text-[var(--m3-on-surface)]">
             {{ item.description || item.reference || item.classificationEvidence || '-' }}
-            <span class="ml-2 text-xs text-slate-500" *ngIf="item.accountId">({{ accountName(item.accountId) }})</span>
+            <span class="text-[var(--m3-on-surface-variant)] font-normal ml-1" *ngIf="item.accountId">({{ accountName(item.accountId) }})</span>
           </p>
-          <p class="text-xs text-slate-500 mt-1">
+
+          <p class="text-[11px] text-[var(--m3-on-surface-variant)]">
             {{ sourceLabel(item) }}
-            <span *ngIf="item.classificationConfidence !== undefined"> | Tin cậy: {{ confidence(item) }}</span>
-            | Gợi ý: {{ actionHint(item) }}
-            <span *ngIf="isTransferLike(item)" class="ml-2 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">transfer-like</span>
-            <span *ngIf="item.autoClassified" class="ml-2 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">auto-classified</span>
-            <button
-              class="ml-2 underline text-slate-700"
-              type="button"
-              (click)="openDetails(item)"
-            >
-              Chi tiết
-            </button>
+            <span *ngIf="item.classificationConfidence !== undefined"> · Confidence: {{ confidence(item) }}</span>
+            · Hint: {{ actionHint(item) }}
           </p>
         </div>
-        <div class="flex gap-2">
-          <button
-            class="text-xs px-3 py-1 rounded bg-slate-900 text-white"
-            (click)="openReclassify(item)"
-            *ngIf="canMutate && canApprove(item)"
-          >
-            Reclassify
-          </button>
-          <button
-            class="text-xs px-3 py-1 rounded bg-emerald-600 text-white"
-            (click)="approve(item)"
-            [disabled]="isActionBusy"
-            *ngIf="canMutate && canApprove(item)"
-          >
-            {{ approveLabel(item) }}
-          </button>
-          <button
-            class="text-xs px-3 py-1 rounded bg-amber-600 text-white"
-            (click)="ignore(item)"
-            [disabled]="isActionBusy"
-            *ngIf="canMutate && item.postingState !== 'ignored' && item.postingState !== 'posted'"
-          >
-            Skip
-          </button>
-          <button
-            type="button"
-            class="text-xs px-3 py-1 rounded bg-slate-300"
-            *ngIf="activeFeed?.id === item.id"
-            (click)="closeDetails()"
-          >
-            Close
-          </button>
+
+        <div class="flex items-center gap-3">
+          <span class="font-bold text-base whitespace-nowrap" [class.text-[var(--m3-danger)]]="item.direction === 'out'" [class.text-[var(--m3-success)]]="item.direction === 'in'">
+            {{ item.amount | number: '1.0-2' }} {{ item.currency }}
+          </span>
+
+          <div class="flex items-center gap-1.5">
+            <button
+              class="m3-btn m3-btn-outlined text-xs py-1 px-2.5"
+              (click)="openReclassify(item)"
+              *ngIf="canMutate && canApprove(item)"
+            >
+              Reclassify
+            </button>
+            <button
+              class="m3-btn m3-btn-primary text-xs py-1 px-3"
+              (click)="approve(item)"
+              [disabled]="isActionBusy"
+              *ngIf="canMutate && canApprove(item)"
+            >
+              {{ approveLabel(item) }}
+            </button>
+            <button
+              class="m3-btn m3-btn-text text-xs py-1 px-2 text-[var(--m3-on-surface-variant)]"
+              (click)="ignore(item)"
+              [disabled]="isActionBusy"
+              *ngIf="canMutate && item.postingState !== 'ignored' && item.postingState !== 'posted'"
+            >
+              Skip
+            </button>
+          </div>
         </div>
       </div>
-    </li>
-  </ul>
-
-  <div *ngIf="activeFeed" class="bg-white border p-4 rounded-lg space-y-2">
-    <div class="flex justify-between items-start gap-2">
-      <h4 class="font-semibold">Chi tiết giao dịch: {{ activeFeed.id }}</h4>
-      <button class="text-sm px-2 py-1 border rounded" (click)="closeDetails()">Đóng</button>
     </div>
-    <p class="text-sm text-slate-600">Tài khoản: {{ accountName(activeFeed.accountId) }} ({{ activeFeed.accountId }})</p>
-    <p class="text-sm text-slate-600">Nội dung: {{ activeFeed.description || activeFeed.reference || '-' }}</p>
-    <p class="text-sm text-slate-500">Trạng thái: {{ statusText(activeFeed) }}</p>
-    <p class="text-sm text-slate-600">Gợi ý: {{ actionHint(activeFeed) }}</p>
-    <p class="text-sm text-slate-600">Tin cậy: {{ confidence(activeFeed) }} | Loại: {{ activeFeed.postingState }}</p>
-    <p class="text-sm text-slate-600">Evidence: {{ activeFeed.classificationEvidence || '-' }}</p>
-    <p class="text-sm text-slate-600">Posted transaction: {{ activeFeed.postedTransactionId || '-' }}</p>
   </div>
 
-  <div *ngIf="previewResult" class="bg-white rounded-lg border p-4 text-sm">
-    <p class="font-semibold mb-2">Preview result</p>
-    <pre>{{ previewResult | json }}</pre>
-  </div>
+  <!-- Reclassify Form Card -->
+  <div *ngIf="selectedFeed && auth.canMutate" class="m3-card max-w-3xl border-2 border-[var(--m3-primary)]">
+    <div class="m3-card-header">
+      <div>
+        <h4 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">edit_note</span> Reclassify Bank Item: {{ selectedFeed.description || selectedFeed.id }}
+        </h4>
+      </div>
+    </div>
 
-  <div *ngIf="selectedFeed && auth.canMutate" class="bg-white border p-4 rounded-lg space-y-2">
-    <h4 class="font-semibold">Reclassify: {{ selectedFeed.description || selectedFeed.id }}</h4>
-    <form [formGroup]="reclassifyForm" (ngSubmit)="submitReclassify()" class="grid sm:grid-cols-2 gap-2">
-      <select class="border p-2 rounded" formControlName="type">
-        <option value="income">income</option>
-        <option value="expense">expense</option>
-        <option value="loan_payment">loan_payment</option>
-        <option value="investment_funding">investment_funding</option>
-        <option value="loan_disbursement">loan_disbursement</option>
-      </select>
-      <input formControlName="accountId" placeholder="Account ID (optional)" class="border p-2 rounded" />
-      <input formControlName="categoryId" placeholder="Category ID" class="border p-2 rounded" />
-      <input formControlName="reason" placeholder="Reclassify reason" class="border p-2 rounded sm:col-span-2" />
-      <div class="sm:col-span-2 flex gap-2">
+    <form [formGroup]="reclassifyForm" (ngSubmit)="submitReclassify()" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="m3-label block mb-1">Target Type</label>
+          <select class="m3-select" formControlName="type">
+            <option value="income">Income</option>
+            <option value="expense">Expense</option>
+            <option value="loan_payment">Loan Payment</option>
+            <option value="investment_funding">Investment Funding</option>
+            <option value="loan_disbursement">Loan Disbursement</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Account ID (Optional)</label>
+          <input formControlName="accountId" placeholder="Account ID" class="m3-input" />
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Category ID</label>
+          <input formControlName="categoryId" placeholder="Category ID" class="m3-input" />
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Reclassification Reason</label>
+          <input formControlName="reason" placeholder="Reason for manual override" class="m3-input" />
+        </div>
+      </div>
+
+      <div class="flex gap-3 justify-end pt-2">
+        <button type="button" class="m3-btn m3-btn-text" (click)="closeReclassify()">Cancel</button>
         <button
           type="submit"
-          class="px-4 py-2 rounded bg-blue-600 text-white"
+          class="m3-btn m3-btn-primary"
           [disabled]="reclassifyForm.invalid || isActionBusy"
         >
-          Save
+          <span class="material-symbols-rounded">save</span> Save & Post
         </button>
-        <button type="button" class="px-4 py-2 rounded bg-slate-300" (click)="closeReclassify()">Close</button>
       </div>
     </form>
   </div>

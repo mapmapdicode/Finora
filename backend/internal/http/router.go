@@ -33,6 +33,7 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 	h := handler.NewWealthHandler(store, svc, cfg)
 
 	r := gin.New()
+	r.Use(middleware.CORS(cfg.CorsOrigins))
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID(cfg.RequestIDHeader))

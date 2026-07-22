@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { NgForOf, NgIf } from '@angular/common';
+import { CommonModule, NgForOf, NgIf, NgClass } from '@angular/common';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Portfolio } from '../../shared/models';
@@ -8,7 +8,7 @@ import { Portfolio } from '../../shared/models';
 @Component({
   selector: 'app-account-list',
   standalone: true,
-  imports: [ReactiveFormsModule, NgForOf, NgIf],
+  imports: [CommonModule, ReactiveFormsModule, NgForOf, NgIf, NgClass],
   templateUrl: './account-list.component.html',
   styleUrl: './account-list.component.css'
 })

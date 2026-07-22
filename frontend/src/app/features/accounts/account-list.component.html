@@ -1,34 +1,123 @@
-<section class="space-y-4">
-  <h2 class="text-2xl font-semibold">Accounts</h2>
+<section class="space-y-6">
+  <!-- Page Header -->
+  <div class="m3-page-header">
+    <div>
+      <h1 class="m3-page-title">Accounts</h1>
+      <p class="m3-page-subtitle">Manage cash wallets, bank accounts, and credit cards across portfolios.</p>
+    </div>
+  </div>
 
-  <p class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700" *ngIf="!auth.canMutate">
-    This workspace is read-only. You can only view accounts.
-  </p>
+  <!-- Readonly Warning -->
+  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
+    <span class="material-symbols-rounded">lock</span>
+    <span>This workspace is read-only. You can only view accounts.</span>
+  </div>
 
-  <form [formGroup]="form" (ngSubmit)="submit()" class="grid md:grid-cols-3 gap-2 bg-white p-4 rounded-lg border max-w-3xl">
-    <input formControlName="name" placeholder="Account name" class="border p-2 rounded" />
-    <select formControlName="type" class="border p-2 rounded">
-      <option value="cash">cash</option>
-      <option value="bank">bank</option>
-      <option value="card">card</option>
-    </select>
-    <select formControlName="portfolioId" class="border p-2 rounded">
-      <option value="">Chọn danh mục</option>
-      <option *ngFor="let item of portfolios" [value]="item.id">
-        {{ item.name }} ({{ item.baseCurrency }})
-      </option>
-    </select>
-    <input formControlName="currency" placeholder="VND" class="border p-2 rounded" />
-    <button type="submit" class="bg-blue-700 text-white rounded px-4 py-2 md:col-span-3" [disabled]="!auth.canMutate">
-      Add account
-    </button>
-  </form>
+  <!-- Create Account Card Form (Max 900px) -->
+  <div class="m3-card max-w-4xl">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">add_card</span> Create New Account
+        </h3>
+        <p class="m3-card-subtitle">Add a financial account to start recording transactions.</p>
+      </div>
+    </div>
 
-  <ul class="border rounded-lg bg-white divide-y">
-    <li *ngFor="let item of accounts" class="px-4 py-2">
-      <p class="font-semibold">{{ item.name }}</p>
-      <p class="text-sm text-slate-600">{{ item.type }} · {{ item.currency }}</p>
-    </li>
-    <li *ngIf="!accounts.length" class="px-4 py-3 text-slate-500">No account yet.</li>
-  </ul>
+    <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="m3-label block mb-1">Account Name</label>
+          <input formControlName="name" placeholder="e.g. Vietcombank Main, Cash Wallet" class="m3-input" />
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Account Type</label>
+          <select formControlName="type" class="m3-select">
+            <option value="cash">Cash Wallet</option>
+            <option value="bank">Bank Account</option>
+            <option value="card">Credit / Debit Card</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Portfolio</label>
+          <select formControlName="portfolioId" class="m3-select">
+            <option value="">-- Select Portfolio --</option>
+            <option *ngFor="let item of portfolios" [value]="item.id">
+              {{ item.name }} ({{ item.baseCurrency }})
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label class="m3-label block mb-1">Currency</label>
+          <input formControlName="currency" placeholder="VND, USD..." class="m3-input" />
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button type="submit" class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
+          <span class="material-symbols-rounded">add</span> Add Account
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Accounts List Card -->
+  <div class="m3-card">
+    <div class="m3-card-header">
+      <div>
+        <h3 class="m3-card-title flex items-center gap-2">
+          <span class="material-symbols-rounded text-[var(--m3-primary)]">account_balance</span> Existing Accounts
+        </h3>
+        <p class="m3-card-subtitle">All active accounts in the current workspace.</p>
+      </div>
+      <span class="m3-badge m3-badge-neutral">{{ accounts.length }} Accounts</span>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!accounts.length" class="m3-empty-state">
+      <div class="m3-empty-icon">
+        <span class="material-symbols-rounded">account_balance_wallet</span>
+      </div>
+      <p class="m3-empty-title">No Accounts Yet</p>
+      <p class="m3-empty-desc">Create your first account using the form above to start tracking balances.</p>
+    </div>
+
+    <!-- Accounts Table -->
+    <div *ngIf="accounts.length" class="m3-table-container">
+      <table class="m3-table">
+        <thead>
+          <tr>
+            <th>Account Name</th>
+            <th>Type</th>
+            <th>Currency</th>
+            <th>ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of accounts">
+            <td class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-2">
+              <span class="material-symbols-rounded text-base text-[var(--m3-on-surface-variant)]">
+                {{ item.type === 'bank' ? 'account_balance' : item.type === 'card' ? 'credit_card' : 'payments' }}
+              </span>
+              {{ item.name }}
+            </td>
+            <td>
+              <span class="m3-badge uppercase text-[10px]" [ngClass]="{
+                'm3-badge-primary': item.type === 'bank',
+                'm3-badge-success': item.type === 'cash',
+                'm3-badge-warning': item.type === 'card'
+              }">
+                {{ item.type }}
+              </span>
+            </td>
+            <td class="font-medium">{{ item.currency }}</td>
+            <td class="font-mono text-xs text-[var(--m3-on-surface-variant)]">{{ item.id }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </section>
