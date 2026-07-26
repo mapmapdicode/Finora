@@ -5,10 +5,13 @@ import { ApiService } from '../../core/services/api.service';
 import { Property } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
 
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { IconComponent } from '../../shared/icons/icon.component';
+
 @Component({
   selector: 'app-property-list',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, TranslatePipe, IconComponent],
   templateUrl: './property-list.component.html',
 })
 export class PropertyListComponent implements OnInit {

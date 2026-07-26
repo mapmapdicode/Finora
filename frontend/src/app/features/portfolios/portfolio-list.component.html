@@ -2,18 +2,18 @@
   <!-- Page Header -->
   <div class="m3-page-header">
     <div>
-      <h1 class="m3-page-title">Investment Portfolios</h1>
-      <p class="m3-page-subtitle">Group accounts, assets, and properties into logical portfolio containers.</p>
+      <h1 class="m3-page-title">{{ 'portfolios.title' | translate }}</h1>
+      <p class="m3-page-subtitle">{{ 'portfolios.subtitle' | translate }}</p>
     </div>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <!-- Create Portfolio Card -->
-    <div class="m3-card">
+    <div class="w-card">
       <div class="m3-card-header">
         <div>
           <h3 class="m3-card-title flex items-center gap-2">
-            <span class="material-symbols-rounded text-[var(--m3-primary)]">donut_large</span> Create New Portfolio
+            <app-icon name="donut_large" class="text-[var(--accent-primary)]"></app-icon> {{ 'portfolios.create_title' | translate }}
           </h3>
           <p class="m3-card-subtitle">Set up a new portfolio group with a base reporting currency.</p>
         </div>
@@ -21,85 +21,84 @@
 
       <form class="space-y-4" [formGroup]="form" (ngSubmit)="createPortfolio()">
         <div>
-          <label class="m3-label block mb-1">Portfolio Name</label>
+          <label class="w-label">Portfolio Name</label>
           <input
             formControlName="name"
-            class="m3-input"
+            class="w-input"
             placeholder="e.g. Main Household, Investment Fund"
           />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Base Reporting Currency</label>
-          <select formControlName="baseCurrency" class="m3-select">
+          <label class="w-label">{{ 'portfolios.base_currency' | translate }}</label>
+          <select formControlName="baseCurrency" class="w-select">
             <option *ngFor="let currency of baseCurrencies" [value]="currency">
               {{ currency }}
             </option>
           </select>
         </div>
 
-        <div class="flex justify-end pt-2">
+        <div class="flex justify-end pt-1">
           <button
             type="submit"
-            class="m3-btn m3-btn-primary"
+            class="w-btn w-btn-primary"
             [disabled]="createInProgress || !auth.canMutate || form.invalid"
           >
-            <span class="material-symbols-rounded">add</span>
-            {{ createInProgress ? 'Creating Portfolio...' : 'Create Portfolio' }}
+            <app-icon name="add"></app-icon>
+            {{ createInProgress ? ('common.loading' | translate) : ('common.create' | translate) }}
           </button>
         </div>
       </form>
 
-      <p *ngIf="!auth.canMutate" class="mt-3 text-xs text-[var(--m3-warning-container)] p-3 rounded-xl">
-        Read-only workspace: Cannot create new portfolios.
+      <p *ngIf="!auth.canMutate" class="mt-3 text-xs text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-200 font-medium flex items-center gap-1.5">
+        <app-icon name="lock"></app-icon> {{ 'common.readonly_warning' | translate }}
       </p>
-      <p *ngIf="error" class="mt-3 text-xs text-[var(--m3-danger)] bg-[var(--m3-danger-container)] p-3 rounded-xl">{{ error }}</p>
+      <p *ngIf="error" class="mt-3 text-xs text-rose-700 bg-rose-50 p-3 rounded-xl border border-rose-200 font-medium">{{ error }}</p>
     </div>
 
     <!-- Active Portfolios List Card -->
-    <div class="m3-card">
+    <div class="w-card">
       <div class="m3-card-header">
         <div>
           <h3 class="m3-card-title flex items-center gap-2">
-            <span class="material-symbols-rounded text-[var(--m3-primary)]">folder_special</span> Active Portfolios
+            <app-icon name="folder_special" class="text-[var(--accent-primary)]"></app-icon> Active Portfolios
           </h3>
           <p class="m3-card-subtitle">Select a portfolio to review valuation history.</p>
         </div>
-        <span class="m3-badge m3-badge-neutral">{{ portfolios.length }} Portfolios</span>
+        <span class="w-badge w-badge-neutral">{{ portfolios.length }} Portfolios</span>
       </div>
 
-      <div *ngIf="!portfolios.length" class="m3-empty-state py-6">
-        <div class="m3-empty-icon">
-          <span class="material-symbols-rounded">donut_large</span>
+      <div *ngIf="!portfolios.length" class="w-empty-state py-6">
+        <div class="w-empty-icon">
+          <app-icon name="donut_large"></app-icon>
         </div>
-        <p class="m3-empty-title">No Portfolios Found</p>
-        <p class="m3-empty-desc">Create your first portfolio using the form on the left.</p>
+        <p class="w-empty-title">No Portfolios Found</p>
+        <p class="w-empty-desc">Create your first portfolio using the form on the left.</p>
       </div>
 
       <div *ngIf="portfolios.length" class="space-y-2 max-h-[340px] overflow-y-auto pr-1">
         <button
           *ngFor="let item of portfolios"
           type="button"
-          class="w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between"
-          [class.border-[var(--m3-primary)]]="selectedPortfolioId === item.id"
-          [class.bg-[var(--m3-primary-container)]]="selectedPortfolioId === item.id"
-          [class.text-[var(--m3-on-primary-container)]]="selectedPortfolioId === item.id"
-          [class.border-[var(--m3-outline)]]="selectedPortfolioId !== item.id"
-          [class.bg-[var(--m3-surface)]]="selectedPortfolioId !== item.id"
+          class="w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between"
+          [class.border-[var(--accent-primary)]]="selectedPortfolioId === item.id"
+          [class.bg-blue-50]="selectedPortfolioId === item.id"
+          [class.border-[var(--border-subtle)]]="selectedPortfolioId !== item.id"
+          [class.bg-[var(--bg-surface)]]="selectedPortfolioId !== item.id"
           (click)="selectPortfolio(item.id)"
         >
           <div class="flex items-center gap-3">
-            <span class="material-symbols-rounded text-xl">pie_chart</span>
-            <span class="font-semibold text-sm">{{ item.name }}</span>
+            <app-icon name="pie_chart" class="text-[var(--accent-primary)] text-xl"></app-icon>
+            <span class="font-bold text-sm text-[var(--text-main)]">{{ item.name }}</span>
           </div>
-          <span class="m3-badge m3-badge-primary uppercase font-mono text-[10px]">{{ item.baseCurrency }}</span>
+          <span class="w-badge w-badge-indigo uppercase font-mono text-[10px]">{{ item.baseCurrency }}</span>
         </button>
       </div>
     </div>
   </div>
 
   <!-- Portfolio Detail & Snapshot History Card -->
-  <div *ngIf="selectedPortfolioId" class="m3-card space-y-6">
+  <div *ngIf="selectedPortfolioId" class="w-card space-y-6">
     <div *ngIf="latestNetWorth() as nw">
       <div class="m3-card-header">
         <div>
@@ -109,41 +108,41 @@
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="p-4 bg-[var(--m3-surface-variant)] rounded-2xl border border-[var(--m3-outline-variant)]">
-          <span class="text-xs text-[var(--m3-on-surface-variant)]">Total Net Worth</span>
-          <p class="text-2xl font-bold mt-1 text-[var(--m3-on-surface)]">{{ nw.netWorth }} {{ nw.baseCurrency }}</p>
+        <div class="p-4 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-subtle)]">
+          <span class="text-xs text-[var(--text-muted)] font-medium">{{ 'dashboard.net_worth' | translate }}</span>
+          <p class="text-2xl font-bold mt-1 text-[var(--text-main)]">{{ nw.netWorth }} {{ nw.baseCurrency }}</p>
         </div>
-        <div class="p-4 bg-[var(--m3-surface-variant)] rounded-2xl border border-[var(--m3-outline-variant)]">
-          <span class="text-xs text-[var(--m3-on-surface-variant)]">Liquid Cash</span>
-          <p class="text-2xl font-bold mt-1 text-[var(--m3-success)]">{{ nw.cash }} {{ nw.baseCurrency }}</p>
+        <div class="p-4 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-subtle)]">
+          <span class="text-xs text-[var(--text-muted)] font-medium">{{ 'dashboard.liquid_cash' | translate }}</span>
+          <p class="text-2xl font-bold mt-1 text-emerald-700">{{ nw.cash }} {{ nw.baseCurrency }}</p>
         </div>
-        <div class="p-4 bg-[var(--m3-surface-variant)] rounded-2xl border border-[var(--m3-outline-variant)]">
-          <span class="text-xs text-[var(--m3-on-surface-variant)]">Liabilities</span>
-          <p class="text-2xl font-bold mt-1 text-[var(--m3-danger)]">{{ nw.liabilities }} {{ nw.baseCurrency }}</p>
+        <div class="p-4 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-subtle)]">
+          <span class="text-xs text-[var(--text-muted)] font-medium">{{ 'dashboard.liabilities' | translate }}</span>
+          <p class="text-2xl font-bold mt-1 text-rose-700">{{ nw.liabilities }} {{ nw.baseCurrency }}</p>
         </div>
-        <div class="p-4 bg-[var(--m3-surface-variant)] rounded-2xl border border-[var(--m3-outline-variant)]">
-          <span class="text-xs text-[var(--m3-on-surface-variant)]">Recent Valuation Change</span>
-          <p class="text-2xl font-bold mt-1 text-[var(--m3-primary)]">{{ formatChange(nw.netWorthChange) }} {{ nw.baseCurrency }}</p>
+        <div class="p-4 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-subtle)]">
+          <span class="text-xs text-[var(--text-muted)] font-medium">Recent Valuation Change</span>
+          <p class="text-2xl font-bold mt-1 text-[var(--accent-primary)]">{{ formatChange(nw.netWorthChange) }} {{ nw.baseCurrency }}</p>
         </div>
       </div>
     </div>
 
     <!-- Snapshots Table -->
     <div>
-      <h4 class="font-semibold text-sm mb-3 flex items-center gap-2">
-        <span class="material-symbols-rounded text-[var(--m3-primary)]">history</span> Portfolio Snapshot History
+      <h4 class="font-bold text-sm mb-3 flex items-center gap-2 text-[var(--text-main)]">
+        <app-icon name="history" class="text-[var(--accent-primary)]"></app-icon> Portfolio Snapshot History
       </h4>
 
-      <div *ngIf="!snapshots.length" class="m3-empty-state py-6">
-        <div class="m3-empty-icon">
-          <span class="material-symbols-rounded">history</span>
+      <div *ngIf="!snapshots.length" class="w-empty-state py-6">
+        <div class="w-empty-icon">
+          <app-icon name="history"></app-icon>
         </div>
-        <p class="m3-empty-title">No Snapshot Records</p>
-        <p class="m3-empty-desc">No historical snapshot data recorded for this portfolio yet.</p>
+        <p class="w-empty-title">No Snapshot Records</p>
+        <p class="w-empty-desc">No historical snapshot data recorded for this portfolio yet.</p>
       </div>
 
-      <div *ngIf="snapshots.length" class="m3-table-container">
-        <table class="m3-table">
+      <div *ngIf="snapshots.length" class="w-table-container">
+        <table class="w-table">
           <thead>
             <tr>
               <th>Timestamp (As-Of)</th>
@@ -155,11 +154,11 @@
           </thead>
           <tbody>
             <tr *ngFor="let item of snapshots">
-              <td class="font-medium text-xs">{{ item.asOfAt | date: 'medium' }}</td>
-              <td class="font-bold">{{ item.netWorth }} {{ item.baseCurrency }}</td>
-              <td>{{ item.cash }} {{ item.baseCurrency }}</td>
-              <td>{{ item.liabilities }} {{ item.baseCurrency }}</td>
-              <td class="font-semibold text-[var(--m3-primary)]">{{ formatChange(item.netWorthChange) }} {{ item.baseCurrency }}</td>
+              <td class="font-semibold text-xs whitespace-nowrap">{{ item.asOfAt | date: 'medium' }}</td>
+              <td class="font-bold text-[var(--text-main)]">{{ item.netWorth }} {{ item.baseCurrency }}</td>
+              <td class="text-emerald-700 font-semibold">{{ item.cash }} {{ item.baseCurrency }}</td>
+              <td class="text-rose-700 font-semibold">{{ item.liabilities }} {{ item.baseCurrency }}</td>
+              <td class="font-bold text-[var(--accent-primary)]">{{ formatChange(item.netWorthChange) }} {{ item.baseCurrency }}</td>
             </tr>
           </tbody>
         </table>
@@ -168,12 +167,12 @@
       <div *ngIf="nextCursor" class="mt-4 flex justify-center">
         <button
           type="button"
-          class="m3-btn m3-btn-outlined"
+          class="w-btn w-btn-outline text-xs"
           (click)="loadMoreSnapshots()"
           [disabled]="snapshotLoading"
         >
-          <span class="material-symbols-rounded">expand_more</span>
-          {{ snapshotLoading ? 'Loading Snapshots...' : 'Load More Snapshots' }}
+          <app-icon name="expand_more"></app-icon>
+          {{ snapshotLoading ? ('common.loading' | translate) : ('common.load_more' | translate) }}
         </button>
       </div>
     </div>

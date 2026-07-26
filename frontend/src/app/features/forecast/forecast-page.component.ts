@@ -5,10 +5,13 @@ import { ApiService } from '../../core/services/api.service';
 import { ForecastScenario } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
 
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { IconComponent } from '../../shared/icons/icon.component';
+
 @Component({
   selector: 'app-forecast-page',
   standalone: true,
-  imports: [ReactiveFormsModule, CommonModule],
+  imports: [ReactiveFormsModule, CommonModule, TranslatePipe, IconComponent],
   templateUrl: './forecast-page.component.html'
 })
 export class ForecastPageComponent implements OnInit {

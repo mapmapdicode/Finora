@@ -1,49 +1,56 @@
 <section class="space-y-6">
   <!-- Page Header -->
-  <div class="m3-page-header">
+  <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="m3-page-title">Accounts</h1>
-      <p class="m3-page-subtitle">Manage cash wallets, bank accounts, and credit cards across portfolios.</p>
+      <h1 class="text-2xl font-bold tracking-tight text-[var(--text-main)]">
+        {{ 'accounts.title' | translate }}
+      </h1>
+      <p class="text-xs text-[var(--text-muted)] mt-0.5 font-medium">
+        {{ 'accounts.subtitle' | translate }}
+      </p>
     </div>
   </div>
 
   <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
-    <span class="material-symbols-rounded">lock</span>
-    <span>This workspace is read-only. You can only view accounts.</span>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
+    <app-icon name="lock"></app-icon>
+    <span>{{ 'common.readonly_warning' | translate }}</span>
   </div>
 
-  <!-- Create Account Card Form (Max 900px) -->
-  <div class="m3-card max-w-4xl">
-    <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">add_card</span> Create New Account
-        </h3>
-        <p class="m3-card-subtitle">Add a financial account to start recording transactions.</p>
+  <!-- Create Account Card Form -->
+  <div class="w-card w-full">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+          <app-icon name="add_card"></app-icon>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'accounts.create_title' | translate }}</h3>
+          <p class="text-xs text-[var(--text-muted)]">{{ 'accounts.create_desc' | translate }}</p>
+        </div>
       </div>
     </div>
 
     <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="m3-label block mb-1">Account Name</label>
-          <input formControlName="name" placeholder="e.g. Vietcombank Main, Cash Wallet" class="m3-input" />
+          <label class="w-label">{{ 'accounts.name_label' | translate }}</label>
+          <input formControlName="name" placeholder="e.g. Vietcombank Main, Cash Wallet" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Account Type</label>
-          <select formControlName="type" class="m3-select">
-            <option value="cash">Cash Wallet</option>
-            <option value="bank">Bank Account</option>
-            <option value="card">Credit / Debit Card</option>
+          <label class="w-label">{{ 'accounts.type_label' | translate }}</label>
+          <select formControlName="type" class="w-select">
+            <option value="cash">{{ 'accounts.cash_type' | translate }}</option>
+            <option value="bank">{{ 'accounts.bank_type' | translate }}</option>
+            <option value="card">{{ 'accounts.card_type' | translate }}</option>
           </select>
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Portfolio</label>
-          <select formControlName="portfolioId" class="m3-select">
-            <option value="">-- Select Portfolio --</option>
+          <label class="w-label">{{ 'accounts.portfolio_label' | translate }}</label>
+          <select formControlName="portfolioId" class="w-select">
+            <option value="">-- {{ 'common.portfolio' | translate }} --</option>
             <option *ngFor="let item of portfolios" [value]="item.id">
               {{ item.name }} ({{ item.baseCurrency }})
             </option>
@@ -51,70 +58,68 @@
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Currency</label>
-          <input formControlName="currency" placeholder="VND, USD..." class="m3-input" />
+          <label class="w-label">{{ 'accounts.currency_label' | translate }}</label>
+          <input formControlName="currency" placeholder="VND, USD..." class="w-input" />
         </div>
       </div>
 
-      <div class="flex justify-end pt-2">
-        <button type="submit" class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
-          <span class="material-symbols-rounded">add</span> Add Account
+      <div class="flex justify-end pt-1">
+        <button type="submit" class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
+          <app-icon name="add"></app-icon> {{ 'common.create' | translate }}
         </button>
       </div>
     </form>
   </div>
 
   <!-- Accounts List Card -->
-  <div class="m3-card">
-    <div class="m3-card-header">
+  <div class="w-card">
+    <div class="flex items-center justify-between mb-4">
       <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">account_balance</span> Existing Accounts
-        </h3>
-        <p class="m3-card-subtitle">All active accounts in the current workspace.</p>
+        <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'accounts.title' | translate }}</h3>
+        <p class="text-xs text-[var(--text-muted)]">Active account ledgers in the current workspace.</p>
       </div>
-      <span class="m3-badge m3-badge-neutral">{{ accounts.length }} Accounts</span>
+      <span class="w-badge w-badge-indigo">{{ accounts.length }} Accounts</span>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="!accounts.length" class="m3-empty-state">
-      <div class="m3-empty-icon">
-        <span class="material-symbols-rounded">account_balance_wallet</span>
+    <div *ngIf="!accounts.length" class="w-empty-state">
+      <div class="w-empty-icon">
+        <app-icon name="account_balance_wallet"></app-icon>
       </div>
-      <p class="m3-empty-title">No Accounts Yet</p>
-      <p class="m3-empty-desc">Create your first account using the form above to start tracking balances.</p>
+      <p class="w-empty-title">No Accounts Yet</p>
+      <p class="w-empty-desc">Create your first account using the form above to start tracking balances.</p>
     </div>
 
     <!-- Accounts Table -->
-    <div *ngIf="accounts.length" class="m3-table-container">
-      <table class="m3-table">
+    <div *ngIf="accounts.length" class="w-table-container">
+      <table class="w-table">
         <thead>
           <tr>
-            <th>Account Name</th>
-            <th>Type</th>
-            <th>Currency</th>
-            <th>ID</th>
+            <th>{{ 'accounts.table_name' | translate }}</th>
+            <th>{{ 'accounts.table_type' | translate }}</th>
+            <th>{{ 'accounts.table_currency' | translate }}</th>
+            <th>{{ 'accounts.table_id' | translate }}</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let item of accounts">
-            <td class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-2">
-              <span class="material-symbols-rounded text-base text-[var(--m3-on-surface-variant)]">
-                {{ item.type === 'bank' ? 'account_balance' : item.type === 'card' ? 'credit_card' : 'payments' }}
+            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
+              <span class="w-7 h-7 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+                <app-icon [name]="item.type === 'bank' ? 'account_balance' : item.type === 'card' ? 'credit_card' : 'payments'" class="text-sm"></app-icon>
               </span>
               {{ item.name }}
             </td>
             <td>
-              <span class="m3-badge uppercase text-[10px]" [ngClass]="{
-                'm3-badge-primary': item.type === 'bank',
-                'm3-badge-success': item.type === 'cash',
-                'm3-badge-warning': item.type === 'card'
+              <span class="w-badge font-bold uppercase text-[10px]" [ngClass]="{
+                'w-badge-indigo': item.type === 'bank',
+                'w-badge-success': item.type === 'cash',
+                'w-badge-warning': item.type === 'card'
               }">
                 {{ item.type }}
               </span>
             </td>
-            <td class="font-medium">{{ item.currency }}</td>
-            <td class="font-mono text-xs text-[var(--m3-on-surface-variant)]">{{ item.id }}</td>
+            <td class="font-bold font-mono text-xs">{{ item.currency }}</td>
+            <td class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td>
           </tr>
         </tbody>
       </table>

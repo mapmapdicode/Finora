@@ -3,16 +3,26 @@ import { CommonModule } from '@angular/common';
 import { ApiService } from '../../core/services/api.service';
 import { Account, NetWorthSummary, Portfolio, PortfolioSnapshotPage, Transaction } from '../../shared/models';
 
+import { AuthService } from '../../core/services/auth.service';
+import { RouterLink } from '@angular/router';
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { IconComponent } from '../../shared/icons/icon.component';
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslatePipe, IconComponent, RouterLink],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css',
 })
 export class DashboardComponent implements OnInit {
   loading = signal(true);
+  hideBalance = signal(false);
   summary = signal('Chưa kết nối dữ liệu');
+
+  toggleBalanceVisibility() {
+    this.hideBalance.update((v) => !v);
+  }
   summaryByPortfolio: string[] = [];
   accounts: Account[] = [];
   transactions: Transaction[] = [];
@@ -27,9 +37,9 @@ export class DashboardComponent implements OnInit {
   trendDotPositions: Array<{ x: number; y: number; value: number; asOf: string }> = [];
   trendMin = 0;
   trendMax = 0;
-  readonly trendHeight = 180;
-  readonly trendWidth = 860;
-  readonly trendPadding = 20;
+  readonly trendHeight = 150;
+  readonly trendWidth = 400;
+  readonly trendPadding = 15;
 
   asOfPreviewInput = '';
   asOfSnapshotAt = '';
@@ -64,7 +74,7 @@ export class DashboardComponent implements OnInit {
   };
   selectedSnapshotNetWorth: NetWorthSummary | null = null;
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, public auth: AuthService) {}
 
   ngOnInit() {
     this.refresh();
@@ -86,7 +96,7 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  private refresh() {
+  public refresh() {
     this.api.getPortfolios().subscribe({
       next: (items) => {
         this.portfolios = items;

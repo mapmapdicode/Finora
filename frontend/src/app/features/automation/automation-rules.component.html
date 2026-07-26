@@ -2,56 +2,60 @@
   <!-- Page Header -->
   <div class="m3-page-header">
     <div>
-      <h1 class="m3-page-title">Bank Automation Rules</h1>
-      <p class="m3-page-subtitle">Configure regex patterns and priority rules to automatically classify incoming bank feed webhooks.</p>
+      <h1 class="m3-page-title">{{ 'automation.title' | translate }}</h1>
+      <p class="m3-page-subtitle">{{ 'automation.subtitle' | translate }}</p>
     </div>
 
-    <button class="m3-btn m3-btn-outlined" (click)="preview()">
-      <span class="material-symbols-rounded">preview</span> Preview Rule Engine
+    <button class="w-btn w-btn-outline text-xs h-9" (click)="preview()">
+      <app-icon name="preview"></app-icon> Preview Rule Engine
     </button>
   </div>
 
   <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
-    <span class="material-symbols-rounded">lock</span>
-    <span>This workspace is read-only. You can only preview matched transactions.</span>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
+    <app-icon name="lock"></app-icon>
+    <span>{{ 'common.readonly_warning' | translate }}</span>
   </div>
 
-  <!-- Create/Edit Rule Form Card (Max 900px) -->
-  <div class="m3-card max-w-4xl">
+  <!-- Create/Edit Rule Form Card (Full Screen Width) -->
+  <div class="w-card w-full">
     <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">auto_awesome</span>
-          {{ editingId ? 'Edit Automation Rule' : 'Create Automation Rule' }}
-        </h3>
-        <p class="m3-card-subtitle">Set up pattern matching, direction, priority, and target action.</p>
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+          <app-icon name="auto_awesome"></app-icon>
+        </div>
+        <div>
+          <h3 class="m3-card-title">
+            {{ editingId ? 'Edit Automation Rule' : 'Create Automation Rule' }}
+          </h3>
+          <p class="m3-card-subtitle">Set up pattern matching, direction, priority, and target action.</p>
+        </div>
       </div>
     </div>
 
     <form (ngSubmit)="submitRule()" [formGroup]="form" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="m3-label block mb-1">Rule Name</label>
-          <input formControlName="name" placeholder="e.g. Auto-Categorize Salary Income" class="m3-input" />
+          <label class="w-label">Rule Name</label>
+          <input formControlName="name" placeholder="e.g. Auto-Categorize Salary Income" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Target Account ID (Optional)</label>
-          <input formControlName="accountId" placeholder="Account ID" class="m3-input" />
+          <label class="w-label">Target Account ID (Optional)</label>
+          <input formControlName="accountId" placeholder="Account ID" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Flow Direction</label>
-          <select formControlName="direction" class="m3-select">
+          <label class="w-label">Flow Direction</label>
+          <select formControlName="direction" class="w-select">
             <option value="in">Inflow (Income)</option>
             <option value="out">Outflow (Expense)</option>
           </select>
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Automation Action</label>
-          <select formControlName="actionType" class="m3-select">
+          <label class="w-label">Automation Action</label>
+          <select formControlName="actionType" class="w-select">
             <option value="categorize">Categorize</option>
             <option value="ignore">Skip / Ignore</option>
             <option value="transfer">Transfer</option>
@@ -61,8 +65,8 @@
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Transaction Classification Type</label>
-          <select formControlName="type" class="m3-select">
+          <label class="w-label">Transaction Classification Type</label>
+          <select formControlName="type" class="w-select">
             <option value="expense">Expense</option>
             <option value="income">Income</option>
             <option value="loan_payment">Loan Payment</option>
@@ -73,100 +77,100 @@
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Execution Priority (Higher numbers run first)</label>
-          <input formControlName="priority" type="number" class="m3-input" />
+          <label class="w-label">Execution Priority (Higher numbers run first)</label>
+          <input formControlName="priority" type="number" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Category ID (Optional)</label>
-          <input formControlName="categoryId" placeholder="Category ID" class="m3-input" />
+          <label class="w-label">Category ID (Optional)</label>
+          <input formControlName="categoryId" placeholder="Category ID" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Content Regex Pattern</label>
-          <input formControlName="contentPattern" placeholder="Regex (e.g. SALARY|LUONG)" class="m3-input font-mono text-xs" />
+          <label class="w-label">Content Regex Pattern</label>
+          <input formControlName="contentPattern" placeholder="Regex (e.g. SALARY|LUONG)" class="w-input font-mono text-xs" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Reference Regex Pattern</label>
-          <input formControlName="referencePattern" placeholder="Reference regex..." class="m3-input font-mono text-xs" />
+          <label class="w-label">Reference Regex Pattern</label>
+          <input formControlName="referencePattern" placeholder="Reference regex..." class="w-input font-mono text-xs" />
         </div>
 
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="m3-label block mb-1">Min Amount</label>
-            <input formControlName="minAmount" placeholder="0.00" class="m3-input" />
+            <label class="w-label">Min Amount</label>
+            <input formControlName="minAmount" placeholder="0.00" class="w-input" />
           </div>
           <div>
-            <label class="m3-label block mb-1">Max Amount</label>
-            <input formControlName="maxAmount" placeholder="0.00" class="m3-input" />
+            <label class="w-label">Max Amount</label>
+            <input formControlName="maxAmount" placeholder="0.00" class="w-input" />
           </div>
         </div>
 
         <div class="md:col-span-2">
-          <label class="m3-label block mb-1">Custom Predicate Expression</label>
-          <input formControlName="predicate" placeholder="Optional evaluation predicate..." class="m3-input font-mono text-xs" />
+          <label class="w-label">Custom Predicate Expression</label>
+          <input formControlName="predicate" placeholder="Optional evaluation predicate..." class="w-input font-mono text-xs" />
         </div>
 
         <div class="md:col-span-2 flex items-center gap-2">
-          <input type="checkbox" formControlName="enabled" class="w-4 h-4 rounded text-[var(--m3-primary)] cursor-pointer" />
-          <span class="text-xs font-semibold">Enable Rule Immediately</span>
+          <input type="checkbox" formControlName="enabled" class="w-4 h-4 rounded text-[var(--accent-primary)] cursor-pointer" />
+          <span class="text-xs font-bold text-[var(--text-main)]">Enable Rule Immediately</span>
         </div>
       </div>
 
-      <div class="flex gap-3 justify-end pt-2">
+      <div class="flex gap-3 justify-end pt-1">
         <button
           type="button"
-          class="m3-btn m3-btn-text"
+          class="w-btn w-btn-ghost text-xs"
           (click)="cancelEdit()"
           *ngIf="editingId && auth.canMutate"
         >
-          Cancel Editing
+          {{ 'common.cancel' | translate }}
         </button>
-        <button class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
-          <span class="material-symbols-rounded">save</span>
-          {{ editingId ? 'Update Rule' : 'Save New Rule' }}
+        <button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
+          <app-icon name="save"></app-icon>
+          {{ editingId ? 'Update Rule' : ('common.save' | translate) }}
         </button>
       </div>
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
 
   <!-- Preview Output Console -->
-  <div *ngIf="previewResult" class="m3-card bg-slate-900 border-slate-800 text-green-400">
+  <div *ngIf="previewResult" class="w-card bg-slate-900 border-slate-800 text-emerald-400">
     <div class="m3-card-header text-white mb-2">
       <h4 class="m3-card-title text-white flex items-center gap-2">
-        <span class="material-symbols-rounded text-green-400">terminal</span> Rule Engine Evaluation Preview
+        <app-icon name="terminal" class="text-emerald-400"></app-icon> Rule Engine Evaluation Preview
       </h4>
     </div>
-    <pre class="p-4 rounded-xl bg-slate-950 font-mono text-xs text-green-300 overflow-x-auto leading-relaxed border border-slate-800">{{ previewResult | json }}</pre>
+    <pre class="p-4 rounded-xl bg-slate-950 font-mono text-xs text-emerald-300 overflow-x-auto leading-relaxed border border-slate-800">{{ previewResult | json }}</pre>
   </div>
 
   <!-- Rules List Card -->
-  <div class="m3-card">
+  <div class="w-card">
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">tune</span> Active Automation Rule Registry
+          <app-icon name="tune" class="text-[var(--accent-primary)]"></app-icon> Active Automation Rule Registry
         </h3>
         <p class="m3-card-subtitle">Rules evaluated sequentially by priority for incoming webhooks.</p>
       </div>
-      <span class="m3-badge m3-badge-neutral">{{ rules.length }} Rules</span>
+      <span class="w-badge w-badge-neutral">{{ rules.length }} Rules</span>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="!rules.length" class="m3-empty-state">
-      <div class="m3-empty-icon">
-        <span class="material-symbols-rounded">auto_awesome</span>
+    <div *ngIf="!rules.length" class="w-empty-state">
+      <div class="w-empty-icon">
+        <app-icon name="auto_awesome"></app-icon>
       </div>
-      <p class="m3-empty-title">No Automation Rules Configured</p>
-      <p class="m3-empty-desc">Create automation rules above to automatically categorize imported bank feeds.</p>
+      <p class="w-empty-title">No Automation Rules Configured</p>
+      <p class="w-empty-desc">Create automation rules above to automatically categorize imported bank feeds.</p>
     </div>
 
     <!-- Rules Table -->
-    <div *ngIf="rules.length" class="m3-table-container">
-      <table class="m3-table">
+    <div *ngIf="rules.length" class="w-table-container">
+      <table class="w-table">
         <thead>
           <tr>
             <th>Rule Name</th>
@@ -180,32 +184,32 @@
         </thead>
         <tbody>
           <tr *ngFor="let item of rules">
-            <td class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-2">
-              <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">bolt</span>
+            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
+              <app-icon name="bolt" class="text-[var(--accent-primary)]"></app-icon>
               {{ item.name }}
             </td>
             <td>
-              <span class="m3-badge uppercase text-[10px]" [ngClass]="item.direction === 'in' ? 'm3-badge-success' : 'm3-badge-danger'">
+              <span class="w-badge uppercase text-[10px]" [ngClass]="item.direction === 'in' ? 'w-badge-success' : 'w-badge-danger'">
                 {{ directionLabel(item.direction || 'out') }}
               </span>
             </td>
             <td>
-              <p class="text-xs font-semibold text-[var(--m3-on-surface)]">{{ item.actionType || '-' }}</p>
-              <p class="text-[10px] text-[var(--m3-on-surface-variant)] uppercase">{{ item.type || '-' }}</p>
+              <p class="text-xs font-bold text-[var(--text-main)]">{{ item.actionType || '-' }}</p>
+              <p class="text-[10px] text-[var(--text-muted)] uppercase font-semibold">{{ item.type || '-' }}</p>
             </td>
             <td class="font-mono text-xs font-bold">{{ item.priority }}</td>
             <td>
-              <span class="m3-badge uppercase text-[10px]" [ngClass]="item.enabled ? 'm3-badge-primary' : 'm3-badge-neutral'">
+              <span class="w-badge uppercase text-[10px]" [ngClass]="item.enabled ? 'w-badge-indigo' : 'w-badge-neutral'">
                 {{ item.enabled ? 'Active' : 'Disabled' }}
               </span>
             </td>
-            <td class="font-mono text-xs text-[var(--m3-on-surface-variant)]">{{ item.contentPattern || '-' }}</td>
+            <td class="font-mono text-xs text-[var(--text-muted)] font-medium">{{ item.contentPattern || '-' }}</td>
             <td class="text-right whitespace-nowrap space-x-1">
-              <button class="m3-btn m3-btn-outlined text-xs py-1 px-2.5" *ngIf="auth.canMutate" (click)="beginEdit(item)">Edit</button>
-              <button class="m3-btn m3-btn-outlined text-xs py-1 px-2.5" *ngIf="auth.canMutate" (click)="toggleEnabled(item)">
+              <button class="w-btn w-btn-outline text-xs h-8 px-2.5" *ngIf="auth.canMutate" (click)="beginEdit(item)">{{ 'common.edit' | translate }}</button>
+              <button class="w-btn w-btn-outline text-xs h-8 px-2.5" *ngIf="auth.canMutate" (click)="toggleEnabled(item)">
                 {{ item.enabled ? 'Disable' : 'Enable' }}
               </button>
-              <button class="m3-btn m3-btn-text text-xs py-1 px-2 text-[var(--m3-danger)]" *ngIf="auth.canMutate" (click)="remove(item.id)">Delete</button>
+              <button class="w-btn w-btn-ghost text-xs h-8 px-2 text-rose-600" *ngIf="auth.canMutate" (click)="remove(item.id)">{{ 'common.delete' | translate }}</button>
             </td>
           </tr>
         </tbody>

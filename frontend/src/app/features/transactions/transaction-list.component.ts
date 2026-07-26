@@ -6,6 +6,9 @@ import { debounceTime, distinctUntilChanged, Subject, takeUntil } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { Account, Transaction, TransactionListPage } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
+import { IconComponent } from '../../shared/icons/icon.component';
+
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 
 type TransactionFilters = {
   accountId: string;
@@ -21,7 +24,7 @@ type TransactionFilters = {
 @Component({
   selector: 'app-transaction-list',
   standalone: true,
-  imports: [ReactiveFormsModule, CommonModule],
+  imports: [ReactiveFormsModule, CommonModule, IconComponent, TranslatePipe],
   templateUrl: './transaction-list.component.html'
 })
 export class TransactionListComponent implements OnInit, OnDestroy {
@@ -361,4 +364,3 @@ export class TransactionListComponent implements OnInit, OnDestroy {
     };
   }
 }
-

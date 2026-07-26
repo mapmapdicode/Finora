@@ -1,150 +1,164 @@
 <section class="space-y-6">
   <!-- Page Header -->
-  <div class="m3-page-header">
+  <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="m3-page-title">Investment Assets</h1>
-      <p class="m3-page-subtitle">Track portfolios of stocks, crypto, fixed income, and custom investments.</p>
+      <h1 class="text-2xl font-bold tracking-tight text-[var(--text-main)]">
+        {{ 'assets.title' | translate }}
+      </h1>
+      <p class="text-xs text-[var(--text-muted)] mt-0.5 font-medium">
+        {{ 'assets.subtitle' | translate }}
+      </p>
     </div>
   </div>
 
   <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
-    <span class="material-symbols-rounded">lock</span>
-    <span>This workspace is read-only. You can only view assets and valuations.</span>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
+    <app-icon name="lock"></app-icon>
+    <span>This workspace is read-only. Asset entry is disabled.</span>
   </div>
 
-  <!-- Create Asset Card Form (Max 900px) -->
-  <div class="m3-card max-w-4xl">
-    <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">savings</span> Create Asset Entry
-        </h3>
-        <p class="m3-card-subtitle">Register investment instruments for tracking valuations.</p>
+  <!-- Register Asset Card Form (Full Screen Width) -->
+  <div class="w-card w-full">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+          <app-icon name="savings"></app-icon>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'assets.add_title' | translate }}</h3>
+          <p class="text-xs text-[var(--text-muted)]">Track investment classes, stocks, gold, crypto, or private equity assets.</p>
+        </div>
       </div>
     </div>
 
     <form (ngSubmit)="submitAsset()" [formGroup]="assetForm" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label class="m3-label block mb-1">Asset Name</label>
-          <input formControlName="name" placeholder="e.g. BTC, Tech Stock Fund" class="m3-input" />
+          <label class="w-label">{{ 'assets.name_label' | translate }}</label>
+          <input formControlName="name" placeholder="e.g. Apple Stock (AAPL), SJC Gold" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Asset Category / Type</label>
-          <input formControlName="assetType" placeholder="investment / crypto / stock..." class="m3-input" />
+          <label class="w-label">{{ 'assets.type_label' | translate }}</label>
+          <select formControlName="assetType" class="w-select">
+            <option value="stock">{{ 'assets.type_stock' | translate }}</option>
+            <option value="crypto">{{ 'assets.type_crypto' | translate }}</option>
+            <option value="gold">{{ 'assets.type_gold' | translate }}</option>
+            <option value="real_estate">{{ 'assets.type_realestate' | translate }}</option>
+            <option value="other">Other Asset</option>
+          </select>
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Portfolio ID (Optional)</label>
-          <input formControlName="portfolioId" placeholder="Portfolio ID" class="m3-input" />
+          <label class="w-label">Portfolio ID (Optional)</label>
+          <input formControlName="portfolioId" placeholder="Portfolio ID" class="w-input" />
         </div>
       </div>
 
-      <div class="flex justify-end pt-2">
-        <button class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
-          <span class="material-symbols-rounded">add</span> Create Asset
+      <div class="flex justify-end pt-1">
+        <button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
+          <app-icon name="add"></app-icon> {{ 'assets.create_button' | translate }}
         </button>
       </div>
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
 
-  <!-- Asset Valuation Modal / Form Card -->
-  <div *ngIf="selectedAssetId" class="m3-card max-w-4xl border-2 border-[var(--m3-primary)]">
+  <!-- Valuation Appraisal Modal Form -->
+  <div *ngIf="selectedAssetId" class="w-card max-w-4xl border-2 border-[var(--accent-primary)]">
     <div class="m3-card-header">
       <div>
         <h4 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">rate_review</span> Add Valuation for: {{ selectedAssetId }}
+          <app-icon name="add_chart" class="text-[var(--accent-primary)]"></app-icon> Record Valuation for Asset: {{ selectedAssetId }}
         </h4>
-        <p class="m3-card-subtitle">Record updated valuation estimate for asset snapshot calculations.</p>
+        <p class="m3-card-subtitle">Add market appraisal estimate for portfolio revaluation.</p>
       </div>
     </div>
 
-    <form [formGroup]="valuationForm" (ngSubmit)="submitValuation()" class="space-y-4">
+    <form (ngSubmit)="submitValuation()" [formGroup]="valuationForm" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="m3-label block mb-1">Valuation Amount</label>
-          <input formControlName="valuationAmount" placeholder="0.00" class="m3-input" />
+          <label class="w-label">Valuation Amount</label>
+          <input formControlName="valuationAmount" placeholder="0.00" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Currency</label>
-          <input formControlName="currency" placeholder="VND" class="m3-input" />
+          <label class="w-label">{{ 'common.currency' | translate }}</label>
+          <input formControlName="currency" placeholder="VND, USD" class="w-input" />
         </div>
 
         <div class="md:col-span-2">
-          <label class="m3-label block mb-1">Valuation Source / Provider</label>
-          <input formControlName="source" placeholder="e.g. Binance API, Market Appraisal, Manual Estimate" class="m3-input" />
+          <label class="w-label">Price Source / Exchange</label>
+          <input formControlName="source" placeholder="e.g. Binance API, Hose Exchange Report" class="w-input" />
         </div>
 
         <div class="md:col-span-2">
-          <label class="m3-label block mb-1">Effective Timestamp</label>
-          <input formControlName="effectiveAt" type="datetime-local" class="m3-input" />
+          <label class="w-label">Effective Timestamp</label>
+          <input formControlName="effectiveAt" type="datetime-local" class="w-input" />
         </div>
       </div>
 
-      <div class="flex gap-3 justify-end pt-2">
-        <button type="button" class="m3-btn m3-btn-text" (click)="closeValuation()">Cancel</button>
-        <button type="submit" class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
-          <span class="material-symbols-rounded">check</span> Save Valuation
+      <div class="flex gap-3 justify-end pt-1">
+        <button type="button" class="w-btn w-btn-ghost text-xs" (click)="closeValuation()">{{ 'common.cancel' | translate }}</button>
+        <button type="submit" class="w-btn w-btn-primary text-xs" [disabled]="!auth.canMutate">
+          <app-icon name="check"></app-icon> {{ 'common.save' | translate }}
         </button>
       </div>
     </form>
   </div>
 
   <!-- Assets List Card -->
-  <div class="m3-card">
-    <div class="m3-card-header">
+  <div class="w-card">
+    <div class="flex items-center justify-between mb-4">
       <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">trending_up</span> Registered Asset Holdings
-        </h3>
-        <p class="m3-card-subtitle">Active financial assets in your portfolio.</p>
+        <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'assets.title' | translate }}</h3>
+        <p class="text-xs text-[var(--text-muted)]">Active holdings in portfolio balance sheet.</p>
       </div>
-      <span class="m3-badge m3-badge-neutral">{{ assets.length }} Assets</span>
+      <span class="w-badge w-badge-neutral">{{ assets.length }} Assets</span>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="!assets.length" class="m3-empty-state">
-      <div class="m3-empty-icon">
-        <span class="material-symbols-rounded">savings</span>
+    <div *ngIf="assets.length === 0" class="w-empty-state">
+      <div class="w-empty-icon">
+        <app-icon name="savings"></app-icon>
       </div>
-      <p class="m3-empty-title">No Assets Recorded</p>
-      <p class="m3-empty-desc">Add investment holdings using the form above to track asset appreciation.</p>
+      <p class="w-empty-title">No Assets Recorded</p>
+      <p class="w-empty-desc">Create your first investment asset using the form above.</p>
     </div>
 
     <!-- Assets Table -->
-    <div *ngIf="assets.length" class="m3-table-container">
-      <table class="m3-table">
+    <div *ngIf="assets.length > 0" class="w-table-container">
+      <table class="w-table">
         <thead>
           <tr>
-            <th>Asset Name</th>
-            <th>Type</th>
+            <th>{{ 'assets.name_label' | translate }}</th>
+            <th>{{ 'assets.type_label' | translate }}</th>
             <th>Asset ID</th>
-            <th class="text-right">Actions</th>
+            <th class="text-right">{{ 'common.actions' | translate }}</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let item of assets">
-            <td class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-2">
-              <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">token</span>
+            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
+              <span class="w-7 h-7 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+                <app-icon name="savings" class="text-sm"></app-icon>
+              </span>
               {{ item.name }}
             </td>
             <td>
-              <span class="m3-badge m3-badge-primary uppercase text-[10px]">{{ item.assetType }}</span>
+              <span class="w-badge font-bold uppercase text-[10px] w-badge-indigo">
+                {{ item.assetType }}
+              </span>
             </td>
-            <td class="font-mono text-xs text-[var(--m3-on-surface-variant)]">{{ item.id }}</td>
+            <td class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td>
             <td class="text-right">
               <button
                 *ngIf="auth.canMutate"
-                type="button"
-                class="m3-btn m3-btn-outlined text-xs py-1 px-3"
+                class="w-btn w-btn-outline text-xs h-8 px-3"
                 (click)="openValuation(item.id)"
               >
-                <span class="material-symbols-rounded text-sm">add_chart</span> Add Valuation
+                <app-icon name="add_chart" class="text-sm"></app-icon> Add Valuation
               </button>
             </td>
           </tr>

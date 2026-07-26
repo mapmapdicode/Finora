@@ -1,370 +1,205 @@
-<section class="space-y-6 animate-fade-in">
-  <!-- Top Page Title & Quick Actions -->
-  <div class="flex flex-wrap items-center justify-between gap-4">
-    <div>
-      <h1 class="text-3xl font-extrabold tracking-tight font-display text-[var(--text-main)]">
-        Dashboard Overview
-      </h1>
-      <p class="text-xs text-[var(--text-muted)] mt-1 font-medium">
-        {{ summary() || 'Real-time financial position, asset distribution, and historical portfolio snapshots.' }}
-      </p>
-    </div>
+<section class="dashboard-page pb-24">
 
-    <!-- Portfolio & As-Of Date Quick Selector Panel -->
-    <div class="flex flex-wrap items-center gap-3 glass-panel p-2 rounded-2xl shadow-sm">
-      <div class="flex items-center gap-2 px-3 py-1">
-        <span class="material-symbols-rounded text-indigo-500 text-base">donut_large</span>
-        <select
-          class="bg-transparent text-xs font-bold text-[var(--text-main)] focus:outline-none cursor-pointer"
-          [value]="selectedPortfolioId"
-          (change)="onPortfolioChange(portfolioPicker.value)"
-          #portfolioPicker
-        >
-          <option value="">-- All Portfolios --</option>
-          <option *ngFor="let item of portfolios" [value]="item.id">
-            {{ item.name }} ({{ item.baseCurrency }})
-          </option>
-        </select>
+  <!-- Net Worth Dashboard Card (Matches Prompt HTML) -->
+  <div class="mt-4 wealth-card glossy-finish">
+    <!-- Decorative blur elements -->
+    <div class="absolute top-0 right-0 w-32 h-32 bg-secondary-container/30 blur-3xl -mr-10 -mt-10 rounded-full pointer-events-none"></div>
+
+    <div class="relative z-10">
+      <div class="flex justify-between items-start mb-4">
+        <div class="flex items-center gap-2 text-primary-fixed-dim/80">
+          <app-icon name="account_balance_wallet" class="text-[18px]"></app-icon>
+          <span class="text-xs font-semibold tracking-wider uppercase">Tổng tài sản ròng</span>
+        </div>
+        <button (click)="toggleBalanceVisibility()" class="text-primary-fixed-dim/80 hover:text-white transition-colors" title="Ẩn/Hiện số dư">
+          <app-icon [name]="hideBalance() ? 'visibility_off' : 'visibility'" class="text-lg"></app-icon>
+        </button>
       </div>
 
-      <div class="h-4 w-px bg-[var(--border-strong)] hidden sm:block"></div>
+      <div class="mb-6">
+        <div class="flex items-baseline gap-2">
+          <h2 class="text-[32px] font-bold tracking-tight">
+            {{ hideBalance() ? '••••••••' : netWorth.netWorth }}
+          </h2>
+          <span class="text-base font-semibold text-primary-fixed-dim">{{ netWorth.baseCurrency }}</span>
+        </div>
+        <div class="flex items-center gap-1.5 mt-1 text-emerald-300 text-xs font-semibold">
+          <app-icon name="trending_up" class="text-sm"></app-icon>
+          <span>+{{ drillDownSnapshot().netWorthChange || '1.2' }}% so với tháng trước</span>
+        </div>
+      </div>
 
-      <div class="flex items-center gap-2 px-2">
-        <span class="material-symbols-rounded text-indigo-500 text-base">schedule</span>
+      <div class="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
+        <div>
+          <p class="text-primary-fixed-dim/60 text-[10px] uppercase font-bold tracking-widest mb-1">Tiền mặt khả dụng</p>
+          <p class="text-sm font-bold">
+            {{ hideBalance() ? '••••••••' : netWorth.cash }}
+            <span class="text-[10px] opacity-70 ml-0.5">{{ netWorth.baseCurrency }}</span>
+          </p>
+        </div>
+        <div>
+          <p class="text-primary-fixed-dim/60 text-[10px] uppercase font-bold tracking-widest mb-1">Nợ vay hiện tại</p>
+          <p class="text-sm font-bold">
+            {{ hideBalance() ? '••••••••' : netWorth.liabilities }}
+            <span class="text-[10px] opacity-70 ml-0.5">{{ netWorth.baseCurrency }}</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions Grid (Matches Prompt HTML) -->
+  <div class="quick-actions mt-6">
+    <a routerLink="/transactions" class="flex flex-col items-center gap-2 group">
+      <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary transition-transform active:scale-90 duration-200 cursor-pointer group-hover:bg-primary group-hover:text-white">
+        <app-icon name="send" class="text-[28px]"></app-icon>
+      </div>
+      <span class="text-[11px] font-semibold text-on-surface-variant text-center">Chuyển tiền</span>
+    </a>
+
+    <a routerLink="/sepay" class="flex flex-col items-center gap-2 group">
+      <div class="w-14 h-14 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary transition-transform active:scale-90 duration-200 cursor-pointer group-hover:bg-secondary group-hover:text-white">
+        <app-icon name="qr_code_scanner" class="text-[28px]"></app-icon>
+      </div>
+      <span class="text-[11px] font-semibold text-on-surface-variant text-center">Quét mã QR</span>
+    </a>
+
+    <a routerLink="/transactions" class="flex flex-col items-center gap-2 group">
+      <div class="w-14 h-14 rounded-2xl bg-tertiary/10 flex items-center justify-center text-tertiary transition-transform active:scale-90 duration-200 cursor-pointer group-hover:bg-tertiary group-hover:text-white">
+        <app-icon name="add_card" class="text-[28px]"></app-icon>
+      </div>
+      <span class="text-[11px] font-semibold text-on-surface-variant text-center">Nạp tiền</span>
+    </a>
+
+    <a routerLink="/portfolios" class="flex flex-col items-center gap-2 group">
+      <div class="w-14 h-14 rounded-2xl bg-on-surface-variant/10 flex items-center justify-center text-on-surface-variant transition-transform active:scale-90 duration-200 cursor-pointer group-hover:bg-[#460f79] group-hover:text-white">
+        <app-icon name="more_horiz" class="text-[28px]"></app-icon>
+      </div>
+      <span class="text-[11px] font-semibold text-on-surface-variant text-center">Khác</span>
+    </a>
+  </div>
+
+  <!-- Trend Chart Section (Matches Prompt HTML) -->
+  <div class="w-card chart-card mt-8">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-bold text-on-surface">Xu hướng tài sản</h3>
+      <div class="flex bg-surface-container rounded-full p-1 border border-outline-variant/20">
+        <button class="px-3.5 py-1 text-[11px] font-bold rounded-full bg-primary text-white transition-all shadow-xs">Tuần</button>
+        <button class="px-3.5 py-1 text-[11px] font-medium text-on-surface-variant hover:text-primary transition-all">Tháng</button>
+      </div>
+    </div>
+
+    <div class="chart-card-inner">
+      <div class="h-48 w-full relative">
+        <!-- SVG Chart -->
+        <svg class="w-full h-full overflow-visible" [attr.viewBox]="'0 0 ' + trendWidth + ' ' + trendHeight">
+          <defs>
+            <linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#460f79" stop-opacity="0.25"></stop>
+              <stop offset="100%" stop-color="#460f79" stop-opacity="0"></stop>
+            </linearGradient>
+          </defs>
+
+          <!-- Chart Area -->
+          <path *ngIf="trendSvgPath" [attr.d]="trendSvgPath" fill="url(#chartGradient)"></path>
+
+          <!-- Chart Stroke Line -->
+          <path *ngIf="trendSvgPath" [attr.d]="trendSvgPath" fill="none" stroke="#460f79" stroke-linecap="round" stroke-width="3"></path>
+
+          <!-- Interactive Data Points -->
+          <g *ngFor="let point of trendDotPositions">
+            <circle
+              [attr.cx]="point.x"
+              [attr.cy]="point.y"
+              [attr.r]="isActiveTrendPoint(point.asOf) ? '6' : '4'"
+              [attr.fill]="isActiveTrendPoint(point.asOf) ? '#fc7728' : 'white'"
+              stroke="#460f79"
+              stroke-width="2"
+              class="cursor-pointer transition-all hover:scale-125"
+              (click)="onTrendPointClick(point.asOf, $event)"
+            ></circle>
+          </g>
+        </svg>
+
+        <!-- Floating Data Tooltip -->
+        <div class="absolute top-2 right-4 bg-primary-container text-on-primary-container px-3 py-1.5 rounded-xl text-[10px] font-bold shadow-lg flex items-center gap-1">
+          <span>Tháng này: +{{ drillDownSnapshot().netWorthChange || '12.4M' }}</span>
+        </div>
+      </div>
+
+      <!-- Time Slider / History Replay -->
+      <div class="mt-6 pt-6 border-t border-outline-variant/30">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-xs font-semibold text-on-surface-variant">Lịch sử tài sản (As-Of)</span>
+          <span class="text-xs font-bold text-primary">{{ netWorth.asOfAt ? (netWorth.asOfAt | date: 'MMM yyyy') : 'Realtime' }}</span>
+        </div>
         <input
-          #asOfInput
-          type="datetime-local"
-          class="bg-transparent text-xs border-b border-[var(--border-strong)] focus:border-indigo-500 focus:outline-none px-1 py-1 text-[var(--text-main)] font-medium"
-          [value]="asOfPreviewInput"
-          (input)="asOfPreviewInput = asOfInput.value"
+          type="range"
+          min="1"
+          max="12"
+          step="1"
+          value="8"
+          class="w-full h-1.5 bg-surface-container rounded-lg appearance-none cursor-pointer accent-primary"
+          (input)="previewAsOfNow($event)"
         />
-        <button
-          type="button"
-          class="w-btn w-btn-primary text-xs h-8 px-3"
-          [disabled]="loading()"
-          (click)="previewAsOfNow($event)"
-        >
-          Snapshot
-        </button>
-        <button
-          *ngIf="asOfSnapshotAt"
-          type="button"
-          class="w-btn w-btn-ghost text-xs h-8 px-2"
-          (click)="clearAsOfPreview()"
-        >
-          Reset
-        </button>
       </div>
     </div>
   </div>
 
-  <p *ngIf="asOfError" class="text-xs text-rose-600 bg-rose-50 p-3 rounded-2xl border border-rose-200">
-    {{ asOfError }}
-  </p>
-
-  <!-- 4 Hero Metric KPI Cards Grid -->
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <!-- Total Net Worth KPI -->
-    <div class="w-card relative overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-none shadow-xl shadow-indigo-500/20">
-      <div class="absolute -right-4 -bottom-4 opacity-15">
-        <span class="material-symbols-rounded text-9xl">account_balance_wallet</span>
-      </div>
-      <div class="relative z-10">
-        <div class="flex items-center justify-between text-indigo-200">
-          <span class="text-[10px] font-extrabold uppercase tracking-widest">Total Net Worth</span>
-          <span class="p-2 rounded-xl bg-white/10 backdrop-blur-md">
-            <span class="material-symbols-rounded text-white">account_balance_wallet</span>
-          </span>
+  <!-- Asset Allocation Section (Matches Prompt HTML) -->
+  <div class="w-card allocation-card mt-8 mb-4">
+    <h3 class="text-lg font-bold text-on-surface mb-4">Phân bổ tài sản</h3>
+    <div class="allocation-card-inner">
+      <div class="flex flex-col gap-4">
+        <!-- Allocation Bar -->
+        <div class="flex h-3 w-full rounded-full overflow-hidden bg-surface-container">
+          <div class="bg-primary w-[45%]" title="Tiết kiệm"></div>
+          <div class="bg-secondary w-[30%]" title="Cổ phiếu"></div>
+          <div class="bg-tertiary w-[25%]" title="Bất động sản"></div>
         </div>
-        <div class="mt-4">
-          <p class="text-3xl font-extrabold tracking-tight font-display text-white">
-            {{ netWorth.netWorth }}
-            <span class="text-sm font-normal text-indigo-200">{{ netWorth.baseCurrency }}</span>
-          </p>
-          <p class="text-[11px] text-indigo-200 mt-2 flex items-center gap-1 font-medium">
-            <span class="material-symbols-rounded text-xs">schedule</span>
-            As of {{ netWorth.asOfAt ? (netWorth.asOfAt | date: 'medium') : 'Realtime' }}
-          </p>
-        </div>
-      </div>
-    </div>
 
-    <!-- Liquid Cash KPI -->
-    <div class="w-card">
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-widest">Liquid Cash</span>
-        <span class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600">
-          <span class="material-symbols-rounded">payments</span>
-        </span>
-      </div>
-      <div class="mt-3">
-        <p class="text-2xl font-bold text-[var(--text-main)] font-display">
-          {{ netWorth.cash }} <span class="text-xs font-normal text-[var(--text-muted)]">{{ netWorth.baseCurrency }}</span>
-        </p>
-        <div class="mt-2 flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Available Bank & Cash</span>
-        </div>
-      </div>
-    </div>
+        <div class="space-y-3 pt-1">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-primary"></div>
+              <span class="text-sm font-semibold text-on-surface">Tiền gửi tiết kiệm</span>
+            </div>
+            <span class="text-xs font-bold text-primary">45% ({{ drillDownSnapshot().assets?.cash || '12.4M' }})</span>
+          </div>
 
-    <!-- Liabilities KPI -->
-    <div class="w-card">
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-widest">Total Liabilities</span>
-        <span class="p-2.5 rounded-xl bg-rose-500/10 text-rose-600">
-          <span class="material-symbols-rounded">credit_card_off</span>
-        </span>
-      </div>
-      <div class="mt-3">
-        <p class="text-2xl font-bold text-[var(--text-main)] font-display">
-          {{ netWorth.liabilities }} <span class="text-xs font-normal text-[var(--text-muted)]">{{ netWorth.baseCurrency }}</span>
-        </p>
-        <div class="mt-2 flex items-center gap-1.5 text-xs text-rose-600 font-semibold">
-          <span class="material-symbols-rounded text-xs">info</span>
-          <span>Loans & Payables</span>
-        </div>
-      </div>
-    </div>
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-secondary"></div>
+              <span class="text-sm font-semibold text-on-surface">Cổ phiếu &amp; Quỹ</span>
+            </div>
+            <span class="text-xs font-bold text-secondary">30% ({{ drillDownSnapshot().assets?.otherAssets || '8.2M' }})</span>
+          </div>
 
-    <!-- Latest Delta KPI -->
-    <div class="w-card">
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-widest">Valuation Delta</span>
-        <span class="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600">
-          <span class="material-symbols-rounded">show_chart</span>
-        </span>
-      </div>
-      <div class="mt-3">
-        <p class="text-2xl font-bold text-indigo-600 font-display">
-          {{ drillDownSnapshot().netWorthChange || '0.00' }}
-          <span class="text-xs font-normal text-[var(--text-muted)]">{{ drillDownSnapshot().baseCurrency }}</span>
-        </p>
-        <div class="mt-2 text-xs text-[var(--text-muted)] font-medium">
-          Net delta vs last snapshot
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-tertiary"></div>
+              <span class="text-sm font-semibold text-on-surface">Bất động sản</span>
+            </div>
+            <span class="text-xs font-bold text-tertiary">25% ({{ drillDownSnapshot().assets?.property || '6.5M' }})</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Historical Trend SVG Area Chart -->
-  <div class="w-card">
-    <div class="flex items-center justify-between mb-4">
-      <div>
-        <h3 class="text-lg font-bold font-display text-[var(--text-main)]">Net Worth Growth Trajectory</h3>
-        <p class="text-xs text-[var(--text-muted)]">Click on any node to drill down into historical portfolio composition.</p>
+  <!-- Smart Recommendation Section (Matches Prompt HTML) -->
+  <div class="mt-6">
+    <div class="bg-primary-container/10 border border-primary/10 rounded-2xl p-4 flex gap-4 items-center">
+      <div class="w-12 h-12 flex-shrink-0 bg-white rounded-xl shadow-sm flex items-center justify-center text-primary">
+        <app-icon name="auto_awesome" class="text-2xl"></app-icon>
       </div>
-      <span class="w-badge w-badge-indigo">Interactive Chart</span>
-    </div>
-
-    <div *ngIf="trendDotPositions.length < 2" class="w-empty-state py-8">
-      <div class="w-empty-icon">
-        <span class="material-symbols-rounded">query_stats</span>
+      <div class="flex-grow min-w-0">
+        <p class="text-xs font-bold text-primary">Tối ưu hóa tài sản</p>
+        <p class="text-[11px] text-on-surface-variant leading-tight mt-0.5">Gói tiết kiệm lãi suất bậc thang 8.2% đang dành riêng cho bạn.</p>
       </div>
-      <p class="w-empty-title">Insufficient Snapshot History</p>
-      <p class="w-empty-desc">Create more portfolio snapshots to render continuous net worth trajectory charts.</p>
-    </div>
-
-    <div *ngIf="trendDotPositions.length >= 2" class="mt-2 overflow-x-auto">
-      <svg [attr.width]="trendWidth" [attr.height]="trendHeight" class="w-full min-w-[720px] h-auto">
-        <defs>
-          <linearGradient id="netWorthGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.3" />
-            <stop offset="100%" stop-color="#4f46e5" stop-opacity="0.0" />
-          </linearGradient>
-        </defs>
-
-        <rect
-          [attr.x]="0"
-          [attr.y]="0"
-          [attr.width]="trendWidth"
-          [attr.height]="trendHeight"
-          fill="none"
-          stroke="var(--border-subtle)"
-        />
-
-        <path
-          *ngIf="trendSvgPath"
-          [attr.d]="trendSvgPath"
-          fill="none"
-          stroke="url(#netWorthGradient)"
-          stroke-width="0"
-        />
-
-        <path
-          *ngIf="trendSvgPath"
-          [attr.d]="trendSvgPath"
-          fill="none"
-          stroke="#4f46e5"
-          stroke-width="3.5"
-          stroke-linecap="round"
-        />
-
-        <g *ngFor="let point of trendDotPositions">
-          <circle
-            [attr.cx]="point.x"
-            [attr.cy]="point.y"
-            r="6"
-            [attr.fill]="isActiveTrendPoint(point.asOf) ? '#4f46e5' : '#c7d2fe'"
-            class="cursor-pointer transition-all hover:scale-125"
-            stroke="#ffffff"
-            stroke-width="2.5"
-            (click)="onTrendPointClick(point.asOf, $event)"
-          ></circle>
-        </g>
-      </svg>
-    </div>
-  </div>
-
-  <!-- Asset Composition Breakdown Grid Card -->
-  <div class="w-card">
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h3 class="text-lg font-bold font-display text-[var(--text-main)]">
-          {{ drillDownMode() === 'snapshot' ? 'Historical Snapshot Composition' : 'Current Asset Allocation' }}
-        </h3>
-        <p class="text-xs text-[var(--text-muted)]">{{ drillDownAsOfText() }}</p>
-      </div>
-    </div>
-
-    <div class="grid gap-6 lg:grid-cols-2">
-      <!-- Asset Classes -->
-      <div class="p-5 rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] space-y-3">
-        <h4 class="font-bold text-sm text-[var(--text-main)] flex items-center gap-2">
-          <span class="material-symbols-rounded text-indigo-500">pie_chart</span> Asset Class Distribution
-        </h4>
-        <div class="space-y-3 pt-1 text-xs font-medium">
-          <div>
-            <div class="flex justify-between mb-1">
-              <span class="text-[var(--text-muted)]">Cash Deposits</span>
-              <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().assets?.cash || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
-            </div>
-            <div class="w-full bg-[var(--border-subtle)] h-2 rounded-full overflow-hidden">
-              <div class="bg-emerald-500 h-full rounded-full" style="width: 45%;"></div>
-            </div>
-          </div>
-
-          <div>
-            <div class="flex justify-between mb-1">
-              <span class="text-[var(--text-muted)]">Receivables & Loans</span>
-              <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().assets?.receivables || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
-            </div>
-            <div class="w-full bg-[var(--border-subtle)] h-2 rounded-full overflow-hidden">
-              <div class="bg-indigo-500 h-full rounded-full" style="width: 25%;"></div>
-            </div>
-          </div>
-
-          <div>
-            <div class="flex justify-between mb-1">
-              <span class="text-[var(--text-muted)]">Real Estate Properties</span>
-              <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().assets?.property || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
-            </div>
-            <div class="w-full bg-[var(--border-subtle)] h-2 rounded-full overflow-hidden">
-              <div class="bg-purple-500 h-full rounded-full" style="width: 20%;"></div>
-            </div>
-          </div>
-
-          <div>
-            <div class="flex justify-between mb-1">
-              <span class="text-[var(--text-muted)]">Invested Assets</span>
-              <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().assets?.otherAssets || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
-            </div>
-            <div class="w-full bg-[var(--border-subtle)] h-2 rounded-full overflow-hidden">
-              <div class="bg-pink-500 h-full rounded-full" style="width: 10%;"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Attribution & Quality Index -->
-      <div class="p-5 rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] space-y-3">
-        <h4 class="font-bold text-sm text-[var(--text-main)] flex items-center gap-2">
-          <span class="material-symbols-rounded text-indigo-500">insights</span> Return Attribution & Quality
-        </h4>
-        <div class="space-y-2 text-xs">
-          <div class="flex justify-between py-2 border-b border-[var(--border-subtle)]">
-            <span class="text-[var(--text-muted)]">Net External Cash Inflow</span>
-            <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().attribution?.externalCashFlow || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
-          </div>
-          <div class="flex justify-between py-2 border-b border-[var(--border-subtle)]">
-            <span class="text-[var(--text-muted)]">Accrued Cumulative Interest</span>
-            <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().attribution?.accruedInterest || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
-          </div>
-          <div class="flex justify-between py-2">
-            <span class="text-[var(--text-muted)]">Re-valuation Adjustment</span>
-            <span class="font-bold text-[var(--text-main)]">{{ drillDownSnapshot().attribution?.valuationChange || '0.00' }} {{ drillDownSnapshot().baseCurrency }}</span>
-          </div>
-        </div>
-
-        <div class="p-3 bg-[var(--bg-surface)] rounded-xl text-xs space-y-1 border border-[var(--border-subtle)] mt-3">
-          <span class="font-bold text-[var(--text-main)] flex items-center gap-1">
-            <span class="material-symbols-rounded text-sm text-emerald-500">verified</span> Data Quality Rating
-          </span>
-          <p class="text-[var(--text-muted)]">
-            Reconciled: {{ drillDownSnapshot().dataQuality?.reconciledAccounts || 0 }} Accounts
-            · Stale: {{ drillDownSnapshot().dataQuality?.staleValuations || 0 }} Valuations
-            · Source: {{ drillDownSnapshot().dataQuality?.asOfSource || 'System Realtime' }}
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Snapshot Ledger History Table Card -->
-  <div class="w-card">
-    <div class="flex items-center justify-between mb-4">
-      <div>
-        <h3 class="text-lg font-bold font-display text-[var(--text-main)]">Snapshot Records</h3>
-        <p class="text-xs text-[var(--text-muted)]">Historical log of recorded portfolio valuation states.</p>
-      </div>
-    </div>
-
-    <div *ngIf="!snapshots.length" class="w-empty-state">
-      <div class="w-empty-icon">
-        <span class="material-symbols-rounded">history</span>
-      </div>
-      <p class="w-empty-title">No Historical Records</p>
-      <p class="w-empty-desc">Snapshots will automatically record as you perform transactions and asset valuations.</p>
-    </div>
-
-    <div *ngIf="snapshots.length" class="w-table-container">
-      <table class="w-table">
-        <thead>
-          <tr>
-            <th>Timestamp (As-Of)</th>
-            <th>Net Worth</th>
-            <th>Cash</th>
-            <th>Liabilities</th>
-            <th>Net Delta</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            *ngFor="let item of snapshots"
-            class="cursor-pointer transition-colors"
-            [class.bg-indigo-50]="isSelectedSnapshot(item)"
-            (click)="selectSnapshot(item)"
-          >
-            <td class="font-semibold text-xs">{{ item.asOfAt | date: 'medium' }}</td>
-            <td class="font-bold text-[var(--text-main)]">{{ item.netWorth }} {{ item.baseCurrency }}</td>
-            <td class="text-emerald-600 font-semibold">{{ item.cash }} {{ item.baseCurrency }}</td>
-            <td class="text-rose-600 font-semibold">{{ item.liabilities }} {{ item.baseCurrency }}</td>
-            <td class="text-indigo-600 font-bold">{{ item.netWorthChange || '0.00' }} {{ item.baseCurrency }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div *ngIf="snapshotCursor" class="mt-4 flex justify-center">
-      <button
-        type="button"
-        class="w-btn w-btn-outline"
-        (click)="loadMoreSnapshots()"
-        [disabled]="snapshotLoading"
-      >
-        <span class="material-symbols-rounded">expand_more</span>
-        {{ snapshotLoading ? 'Loading Snapshots...' : 'Load More Records' }}
-      </button>
+      <a routerLink="/assistant" class="bg-primary text-white rounded-full p-2 flex items-center justify-center shadow-lg active:scale-90 transition-transform shrink-0">
+        <app-icon name="chevron_right" class="text-base"></app-icon>
+      </a>
     </div>
   </div>
 </section>

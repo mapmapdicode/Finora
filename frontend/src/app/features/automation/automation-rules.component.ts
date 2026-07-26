@@ -5,12 +5,15 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { BankAutomationRule } from '../../shared/models';
 
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { IconComponent } from '../../shared/icons/icon.component';
+
 type Direction = 'in' | 'out';
 
 @Component({
   selector: 'app-automation-rules',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, TranslatePipe, IconComponent],
   templateUrl: './automation-rules.component.html',
 })
 export class AutomationRulesComponent implements OnInit {

@@ -2,112 +2,115 @@
   <!-- Page Header -->
   <div class="m3-page-header">
     <div>
-      <h1 class="m3-page-title">AI Hermes Assistant Gateway</h1>
-      <p class="m3-page-subtitle">Send natural language financial commands, inspect execution plans, and issue manual approval policies.</p>
+      <h1 class="m3-page-title">{{ 'assistant.title' | translate }}</h1>
+      <p class="m3-page-subtitle">{{ 'assistant.subtitle' | translate }}</p>
     </div>
   </div>
 
   <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
-    <span class="material-symbols-rounded">lock</span>
-    <span>This workspace is read-only. Assistant actions are disabled.</span>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
+    <app-icon name="lock"></app-icon>
+    <span>{{ 'common.readonly_warning' | translate }}</span>
   </div>
 
-  <!-- Send Command Form Card (Max 900px) -->
-  <div class="m3-card max-w-4xl">
+  <!-- Send Command Form Card (Full Screen Width) -->
+  <div class="w-card w-full">
     <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">smart_toy</span> Send Assistant Command
-        </h3>
-        <p class="m3-card-subtitle">Type natural language prompts or structured execution plans.</p>
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+          <app-icon name="smart_toy"></app-icon>
+        </div>
+        <div>
+          <h3 class="m3-card-title">Send Assistant Command</h3>
+          <p class="m3-card-subtitle">Type natural language prompts or structured execution plans.</p>
+        </div>
       </div>
     </div>
 
     <form (ngSubmit)="submitCommand()" [formGroup]="form" class="space-y-4">
       <div>
-        <label class="m3-label block mb-1">Natural Language Command Prompt</label>
+        <label class="w-label">Natural Language Command Prompt</label>
         <textarea
           formControlName="command"
-          class="m3-textarea text-xs font-mono"
+          class="w-textarea text-xs font-mono"
           rows="3"
           placeholder='e.g. "Record an expense of 500,000 VND for Client Lunch from Cash Account"'
         ></textarea>
       </div>
 
       <div>
-        <label class="m3-label block mb-1">Execution Plan (Optional)</label>
-        <input formControlName="plan" placeholder="Optional structured action plan..." class="m3-input" />
+        <label class="w-label">Execution Plan (Optional)</label>
+        <input formControlName="plan" placeholder="Optional structured action plan..." class="w-input" />
       </div>
 
-      <div class="flex justify-end pt-2">
-        <button type="submit" class="m3-btn m3-btn-primary" [disabled]="loading || !auth.canMutate">
-          <span class="material-symbols-rounded" [class.animate-spin]="loading">send</span>
-          {{ loading ? 'Dispatching Command...' : 'Send Command' }}
+      <div class="flex justify-end pt-1">
+        <button type="submit" class="w-btn w-btn-primary" [disabled]="loading || !auth.canMutate">
+          <app-icon name="send" [class.animate-spin]="loading"></app-icon>
+          {{ loading ? ('common.loading' | translate) : 'Send Command' }}
         </button>
       </div>
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
 
   <!-- Command History List Card -->
-  <div class="m3-card">
+  <div class="w-card">
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">forum</span> Command Journal & Approvals
+          <app-icon name="forum" class="text-[var(--accent-primary)]"></app-icon> Command Journal & Approvals
         </h3>
         <p class="m3-card-subtitle">History of dispatched commands and pending policy approvals.</p>
       </div>
-      <span class="m3-badge m3-badge-neutral">{{ commands.length }} Commands</span>
+      <span class="w-badge w-badge-neutral">{{ commands.length }} Commands</span>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="!commands.length" class="m3-empty-state">
-      <div class="m3-empty-icon">
-        <span class="material-symbols-rounded">smart_toy</span>
+    <div *ngIf="!commands.length" class="w-empty-state">
+      <div class="w-empty-icon">
+        <app-icon name="smart_toy"></app-icon>
       </div>
-      <p class="m3-empty-title">No Commands Dispatched</p>
-      <p class="m3-empty-desc">Send your first prompt to the AI Assistant above to automate ledger entries.</p>
+      <p class="w-empty-title">No Commands Dispatched</p>
+      <p class="w-empty-desc">Send your first prompt to the AI Assistant above to automate ledger entries.</p>
     </div>
 
     <!-- Commands Table / Cards List -->
     <div *ngIf="commands.length" class="space-y-3">
-      <div *ngFor="let item of commands" class="p-4 rounded-2xl border border-[var(--m3-outline)] bg-[var(--m3-surface)] hover:shadow-md transition-all flex flex-wrap items-start justify-between gap-4">
+      <div *ngFor="let item of commands" class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:shadow-xs transition-all flex flex-wrap items-start justify-between gap-4">
         <div class="space-y-1.5 max-w-xl">
           <div class="flex items-center gap-2">
-            <span class="font-bold text-sm text-[var(--m3-on-surface)] flex items-center gap-1">
-              <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">terminal</span> {{ item.command }}
+            <span class="font-bold text-sm text-[var(--text-main)] flex items-center gap-1.5">
+              <app-icon name="terminal" class="text-[var(--accent-primary)]"></app-icon> {{ item.command }}
             </span>
-            <span class="m3-badge uppercase text-[10px]" [ngClass]="{
-              'm3-badge-success': item.status === 'executed' || item.status === 'approved',
-              'm3-badge-warning': item.status === 'pending_approval' || item.status === 'received',
-              'm3-badge-danger': item.status === 'cancelled' || item.status === 'rejected'
+            <span class="w-badge uppercase text-[10px]" [ngClass]="{
+              'w-badge-success': item.status === 'executed' || item.status === 'approved',
+              'w-badge-warning': item.status === 'pending_approval' || item.status === 'received' || item.status === 'ready',
+              'w-badge-danger': item.status === 'cancelled' || item.status === 'rejected'
             }">
               {{ item.status || 'received' }}
             </span>
           </div>
 
-          <p class="text-xs text-[var(--m3-on-surface-variant)]">ID: <span class="font-mono">{{ item.id }}</span> · Plan: {{ item.plan || 'Direct execution' }}</p>
+          <p class="text-xs text-[var(--text-muted)] font-medium">ID: <span class="font-mono">{{ item.id }}</span> · Plan: {{ item.plan || 'Direct execution' }}</p>
 
-          <p *ngIf="item.approvalId" class="text-xs text-[var(--m3-warning)] font-medium flex items-center gap-1">
-            <span class="material-symbols-rounded text-sm">lock_clock</span> Approval ID: {{ item.approvalId }} · Expires: {{ item.approvalExpiresAt || 'n/a' }}
+          <p *ngIf="item.approvalId" class="text-xs text-amber-700 font-medium flex items-center gap-1">
+            <app-icon name="lock_clock" class="text-sm"></app-icon> Approval ID: {{ item.approvalId }} · Expires: {{ item.approvalExpiresAt || 'n/a' }}
           </p>
 
-          <div *ngIf="selectedCommandId === item.id" class="mt-3 p-3 rounded-xl bg-slate-900 text-green-300 font-mono text-xs overflow-x-auto border border-slate-800">
+          <div *ngIf="selectedCommandId === item.id" class="mt-3 p-3 rounded-lg bg-slate-900 text-emerald-400 font-mono text-xs overflow-x-auto border border-slate-800">
             <pre>{{ item | json }}</pre>
           </div>
         </div>
 
         <div class="flex flex-col gap-2 items-end">
-          <button class="m3-btn m3-btn-outlined text-xs py-1 px-3" (click)="inspect(item)">
-            <span class="material-symbols-rounded text-sm">info</span> {{ selectedCommandId === item.id ? 'Close Details' : 'Details' }}
+          <button class="w-btn w-btn-outline text-xs h-8 px-3" (click)="inspect(item)">
+            <app-icon name="info" class="text-sm"></app-icon> {{ selectedCommandId === item.id ? ('common.close' | translate) : ('common.details' | translate) }}
           </button>
 
           <ng-container *ngIf="canApprove(item)">
             <input
-              class="m3-input text-xs h-8 py-1 px-2.5 w-48 font-mono"
+              class="w-input text-xs h-8 py-1 px-2.5 w-48 font-mono"
               type="text"
               placeholder="approvalId"
               [value]="approvalInputs[item.id] || ''"
@@ -115,7 +118,7 @@
             />
             <div class="flex gap-1.5">
               <button
-                class="m3-btn m3-btn-primary text-xs py-1 px-3"
+                class="w-btn w-btn-primary text-xs h-8 px-3"
                 *ngIf="auth.canMutate"
                 [disabled]="requiresApproval(item)"
                 (click)="approve(item.id)"
@@ -123,7 +126,7 @@
                 Approve
               </button>
               <button
-                class="m3-btn m3-btn-outlined text-xs py-1 px-3 text-[var(--m3-danger)] border-[var(--m3-danger)]"
+                class="w-btn w-btn-outline text-xs h-8 px-3 text-rose-600 border-rose-300 hover:bg-rose-50"
                 *ngIf="auth.canMutate"
                 (click)="cancel(item.id)"
               >

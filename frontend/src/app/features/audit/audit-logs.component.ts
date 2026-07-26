@@ -3,10 +3,13 @@ import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
 import { AuditLog } from '../../shared/models';
 
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { IconComponent } from '../../shared/icons/icon.component';
+
 @Component({
   selector: 'app-audit-logs',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslatePipe, IconComponent],
   templateUrl: './audit-logs.component.html',
 })
 export class AuditLogsComponent implements OnInit {

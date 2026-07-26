@@ -4,11 +4,12 @@ import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 
 import { CommonModule } from '@angular/common';
+import { IconComponent } from '../../shared/icons/icon.component';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, IconComponent],
   templateUrl: './login.component.html',
 })
 export class LoginComponent {

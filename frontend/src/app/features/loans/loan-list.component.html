@@ -1,266 +1,155 @@
 <section class="space-y-6">
   <!-- Page Header -->
-  <div class="m3-page-header">
+  <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="m3-page-title">Loans & Credit Agreements</h1>
-      <p class="m3-page-subtitle">Manage borrower/lender loan portfolios, track accrued interest, and issue payment requests.</p>
+      <h1 class="text-2xl font-bold tracking-tight text-[var(--text-main)]">
+        {{ 'loans.title' | translate }}
+      </h1>
+      <p class="text-xs text-[var(--text-muted)] mt-0.5 font-medium">
+        {{ 'loans.subtitle' | translate }}
+      </p>
     </div>
   </div>
 
   <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
-    <span class="material-symbols-rounded">lock</span>
-    <span>This workspace is read-only. You can only view loans and accruals.</span>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
+    <app-icon name="lock"></app-icon>
+    <span>This workspace is read-only. Loan creation is disabled.</span>
   </div>
 
-  <!-- Create Loan Form Card (Max 900px) -->
-  <div class="m3-card max-w-4xl">
-    <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">request_quote</span> Create Loan Agreement
-        </h3>
-        <p class="m3-card-subtitle">Set up a loan receivable or payable agreement.</p>
+  <!-- Create Loan Agreement Card Form (Full Screen Width) -->
+  <div class="w-card w-full">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+          <app-icon name="request_quote"></app-icon>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'loans.create_title' | translate }}</h3>
+          <p class="text-xs text-[var(--text-muted)]">Record a debt contract with initial principal balance & interest parameters.</p>
+        </div>
       </div>
     </div>
 
     <form (ngSubmit)="submitLoan()" [formGroup]="creationForm" class="space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="m3-label block mb-1">Counterparty</label>
-          <input formControlName="counterparty" placeholder="Name or Institution" class="m3-input" />
+          <label class="w-label">{{ 'loans.counterparty' | translate }}</label>
+          <input formControlName="counterparty" placeholder="Counterparty Name / Lender / Borrower" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Direction</label>
-          <select formControlName="direction" class="m3-select">
-            <option value="receivable">Receivable (Lending)</option>
-            <option value="payable">Payable (Borrowing)</option>
+          <label class="w-label">{{ 'loans.principal' | translate }}</label>
+          <input formControlName="principalInitial" placeholder="0.00" class="w-input" />
+        </div>
+
+        <div>
+          <label class="w-label">{{ 'loans.annual_rate' | translate }} (%)</label>
+          <input formControlName="annualRate" placeholder="e.g. 7.5" class="w-input" />
+        </div>
+
+        <div>
+          <label class="w-label">{{ 'loans.direction' | translate }}</label>
+          <select formControlName="direction" class="w-select">
+            <option value="borrowed">Borrowed (Liability / Payee)</option>
+            <option value="lent">Lent Out (Asset / Receivable)</option>
           </select>
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Initial Principal</label>
-          <input formControlName="principalInitial" placeholder="0.00" class="m3-input" />
+          <label class="w-label">Linked Settlement Account ID</label>
+          <select formControlName="accountId" class="w-select">
+            <option value="">-- Linked Account --</option>
+            <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
+          </select>
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Annual Interest Rate (%)</label>
-          <input formControlName="annualRate" placeholder="e.g. 8.5" class="m3-input" />
-        </div>
-
-        <div>
-          <label class="m3-label block mb-1">Day Count Basis</label>
-          <input formControlName="dayCountBasis" placeholder="ACT_365" class="m3-input" />
-        </div>
-
-        <div>
-          <label class="m3-label block mb-1">Portfolio ID (Optional)</label>
-          <input formControlName="portfolioId" placeholder="Portfolio ID" class="m3-input" />
-        </div>
-
-        <div>
-          <label class="m3-label block mb-1">Start Date</label>
-          <input formControlName="startAt" type="datetime-local" class="m3-input" />
-        </div>
-
-        <div>
-          <label class="m3-label block mb-1">Due Date</label>
-          <input formControlName="dueAt" type="datetime-local" class="m3-input" />
-        </div>
-
-        <div class="flex items-center pt-6">
-          <label class="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-            <input type="checkbox" formControlName="interestCompounding" class="w-4 h-4 rounded text-[var(--m3-primary)]" />
-            <span>Compound Interest Enabled</span>
-          </label>
+          <label class="w-label">Disbursement Date</label>
+          <input formControlName="startAt" type="date" class="w-input" />
         </div>
       </div>
 
-      <div class="flex justify-end pt-2">
-        <button type="submit" class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
-          <span class="material-symbols-rounded">add</span> Create Loan
+      <div class="flex justify-end pt-1">
+        <button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
+          <app-icon name="add"></app-icon> {{ 'common.create' | translate }}
         </button>
       </div>
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
 
-  <!-- Loans List Grid -->
-  <div class="space-y-4">
-    <h3 class="text-lg font-semibold flex items-center gap-2">
-      <span class="material-symbols-rounded text-[var(--m3-primary)]">format_list_bulleted</span> Loan Portfolio Items
-    </h3>
-
-    <!-- Empty State -->
-    <div *ngIf="!loans.length" class="m3-empty-state m3-card">
-      <div class="m3-empty-icon">
-        <span class="material-symbols-rounded">request_quote</span>
+  <!-- Loans List Card -->
+  <div class="w-card">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'loans.title' | translate }}</h3>
+        <p class="text-xs text-[var(--text-muted)]">Active loan contracts in portfolio.</p>
       </div>
-      <p class="m3-empty-title">No Loans Created</p>
-      <p class="m3-empty-desc">Create your first loan agreement to track lending, repayments, and accrued interest.</p>
+      <span class="w-badge w-badge-neutral">{{ loans.length }} Contracts</span>
     </div>
 
-    <div *ngIf="loans.length" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div *ngFor="let loan of loans" class="m3-card space-y-4">
-        <div class="m3-card-header mb-0">
-          <div>
-            <h4 class="m3-card-title">{{ loan.counterparty }}</h4>
-            <p class="m3-card-subtitle">
-              {{ statusText(loan) }} · Initial: {{ loan.principalInitial }} · {{ loan.annualRate }}%/yr
-            </p>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <span class="m3-badge uppercase text-[10px]" [ngClass]="{
-              'm3-badge-success': loan.direction === 'receivable',
-              'm3-badge-danger': loan.direction === 'payable'
-            }">
-              {{ loan.direction }}
-            </span>
-            <button class="m3-btn m3-btn-outlined text-xs py-1 px-2.5" (click)="loadAccruals(loan.id)">
-              <span class="material-symbols-rounded text-sm">calculate</span>
-              {{ selectedLoanId === loan.id ? 'Hide Accruals' : 'Accruals' }}
-            </button>
-          </div>
-        </div>
-
-        <div class="p-3 bg-[var(--m3-surface-variant)] rounded-xl flex items-center justify-between text-xs">
-          <div>
-            <span class="text-[var(--m3-on-surface-variant)]">Current Status</span>
-            <p class="font-bold text-[var(--m3-on-surface)] uppercase">{{ loan.status }}</p>
-          </div>
-          <div class="text-right">
-            <span class="text-[var(--m3-on-surface-variant)]">Outstanding Principal</span>
-            <p class="font-bold text-[var(--m3-primary)] text-sm">{{ loan.principalBalance || loan.principalInitial }}</p>
-          </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex flex-wrap gap-2">
-          <button
-            class="m3-btn m3-btn-outlined text-xs py-1 px-3"
-            *ngIf="auth.canMutate"
-            (click)="openPayment(loan.id)"
-          >
-            <span class="material-symbols-rounded text-sm">paid</span> Record Repayment
-          </button>
-          <button
-            class="m3-btn m3-btn-outlined text-xs py-1 px-3"
-            *ngIf="auth.canMutate"
-            (click)="openRequest(loan.id)"
-          >
-            <span class="material-symbols-rounded text-sm">qr_code</span> Payment Request
-          </button>
-        </div>
-
-        <!-- Record Repayment Form -->
-        <form
-          *ngIf="selectedLoanForPayment === loan.id"
-          [formGroup]="paymentForm"
-          (ngSubmit)="submitPayment()"
-          class="border-t border-[var(--m3-outline)] pt-4 space-y-3"
-        >
-          <h5 class="font-semibold text-xs text-[var(--m3-primary)] flex items-center gap-1">
-            <span class="material-symbols-rounded text-sm">payments</span> Record Payment Details
-          </h5>
-          <input formControlName="loanId" type="hidden" />
-
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="m3-label text-[11px] block">Principal Amount</label>
-              <input formControlName="principalAmount" placeholder="0.00" class="m3-input text-xs h-9" />
-            </div>
-            <div>
-              <label class="m3-label text-[11px] block">Interest Amount</label>
-              <input formControlName="interestAmount" placeholder="0.00" class="m3-input text-xs h-9" />
-            </div>
-            <div>
-              <label class="m3-label text-[11px] block">Fee Amount</label>
-              <input formControlName="feeAmount" placeholder="0.00" class="m3-input text-xs h-9" />
-            </div>
-            <div>
-              <label class="m3-label text-[11px] block">Waived Amount</label>
-              <input formControlName="waivedAmount" placeholder="0.00" class="m3-input text-xs h-9" />
-            </div>
-          </div>
-          <div>
-            <label class="m3-label text-[11px] block">Payment Date</label>
-            <input formControlName="occurredAt" type="datetime-local" class="m3-input text-xs h-9" />
-          </div>
-
-          <div class="flex gap-2 justify-end">
-            <button type="button" class="m3-btn m3-btn-text text-xs py-1 px-3" (click)="closePayment()">Cancel</button>
-            <button class="m3-btn m3-btn-primary text-xs py-1 px-4" type="submit" [disabled]="!auth.canMutate">Save Repayment</button>
-          </div>
-        </form>
-
-        <!-- Accrual Box -->
-        <div class="p-3 border border-[var(--m3-outline)] rounded-xl bg-[var(--m3-surface-variant)] text-xs space-y-1" *ngIf="selectedLoanId === loan.id">
-          <p class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-1">
-            <span class="material-symbols-rounded text-sm">trending_up</span> Accrual Details
-          </p>
-          <div *ngIf="accrualsMap[loan.id]" class="grid grid-cols-2 gap-2 pt-1">
-            <div>
-              <span class="text-[var(--m3-on-surface-variant)]">Total Accrued Interest</span>
-              <p class="font-bold text-[var(--m3-on-surface)]">{{ accrualsMap[loan.id].totalAccruedInterest }}</p>
-            </div>
-            <div>
-              <span class="text-[var(--m3-on-surface-variant)]">Unpaid Interest</span>
-              <p class="font-bold text-[var(--m3-warning)]">{{ accrualsMap[loan.id].unpaidInterest }}</p>
-            </div>
-          </div>
-          <div *ngIf="!accrualsMap[loan.id]" class="text-[var(--m3-on-surface-variant)]">
-            No accrual data available yet.
-          </div>
-        </div>
-
-        <!-- Payment Request Form -->
-        <form [formGroup]="requestForm" class="border-t border-[var(--m3-outline)] pt-4 space-y-3" *ngIf="auth.canMutate">
-          <input formControlName="loanId" type="hidden" [value]="loan.id" />
-          <div class="grid grid-cols-3 gap-2">
-            <div>
-              <label class="m3-label text-[11px] block">Amount</label>
-              <input formControlName="amount" placeholder="Requested amount" class="m3-input text-xs h-9" />
-            </div>
-            <div>
-              <label class="m3-label text-[11px] block">Currency</label>
-              <input formControlName="currency" placeholder="VND" class="m3-input text-xs h-9" />
-            </div>
-            <div>
-              <label class="m3-label text-[11px] block">Expiration</label>
-              <input formControlName="expiresAt" type="datetime-local" class="m3-input text-xs h-9" />
-            </div>
-          </div>
-          <button
-            type="button"
-            class="m3-btn m3-btn-outlined w-full text-xs"
-            (click)="requestCode(loan.id)"
-          >
-            <span class="material-symbols-rounded text-sm">qr_code_2</span> Generate Payment QR Request
-          </button>
-        </form>
-
-        <!-- Active Payment Request Display -->
-        <div class="p-3 border border-[var(--m3-outline)] rounded-xl bg-[var(--m3-primary-container)]/30 text-xs space-y-1" *ngIf="paymentRequests[loan.id] as paymentRequest">
-          <p class="font-semibold text-[var(--m3-on-primary-container)] flex items-center gap-1">
-            <span class="material-symbols-rounded text-sm">qr_code</span> Latest Payment Request
-          </p>
-          <p>Code: <strong class="font-mono">{{ paymentRequest.paymentCode }}</strong></p>
-          <p>Amount: <strong>{{ paymentRequest.amount }} {{ paymentRequest.currency }}</strong></p>
-          <p>Status: <span class="m3-badge m3-badge-primary uppercase text-[10px]">{{ paymentRequest.status }}</span></p>
-          <a
-            *ngIf="paymentRequest.qr"
-            [href]="paymentRequest.qr"
-            target="_blank"
-            rel="noopener"
-            class="m3-btn m3-btn-primary text-xs py-1 px-3 mt-2 inline-flex items-center gap-1"
-          >
-            <span class="material-symbols-rounded text-sm">open_in_new</span> Open Payment Link / QR
-          </a>
-        </div>
+    <!-- Empty State -->
+    <div *ngIf="loans.length === 0" class="w-empty-state">
+      <div class="w-empty-icon">
+        <app-icon name="request_quote"></app-icon>
       </div>
+      <p class="w-empty-title">No Loans Recorded</p>
+      <p class="w-empty-desc">Create your first loan contract above to start tracking interest accruals and principal balances.</p>
+    </div>
+
+    <!-- Loans Table -->
+    <div *ngIf="loans.length > 0" class="w-table-container">
+      <table class="w-table">
+        <thead>
+          <tr>
+            <th>{{ 'loans.counterparty' | translate }}</th>
+            <th>{{ 'loans.direction' | translate }}</th>
+            <th>{{ 'loans.principal' | translate }}</th>
+            <th>Remaining Balance</th>
+            <th>{{ 'loans.annual_rate' | translate }}</th>
+            <th>Accrued Interest</th>
+            <th>{{ 'common.status' | translate }}</th>
+            <th class="text-right">{{ 'common.actions' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of loans">
+            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
+              <span class="w-7 h-7 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+                <app-icon name="request_quote" class="text-sm"></app-icon>
+              </span>
+              {{ item.counterparty }}
+            </td>
+            <td>
+              <span class="w-badge uppercase text-[10px]" [ngClass]="item.direction === 'payable' ? 'w-badge-danger' : 'w-badge-success'">
+                {{ item.direction }}
+              </span>
+            </td>
+            <td class="font-bold text-xs">{{ item.principalInitial }}</td>
+            <td class="font-bold text-xs text-[var(--text-main)]">{{ item.principalBalance }}</td>
+            <td class="font-mono text-xs font-bold text-[var(--accent-primary)]">{{ item.annualRate }}%</td>
+            <td class="font-semibold text-xs text-amber-700">
+              {{ accrualsMap[item.id]?.totalAccruedInterest || '0.00' }}
+            </td>
+            <td>
+              <span class="w-badge w-badge-indigo uppercase text-[10px]">
+                {{ item.status || 'active' }}
+              </span>
+            </td>
+            <td class="text-right">
+              <button
+                *ngIf="auth.canMutate"
+                class="w-btn w-btn-outline text-xs h-8 px-3"
+                (click)="openPayment(item.id)"
+              >
+                <app-icon name="payments" class="text-sm"></app-icon> {{ 'loans.pay_button' | translate }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </section>

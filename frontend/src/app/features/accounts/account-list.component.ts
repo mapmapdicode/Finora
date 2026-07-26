@@ -4,11 +4,13 @@ import { CommonModule, NgForOf, NgIf, NgClass } from '@angular/common';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Portfolio } from '../../shared/models';
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { IconComponent } from '../../shared/icons/icon.component';
 
 @Component({
   selector: 'app-account-list',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, NgForOf, NgIf, NgClass],
+  imports: [CommonModule, ReactiveFormsModule, NgForOf, NgIf, NgClass, TranslatePipe, IconComponent],
   templateUrl: './account-list.component.html',
   styleUrl: './account-list.component.css'
 })

@@ -2,73 +2,76 @@
   <!-- Page Header -->
   <div class="m3-page-header">
     <div>
-      <h1 class="m3-page-title">Financial Forecast & Simulation</h1>
-      <p class="m3-page-subtitle">Run growth rate projections, Monte Carlo simulations, and scenario modeling.</p>
+      <h1 class="m3-page-title">{{ 'forecast.title' | translate }}</h1>
+      <p class="m3-page-subtitle">{{ 'forecast.subtitle' | translate }}</p>
     </div>
   </div>
 
   <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
-    <span class="material-symbols-rounded">lock</span>
-    <span>This workspace is read-only. You can still review forecast scenarios.</span>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
+    <app-icon name="lock"></app-icon>
+    <span>{{ 'common.readonly_warning' | translate }}</span>
   </div>
 
-  <!-- Create Scenario Card Form (Max 900px) -->
-  <div class="m3-card max-w-4xl">
+  <!-- Create Scenario Card Form (Full Screen Width) -->
+  <div class="w-card w-full">
     <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">analytics</span> Create Simulation Scenario
-        </h3>
-        <p class="m3-card-subtitle">Define simulation assumptions (JSON schema) for future wealth modeling.</p>
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+          <app-icon name="analytics"></app-icon>
+        </div>
+        <div>
+          <h3 class="m3-card-title">{{ 'forecast.create_title' | translate }}</h3>
+          <p class="m3-card-subtitle">Define simulation assumptions (JSON schema) for future wealth modeling.</p>
+        </div>
       </div>
     </div>
 
     <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
       <div>
-        <label class="m3-label block mb-1">Scenario Name</label>
-        <input formControlName="name" class="m3-input" placeholder="e.g. Bull Market 10% Annual Growth" />
+        <label class="w-label">Scenario Name</label>
+        <input formControlName="name" class="w-input" placeholder="e.g. Bull Market 10% Annual Growth" />
       </div>
 
       <div>
-        <label class="m3-label block mb-1">Assumptions (JSON Object)</label>
-        <textarea formControlName="assumptions" class="m3-textarea font-mono text-xs" placeholder='{"growthRate": 0.08, "inflationRate": 0.03, "horizonMonths": 60}'></textarea>
+        <label class="w-label">{{ 'forecast.assumptions' | translate }}</label>
+        <textarea formControlName="assumptions" class="w-textarea font-mono text-xs" placeholder='{"growthRate": 0.08, "horizonMonths": 60}'></textarea>
       </div>
 
-      <div class="flex justify-end pt-2">
-        <button class="m3-btn m3-btn-primary" type="submit" [disabled]="!auth.canMutate">
-          <span class="material-symbols-rounded">add</span> Create Scenario
+      <div class="flex justify-end pt-1">
+        <button class="w-btn w-btn-primary" type="submit" [disabled]="!auth.canMutate">
+          <app-icon name="add"></app-icon> {{ 'common.create' | translate }}
         </button>
       </div>
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
 
   <!-- Saved Scenarios Card -->
-  <div class="m3-card">
+  <div class="w-card">
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">tune</span> Saved Scenarios
+          <app-icon name="tune" class="text-[var(--accent-primary)]"></app-icon> Saved Scenarios
         </h3>
         <p class="m3-card-subtitle">Execute simulations and inspect projection engines.</p>
       </div>
-      <span class="m3-badge m3-badge-neutral">{{ scenarios.length }} Scenarios</span>
+      <span class="w-badge w-badge-neutral">{{ scenarios.length }} Scenarios</span>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="!scenarios.length" class="m3-empty-state">
-      <div class="m3-empty-icon">
-        <span class="material-symbols-rounded">analytics</span>
+    <div *ngIf="!scenarios.length" class="w-empty-state">
+      <div class="w-empty-icon">
+        <app-icon name="analytics"></app-icon>
       </div>
-      <p class="m3-empty-title">No Forecast Scenarios</p>
-      <p class="m3-empty-desc">Create your first forecast scenario using the form above to model future net worth.</p>
+      <p class="w-empty-title">No Forecast Scenarios</p>
+      <p class="w-empty-desc">Create your first forecast scenario using the form above to model future net worth.</p>
     </div>
 
     <!-- Scenarios Table -->
-    <div *ngIf="scenarios.length" class="m3-table-container">
-      <table class="m3-table">
+    <div *ngIf="scenarios.length" class="w-table-container">
+      <table class="w-table">
         <thead>
           <tr>
             <th>Scenario Name</th>
@@ -79,28 +82,28 @@
         </thead>
         <tbody>
           <tr *ngFor="let item of scenarios">
-            <td class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-2">
-              <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">query_stats</span>
+            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
+              <app-icon name="query_stats" class="text-[var(--accent-primary)]"></app-icon>
               {{ item.name }}
             </td>
             <td>
-              <span class="m3-badge uppercase text-[10px]" [ngClass]="{
-                'm3-badge-success': item.status === 'done',
-                'm3-badge-warning': item.status === 'running',
-                'm3-badge-neutral': !item.status || item.status === 'pending'
+              <span class="w-badge uppercase text-[10px]" [ngClass]="{
+                'w-badge-success': item.status === 'done',
+                'w-badge-warning': item.status === 'running',
+                'w-badge-neutral': !item.status || item.status === 'pending'
               }">
                 {{ item.status || 'pending' }}
               </span>
             </td>
-            <td class="font-mono text-xs text-[var(--m3-on-surface-variant)]">{{ item.id }}</td>
+            <td class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td>
             <td class="text-right">
               <button
-                class="m3-btn m3-btn-outlined text-xs py-1 px-3"
+                class="w-btn w-btn-outline text-xs h-8 px-3"
                 [disabled]="activeScenarioId === item.id || !auth.canMutate"
                 (click)="runScenario(item)"
               >
-                <span class="material-symbols-rounded text-sm" [class.animate-spin]="activeScenarioId === item.id">play_arrow</span>
-                {{ activeScenarioId === item.id ? 'Simulating...' : 'Run Simulation' }}
+                <app-icon name="play_arrow" [class.animate-spin]="activeScenarioId === item.id"></app-icon>
+                {{ activeScenarioId === item.id ? ('common.loading' | translate) : ('forecast.run_button' | translate) }}
               </button>
             </td>
           </tr>
@@ -110,14 +113,12 @@
   </div>
 
   <!-- Simulation Result Viewer -->
-  <div *ngIf="lastResult" class="m3-card bg-slate-900 border-slate-800 text-green-400">
+  <div *ngIf="lastResult" class="w-card bg-slate-900 border-slate-800 text-emerald-400">
     <div class="m3-card-header text-white mb-2">
-      <div>
-        <h4 class="m3-card-title text-white flex items-center gap-2">
-          <span class="material-symbols-rounded text-green-400">terminal</span> Simulation Output Log
-        </h4>
-      </div>
+      <h4 class="m3-card-title text-white flex items-center gap-2">
+        <app-icon name="terminal" class="text-emerald-400"></app-icon> Simulation Output Log
+      </h4>
     </div>
-    <pre class="p-4 rounded-xl bg-slate-950 font-mono text-xs text-green-300 overflow-x-auto leading-relaxed border border-slate-800">{{ lastResult | json }}</pre>
+    <pre class="p-4 rounded-xl bg-slate-950 font-mono text-xs text-emerald-300 overflow-x-auto leading-relaxed border border-slate-800">{{ lastResult | json }}</pre>
   </div>
 </section>

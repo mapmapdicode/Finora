@@ -2,206 +2,203 @@
   <!-- Page Header -->
   <div class="m3-page-header">
     <div>
-      <h1 class="m3-page-title">SePay Bank Hub & Feed Inbox</h1>
-      <p class="m3-page-subtitle">Realtime bank webhook feed, automated classification, and ledger reconciliation inbox.</p>
+      <h1 class="m3-page-title">{{ 'sepay.title' | translate }}</h1>
+      <p class="m3-page-subtitle">{{ 'sepay.subtitle' | translate }}</p>
     </div>
 
     <div class="flex items-center gap-2">
       <button
         (click)="connect()"
-        class="m3-btn m3-btn-primary"
+        class="w-btn w-btn-primary"
         [disabled]="isBusy || !auth.canMutate"
       >
-        <span class="material-symbols-rounded" [class.animate-spin]="isBusy">link</span>
-        {{ isBusy ? 'Connecting SePay...' : 'Connect SePay Bank' }}
+        <app-icon name="link" [class.animate-spin]="isBusy"></app-icon>
+        {{ isBusy ? ('common.loading' | translate) : ('sepay.connect_button' | translate) }}
       </button>
-      <button (click)="preview()" class="m3-btn m3-btn-outlined">
-        <span class="material-symbols-rounded">preview</span> Preview Rule Engine
+      <button (click)="preview()" class="w-btn w-btn-outline">
+        <app-icon name="preview"></app-icon> Preview Rule Engine
       </button>
     </div>
   </div>
 
   <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
-    <span class="material-symbols-rounded">lock</span>
-    <span>This workspace is read-only. You can review bank feed items but not perform mutations.</span>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
+    <app-icon name="lock"></app-icon>
+    <span>{{ 'common.readonly_warning' | translate }}</span>
   </div>
 
   <!-- Feed Status Counter Banner -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-    <div class="p-3.5 bg-[var(--m3-surface)] border border-[var(--m3-outline)] rounded-2xl flex items-center justify-between shadow-sm">
+    <div class="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl flex items-center justify-between shadow-xs">
       <div>
-        <span class="text-xs text-[var(--m3-on-surface-variant)] block">Pending Inbox</span>
-        <span class="text-xl font-bold text-[var(--m3-warning)]">{{ pendingCount }}</span>
+        <span class="text-xs text-[var(--text-muted)] font-medium block">Pending Inbox</span>
+        <span class="text-xl font-bold text-amber-700 font-display">{{ pendingCount }}</span>
       </div>
-      <span class="material-symbols-rounded text-[var(--m3-warning)]">pending_actions</span>
+      <app-icon name="pending_actions" class="text-amber-600 text-2xl"></app-icon>
     </div>
 
-    <div class="p-3.5 bg-[var(--m3-surface)] border border-[var(--m3-outline)] rounded-2xl flex items-center justify-between shadow-sm">
+    <div class="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl flex items-center justify-between shadow-xs">
       <div>
-        <span class="text-xs text-[var(--m3-on-surface-variant)] block">Auto Ready</span>
-        <span class="text-xl font-bold text-[var(--m3-primary)]">{{ autoReadyCount }}</span>
+        <span class="text-xs text-[var(--text-muted)] font-medium block">Auto Ready</span>
+        <span class="text-xl font-bold text-[var(--accent-primary)] font-display">{{ autoReadyCount }}</span>
       </div>
-      <span class="material-symbols-rounded text-[var(--m3-primary)]">auto_awesome</span>
+      <app-icon name="auto_awesome" class="text-[var(--accent-primary)] text-2xl"></app-icon>
     </div>
 
-    <div class="p-3.5 bg-[var(--m3-surface)] border border-[var(--m3-outline)] rounded-2xl flex items-center justify-between shadow-sm">
+    <div class="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl flex items-center justify-between shadow-xs">
       <div>
-        <span class="text-xs text-[var(--m3-on-surface-variant)] block">Posted Ledger</span>
-        <span class="text-xl font-bold text-[var(--m3-success)]">{{ postedCount }}</span>
+        <span class="text-xs text-[var(--text-muted)] font-medium block">Posted Ledger</span>
+        <span class="text-xl font-bold text-emerald-700 font-display">{{ postedCount }}</span>
       </div>
-      <span class="material-symbols-rounded text-[var(--m3-success)]">check_circle</span>
+      <app-icon name="check_circle" class="text-emerald-600 text-2xl"></app-icon>
     </div>
 
-    <div class="p-3.5 bg-[var(--m3-surface)] border border-[var(--m3-outline)] rounded-2xl flex items-center justify-between shadow-sm">
+    <div class="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl flex items-center justify-between shadow-xs">
       <div>
-        <span class="text-xs text-[var(--m3-on-surface-variant)] block">Skipped / Ignored</span>
-        <span class="text-xl font-bold text-[var(--m3-on-surface-variant)]">{{ ignoredCount }}</span>
+        <span class="text-xs text-[var(--text-muted)] font-medium block">Skipped / Ignored</span>
+        <span class="text-xl font-bold text-[var(--text-muted)] font-display">{{ ignoredCount }}</span>
       </div>
-      <span class="material-symbols-rounded text-[var(--m3-on-surface-variant)]">do_not_disturb_on</span>
+      <app-icon name="do_not_disturb_on" class="text-[var(--text-muted)] text-2xl"></app-icon>
     </div>
   </div>
 
   <!-- Connect Session Info Box -->
-  <div *ngIf="lastConnect" class="p-4 rounded-2xl bg-[var(--m3-success-container)] text-[var(--m3-on-success-container)] border border-[var(--m3-success)] text-xs space-y-1">
-    <p class="font-semibold flex items-center gap-1">
-      <span class="material-symbols-rounded text-sm">link</span> Latest SePay Connection Session
+  <div *ngIf="lastConnect" class="p-4 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200 text-xs space-y-1 font-medium">
+    <p class="font-bold flex items-center gap-1.5 text-sm">
+      <app-icon name="link" class="text-base text-emerald-700"></app-icon> Latest SePay Connection Session
     </p>
     <p>Connection ID: <strong class="font-mono">{{ lastConnect.connectionId }}</strong></p>
     <p>Callback State: <strong class="font-mono">{{ lastConnect.callbackState }}</strong></p>
     <a
-      class="m3-btn m3-btn-primary text-xs py-1 px-3 mt-2 inline-flex items-center gap-1"
+      class="w-btn w-btn-primary text-xs h-8 px-3 mt-2 inline-flex items-center gap-1"
       [href]="lastConnect.connectUrl"
       target="_blank"
       rel="noopener noreferrer"
     >
-      <span class="material-symbols-rounded text-sm">open_in_new</span> Open SePay OAuth Consent Page
+      <app-icon name="open_in_new" class="text-sm"></app-icon> Open SePay OAuth Consent Page
     </a>
   </div>
 
   <!-- Connected Bank Connections List -->
-  <div *ngIf="hasConnected" class="m3-card space-y-4">
+  <div *ngIf="hasConnected" class="w-card space-y-4">
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">account_balance</span> Bank Feed Connections
+          <app-icon name="account_balance" class="text-[var(--accent-primary)]"></app-icon> Bank Feed Connections
         </h3>
         <p class="m3-card-subtitle">Active OAuth / API integrations with SePay Provider.</p>
       </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div *ngFor="let connection of connections" class="p-4 rounded-2xl border border-[var(--m3-outline)] bg-[var(--m3-surface-variant)]/40 space-y-2 text-xs">
+      <div *ngFor="let connection of connections" class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-subtle)] space-y-2 text-xs font-medium">
         <div class="flex justify-between items-start">
-          <span class="font-bold text-sm text-[var(--m3-on-surface)] flex items-center gap-1">
-            <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">hub</span> {{ connection.provider }}
+          <span class="font-bold text-sm text-[var(--text-main)] flex items-center gap-1.5">
+            <app-icon name="hub" class="text-base text-[var(--accent-primary)]"></app-icon> {{ connection.provider }}
           </span>
-          <span class="m3-badge m3-badge-primary uppercase text-[10px]">{{ connection.status }}</span>
+          <span class="w-badge w-badge-indigo uppercase text-[10px]">{{ connection.status }}</span>
         </div>
-        <p class="text-[var(--m3-on-surface-variant)]">ID: <span class="font-mono">{{ connection.id }}</span></p>
-        <p class="text-[var(--m3-on-surface-variant)]">
+        <p class="text-[var(--text-muted)]">ID: <span class="font-mono">{{ connection.id }}</span></p>
+        <p class="text-[var(--text-muted)]">
           Sync Status: <strong>{{ connection.syncStatus || 'idle' }}</strong> | Last Sync: {{ syncLabel(connection) }}
         </p>
 
         <div class="flex gap-2 pt-1">
           <button
             *ngIf="auth.canMutate"
-            class="m3-btn m3-btn-outlined text-xs py-1 px-3"
+            class="w-btn w-btn-outline text-xs h-8 px-3"
             (click)="sync(connection.id)"
           >
-            <span class="material-symbols-rounded text-sm">sync</span> Sync
+            <app-icon name="refresh" class="text-sm"></app-icon> Sync
           </button>
           <button
             *ngIf="auth.canMutate"
-            class="m3-btn m3-btn-outlined text-xs py-1 px-3 text-[var(--m3-danger)] border-[var(--m3-danger)]"
+            class="w-btn w-btn-outline text-xs h-8 px-3 text-rose-700 border-rose-300 hover:bg-rose-50"
             (click)="revoke(connection.id)"
           >
-            <span class="material-symbols-rounded text-sm">link_off</span> Revoke
+            <app-icon name="link_off" class="text-sm"></app-icon> Revoke
           </button>
         </div>
       </div>
     </div>
 
     <!-- Filter Tabs & Account Select -->
-    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--m3-outline)] pt-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-4">
       <div class="flex flex-wrap gap-2">
         <button
           *ngFor="let tab of postingTabs"
           (click)="setTab(tab.key)"
-          class="px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all"
-          [class.bg-[var(--m3-primary-container)]]="activeTab === tab.key"
-          [class.text-[var(--m3-on-primary-container)]]="activeTab === tab.key"
-          [class.border-[var(--m3-primary)]]="activeTab === tab.key"
-          [class.border-[var(--m3-outline)]]="activeTab !== tab.key"
-          [class.text-[var(--m3-on-surface-variant)]]="activeTab !== tab.key"
+          class="w-btn text-xs h-8 px-3"
+          [class.w-btn-primary]="activeTab === tab.key"
+          [class.w-btn-outline]="activeTab !== tab.key"
         >
           {{ tab.label }}
         </button>
       </div>
 
       <div class="flex items-center gap-2">
-        <span class="text-xs text-[var(--m3-on-surface-variant)]">Filter Account:</span>
+        <span class="text-xs text-[var(--text-muted)] font-semibold">{{ 'common.account' | translate }}:</span>
         <select
-          class="m3-select text-xs h-9 py-1 px-3"
+          class="w-select w-select-sm text-xs w-44"
           [value]="accountIdFilter"
           (change)="setAccountFilter(($any($event.target).value))"
         >
-          <option value="">All Bank Accounts</option>
+          <option value="">{{ 'common.all_accounts' | translate }}</option>
           <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
         </select>
         <button
-          class="m3-btn m3-btn-text text-xs py-1 px-2"
+          class="w-btn w-btn-ghost text-xs h-8 px-2"
           *ngIf="accountIdFilter"
           (click)="clearAccountFilter()"
         >
-          Reset
+          {{ 'common.reset' | translate }}
         </button>
       </div>
     </div>
   </div>
 
   <!-- Feed Inbox List Card -->
-  <div class="m3-card">
+  <div class="w-card">
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">inbox</span> Bank Feed Stream
+          <app-icon name="inbox" class="text-[var(--accent-primary)]"></app-icon> Bank Feed Stream
         </h3>
         <p class="m3-card-subtitle">Transactions received via bank webhook integrations.</p>
       </div>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="!filteredFeed.length" class="m3-empty-state">
-      <div class="m3-empty-icon">
-        <span class="material-symbols-rounded">move_to_inbox</span>
+    <div *ngIf="!filteredFeed.length" class="w-empty-state">
+      <div class="w-empty-icon">
+        <app-icon name="move_to_inbox"></app-icon>
       </div>
-      <p class="m3-empty-title">Inbox Empty</p>
-      <p class="m3-empty-desc">No bank feed items match your active tab or filter selection.</p>
+      <p class="w-empty-title">Inbox Empty</p>
+      <p class="w-empty-desc">No bank feed items match your active tab or filter selection.</p>
     </div>
 
     <!-- Feed Items List -->
     <div *ngIf="filteredFeed.length" class="space-y-3">
-      <div *ngFor="let item of filteredFeed; trackBy: trackByFeedId" class="p-4 rounded-2xl border border-[var(--m3-outline)] bg-[var(--m3-surface)] hover:shadow-md transition-all flex flex-wrap items-center justify-between gap-4">
+      <div *ngFor="let item of filteredFeed; trackBy: trackByFeedId" class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:shadow-xs transition-all flex flex-wrap items-center justify-between gap-4">
         <div class="space-y-1 max-w-xl">
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="font-bold text-sm text-[var(--m3-on-surface)]">{{ item.occurredAt | date: 'medium' }}</span>
-            <span class="m3-badge uppercase text-[10px]" [ngClass]="item.direction === 'out' ? 'm3-badge-danger' : 'm3-badge-success'">
+            <span class="font-bold text-sm text-[var(--text-main)]">{{ item.occurredAt | date: 'medium' }}</span>
+            <span class="w-badge uppercase text-[10px]" [ngClass]="item.direction === 'out' ? 'w-badge-danger' : 'w-badge-success'">
               {{ item.direction === 'out' ? 'Expense' : 'Income' }}
             </span>
-            <span class="m3-badge uppercase text-[10px]" [ngClass]="statusClass(item)">
+            <span class="w-badge uppercase text-[10px]" [ngClass]="statusClass(item)">
               {{ statusText(item) }}
             </span>
-            <span *ngIf="isTransferLike(item)" class="m3-badge m3-badge-warning text-[10px]">Transfer-like</span>
-            <span *ngIf="item.autoClassified" class="m3-badge m3-badge-primary text-[10px]">Auto Classified</span>
+            <span *ngIf="isTransferLike(item)" class="w-badge w-badge-warning text-[10px]">Transfer-like</span>
+            <span *ngIf="item.autoClassified" class="w-badge w-badge-indigo text-[10px]">Auto Classified</span>
           </div>
 
-          <p class="text-xs font-semibold text-[var(--m3-on-surface)]">
+          <p class="text-xs font-bold text-[var(--text-main)]">
             {{ item.description || item.reference || item.classificationEvidence || '-' }}
-            <span class="text-[var(--m3-on-surface-variant)] font-normal ml-1" *ngIf="item.accountId">({{ accountName(item.accountId) }})</span>
+            <span class="text-[var(--text-muted)] font-medium ml-1" *ngIf="item.accountId">({{ accountName(item.accountId) }})</span>
           </p>
 
-          <p class="text-[11px] text-[var(--m3-on-surface-variant)]">
+          <p class="text-[11px] text-[var(--text-muted)] font-medium">
             {{ sourceLabel(item) }}
             <span *ngIf="item.classificationConfidence !== undefined"> · Confidence: {{ confidence(item) }}</span>
             · Hint: {{ actionHint(item) }}
@@ -209,20 +206,20 @@
         </div>
 
         <div class="flex items-center gap-3">
-          <span class="font-bold text-base whitespace-nowrap" [class.text-[var(--m3-danger)]]="item.direction === 'out'" [class.text-[var(--m3-success)]]="item.direction === 'in'">
+          <span class="font-bold text-base whitespace-nowrap" [class.text-rose-600]="item.direction === 'out'" [class.text-emerald-600]="item.direction === 'in'">
             {{ item.amount | number: '1.0-2' }} {{ item.currency }}
           </span>
 
           <div class="flex items-center gap-1.5">
             <button
-              class="m3-btn m3-btn-outlined text-xs py-1 px-2.5"
+              class="w-btn w-btn-outline text-xs h-8 px-2.5"
               (click)="openReclassify(item)"
               *ngIf="canMutate && canApprove(item)"
             >
               Reclassify
             </button>
             <button
-              class="m3-btn m3-btn-primary text-xs py-1 px-3"
+              class="w-btn w-btn-primary text-xs h-8 px-3"
               (click)="approve(item)"
               [disabled]="isActionBusy"
               *ngIf="canMutate && canApprove(item)"
@@ -230,7 +227,7 @@
               {{ approveLabel(item) }}
             </button>
             <button
-              class="m3-btn m3-btn-text text-xs py-1 px-2 text-[var(--m3-on-surface-variant)]"
+              class="w-btn w-btn-ghost text-xs h-8 px-2"
               (click)="ignore(item)"
               [disabled]="isActionBusy"
               *ngIf="canMutate && item.postingState !== 'ignored' && item.postingState !== 'posted'"
@@ -244,11 +241,11 @@
   </div>
 
   <!-- Reclassify Form Card -->
-  <div *ngIf="selectedFeed && auth.canMutate" class="m3-card max-w-3xl border-2 border-[var(--m3-primary)]">
+  <div *ngIf="selectedFeed && auth.canMutate" class="w-card max-w-3xl border-2 border-[var(--accent-primary)]">
     <div class="m3-card-header">
       <div>
         <h4 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">edit_note</span> Reclassify Bank Item: {{ selectedFeed.description || selectedFeed.id }}
+          <app-icon name="edit_note" class="text-[var(--accent-primary)]"></app-icon> Reclassify Bank Item: {{ selectedFeed.description || selectedFeed.id }}
         </h4>
       </div>
     </div>
@@ -256,8 +253,8 @@
     <form [formGroup]="reclassifyForm" (ngSubmit)="submitReclassify()" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="m3-label block mb-1">Target Type</label>
-          <select class="m3-select" formControlName="type">
+          <label class="w-label">Target Type</label>
+          <select class="w-select" formControlName="type">
             <option value="income">Income</option>
             <option value="expense">Expense</option>
             <option value="loan_payment">Loan Payment</option>
@@ -267,29 +264,29 @@
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Account ID (Optional)</label>
-          <input formControlName="accountId" placeholder="Account ID" class="m3-input" />
+          <label class="w-label">Account ID (Optional)</label>
+          <input formControlName="accountId" placeholder="Account ID" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Category ID</label>
-          <input formControlName="categoryId" placeholder="Category ID" class="m3-input" />
+          <label class="w-label">Category ID</label>
+          <input formControlName="categoryId" placeholder="Category ID" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Reclassification Reason</label>
-          <input formControlName="reason" placeholder="Reason for manual override" class="m3-input" />
+          <label class="w-label">Reclassification Reason</label>
+          <input formControlName="reason" placeholder="Reason for manual override" class="w-input" />
         </div>
       </div>
 
-      <div class="flex gap-3 justify-end pt-2">
-        <button type="button" class="m3-btn m3-btn-text" (click)="closeReclassify()">Cancel</button>
+      <div class="flex gap-3 justify-end pt-1">
+        <button type="button" class="w-btn w-btn-ghost text-xs" (click)="closeReclassify()">{{ 'common.cancel' | translate }}</button>
         <button
           type="submit"
-          class="m3-btn m3-btn-primary"
+          class="w-btn w-btn-primary text-xs"
           [disabled]="reclassifyForm.invalid || isActionBusy"
         >
-          <span class="material-symbols-rounded">save</span> Save & Post
+          <app-icon name="save"></app-icon> {{ 'common.save' | translate }}
         </button>
       </div>
     </form>

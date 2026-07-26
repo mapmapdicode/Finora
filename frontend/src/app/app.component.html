@@ -1,51 +1,52 @@
-<div class="min-h-screen flex flex-col bg-[var(--bg-main)] text-[var(--text-main)] transition-colors duration-200">
-  <!-- Top App Header (Glassmorphism 64px) -->
-  <header class="h-16 glass-panel border-b border-[var(--border-subtle)] px-4 md:px-6 flex items-center justify-between sticky top-0 z-40 shadow-sm">
-    <div class="flex items-center gap-3">
+<div class="app-shell min-h-screen text-[var(--text-main)]">
+  <!-- Top App Header (Clean Slate 64px) -->
+  <header class="app-topbar">
+    <div class="flex items-center gap-2 sm:gap-3">
       <button 
         *ngIf="isAuthenticated"
         type="button" 
         (click)="toggleSidebar()"
-        class="w-btn-icon text-[var(--text-muted)]"
+        class="app-icon-button md:hidden"
         aria-label="Toggle navigation menu"
       >
-        <span class="material-symbols-rounded">menu</span>
+        <app-icon name="menu"></app-icon>
       </button>
 
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 text-white flex items-center justify-center font-extrabold text-xl shadow-lg shadow-indigo-500/25 tracking-tight">
-          W
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="text-lg font-extrabold tracking-tight font-display text-[var(--text-main)]">WealthOS</span>
-            <span class="w-badge w-badge-indigo text-[10px] py-0 px-2 uppercase tracking-wider font-bold">Pro</span>
+      <div class="flex items-center gap-2 sm:gap-3">
+        <img
+          src="assets/branding/wealthos-logo-01-ascending-w.png"
+          alt="WealthOS Logo"
+          class="h-9 w-auto object-contain shrink-0 filter drop-shadow-sm"
+        />
+        <div class="brand-copy">
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <span class="brand-name">WealthOS</span>
+            <span class="brand-caption">PERSONAL WEALTH</span>
           </div>
-          <p class="text-[10px] text-[var(--text-muted)] font-medium -mt-1 hidden sm:block">Portfolio & Asset OS</p>
         </div>
       </div>
     </div>
 
     <!-- Quick Search & Workspace Selector -->
-    <div class="flex items-center gap-3">
-      <!-- Search Pill -->
-      <div *ngIf="isAuthenticated" class="hidden md:flex items-center bg-[var(--bg-subtle)] px-3.5 py-1.5 rounded-xl border border-[var(--border-subtle)] focus-within:border-[var(--accent-primary)] focus-within:bg-[var(--bg-surface)] transition-all">
-        <span class="material-symbols-rounded text-[var(--text-muted)] text-lg mr-2">search</span>
+    <div class="app-topbar__tools">
+      <!-- Search Box (Desktop) -->
+      <div *ngIf="isAuthenticated" class="workspace-select">
+        <span class="status-dot"></span>
+        <app-icon name="search" class="text-[var(--text-muted)] text-sm mr-2"></app-icon>
         <input 
           type="text" 
-          placeholder="Search workspace, transactions..." 
-          class="bg-transparent text-xs w-52 focus:w-64 focus:outline-none transition-all text-[var(--text-main)] font-medium"
+          placeholder="Search workspace..."
+          class="bg-transparent text-xs w-36 lg:w-52 focus:outline-none text-[var(--text-main)] font-medium"
         />
-        <kbd class="hidden lg:inline-block text-[10px] font-mono bg-[var(--bg-surface)] px-1.5 py-0.5 rounded text-[var(--text-muted)] border border-[var(--border-subtle)] shadow-2xs">⌘K</kbd>
       </div>
 
-      <!-- Workspace Switcher Pill -->
+      <!-- Workspace Switcher Dropdown -->
       <div class="flex items-center gap-2" *ngIf="isAuthenticated">
-        <div class="bg-[var(--bg-subtle)] border border-[var(--border-subtle)] rounded-xl px-3 py-1 flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <div class="bg-[var(--bg-subtle)] border border-[var(--border-strong)] rounded-xl px-2 sm:px-3 py-1 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
           <select
             id="workspace-select"
-            class="bg-transparent text-[var(--text-main)] text-xs font-semibold focus:outline-none cursor-pointer"
+            class="bg-transparent text-[var(--text-main)] text-[11px] sm:text-xs font-semibold focus:outline-none cursor-pointer max-w-[110px] sm:max-w-none truncate"
             [value]="selectedWorkspaceId || ''"
             (change)="onWorkspaceChange($event)"
           >
@@ -57,111 +58,170 @@
         </div>
       </div>
 
+      <!-- Language Switcher Selector -->
+      <div class="language-select">
+        <app-icon name="language" class="text-xs text-[var(--accent-primary)]"></app-icon>
+        <select
+          class="bg-transparent text-[11px] sm:text-xs font-bold text-[var(--text-main)] focus:outline-none cursor-pointer"
+          [value]="langService.currentLanguage"
+          (change)="changeLanguage($event)"
+        >
+          <option value="vi">🇻🇳 VI</option>
+          <option value="en">🇺🇸 EN</option>
+        </select>
+      </div>
+
       <!-- Dark Mode & Logout -->
       <div class="flex items-center gap-1.5" *ngIf="isAuthenticated">
         <button
           type="button"
           (click)="toggleDarkMode()"
-          class="w-btn-icon"
+          class="app-icon-button hidden sm:inline-flex"
           [title]="isDarkMode ? 'Light Mode' : 'Dark Mode'"
         >
-          <span class="material-symbols-rounded text-indigo-500">{{ isDarkMode ? 'light_mode' : 'dark_mode' }}</span>
+          <app-icon [name]="isDarkMode ? 'light_mode' : 'dark_mode'" class="text-[var(--text-muted)]"></app-icon>
         </button>
 
         <button
           (click)="logout()"
-          class="w-btn w-btn-outline text-xs h-9 px-3 border-[var(--border-subtle)] hover:border-rose-300 hover:text-rose-600"
+          class="avatar-button"
         >
-          <span class="material-symbols-rounded text-base">logout</span>
-          <span class="hidden sm:inline font-semibold">Logout</span>
+          <app-icon name="logout" class="text-xs sm:text-sm"></app-icon>
+          <span class="hidden">{{ 'common.logout' | translate }}</span><span>TH</span>
         </button>
       </div>
     </div>
   </header>
 
+  <!-- Mobile Backdrop Overlay when Drawer is Open -->
+  <div 
+    *ngIf="isAuthenticated && sidebarOpen" 
+    (click)="toggleSidebar()" 
+    class="app-backdrop md:hidden"
+  ></div>
+
   <!-- Body Layout (Left Sidebar + Main Content) -->
-  <div class="flex-1 flex overflow-hidden">
-    <!-- Left Navigation Sidebar -->
+  <div class="app-body">
+    <!-- Navigation Sidebar (Drawer on Mobile, Column on Desktop) -->
     <aside 
       *ngIf="isAuthenticated"
-      [class.w-64]="sidebarOpen"
-      [class.w-20]="!sidebarOpen"
-      class="glass-panel border-r border-[var(--border-subtle)] transition-all duration-300 ease-in-out flex flex-col justify-between z-30 shrink-0 select-none overflow-y-auto"
+      [class.w-60]="sidebarOpen"
+      [class.w-16]="!sidebarOpen"
+      [class.translate-x-0]="sidebarOpen"
+      [class.-translate-x-full]="!sidebarOpen"
+      class="app-sidebar"
     >
-      <div class="p-3 space-y-4">
+      <div class="sidebar-scroll">
         <!-- Main Navigation Section -->
         <div>
-          <p *ngIf="sidebarOpen" class="px-3 text-[10px] font-extrabold tracking-widest text-[var(--text-muted)] uppercase mb-2">Main Dashboard</p>
+          <p *ngIf="sidebarOpen" class="sidebar-label">Tổng quan</p>
           <nav class="space-y-1">
             <a
               *ngFor="let item of navItems.slice(0, 9)"
               [routerLink]="item.path"
-              routerLinkActive="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-bold shadow-md shadow-indigo-500/20"
-              class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all group relative"
-              [title]="item.label"
+              routerLinkActive="bg-[#460f79] text-white font-bold shadow-md"
+              class="sidebar-link"
+              [title]="item.labelKey | translate"
             >
-              <span class="material-symbols-rounded text-xl group-hover:scale-110 transition-transform">{{ item.icon }}</span>
-              <span *ngIf="sidebarOpen" class="truncate">{{ item.label }}</span>
+              <app-icon [name]="item.icon" class="text-base sm:text-lg"></app-icon>
+              <span>{{ item.labelKey | translate }}</span>
             </a>
           </nav>
         </div>
 
         <!-- Automation & Tools Section -->
         <div>
-          <p *ngIf="sidebarOpen" class="px-3 text-[10px] font-extrabold tracking-widest text-[var(--text-muted)] uppercase mb-2">Integrations & AI</p>
+          <p *ngIf="sidebarOpen" class="sidebar-label sidebar-label--tools">Công cụ</p>
           <nav class="space-y-1">
             <a
               *ngFor="let item of navItems.slice(9)"
               [routerLink]="item.path"
-              routerLinkActive="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-bold shadow-md shadow-indigo-500/20"
-              class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all group"
-              [title]="item.label"
+              routerLinkActive="bg-[#460f79] text-white font-bold shadow-md"
+              class="sidebar-link"
+              [title]="item.labelKey | translate"
             >
-              <span class="material-symbols-rounded text-xl group-hover:scale-110 transition-transform">{{ item.icon }}</span>
-              <span *ngIf="sidebarOpen" class="truncate">{{ item.label }}</span>
+              <app-icon [name]="item.icon" class="text-base sm:text-lg"></app-icon>
+              <span>{{ item.labelKey | translate }}</span>
             </a>
           </nav>
         </div>
       </div>
 
-      <!-- Bottom Workspace Footer -->
-      <div *ngIf="sidebarOpen" class="p-3 m-3 rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] space-y-1">
-        <div class="flex items-center justify-between font-semibold text-[var(--text-main)]">
-          <span>Enterprise OS</span>
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+      <!-- Bottom Workspace Status Footer -->
+      <div *ngIf="sidebarOpen" class="sidebar-footer">
+        <div class="flex items-center justify-between font-bold text-[var(--text-main)]">
+          <span>WealthOS Mobile</span>
+          <span class="status-dot"></span>
         </div>
-        <p class="text-[10px] opacity-75">Encrypted Financial Ledger</p>
+          <p class="sidebar-footer__version">v2.4.0 · Secure ledger</p>
       </div>
     </aside>
 
-    <!-- Main Workspace Content Area -->
-    <main class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+    <!-- Main Workspace Content Area (Mobile Responsive Full Width) -->
+    <main class="app-main">
       <router-outlet></router-outlet>
     </main>
   </div>
 
+  <!-- Mobile Bottom App Bar (Sticky Bottom Navigation for Phone View) -->
+  <div *ngIf="isAuthenticated" class="mobile-nav">
+    <a
+      routerLink="/dashboard"
+      routerLinkActive="text-[#460f79] font-bold"
+      [routerLinkActiveOptions]="{ exact: true }"
+      class="flex flex-col items-center gap-1"
+    >
+      <app-icon name="home" class="text-xl"></app-icon>
+      <span class="text-[10px] tracking-tight">Home</span>
+    </a>
+
+    <a
+      routerLink="/transactions"
+      routerLinkActive="text-[#460f79] font-bold"
+      class="flex flex-col items-center gap-1"
+    >
+      <app-icon name="swap_horiz" class="text-xl"></app-icon>
+      <span class="text-[10px] tracking-tight">Transactions</span>
+    </a>
+
+    <a
+      routerLink="/portfolios"
+      routerLinkActive="text-[#460f79] font-bold"
+      class="flex flex-col items-center gap-1"
+    >
+      <app-icon name="pie_chart" class="text-xl"></app-icon>
+      <span class="text-[10px] tracking-tight">Wealth</span>
+    </a>
+
+    <button
+      (click)="toggleSidebar()"
+      class="flex flex-col items-center gap-1"
+    >
+      <app-icon name="menu" class="text-xl"></app-icon>
+      <span class="text-[10px] tracking-tight">Menu</span>
+    </button>
+  </div>
+
   <!-- Toast Notification Container -->
-  <div class="pointer-events-none fixed bottom-6 right-6 z-50 flex flex-col gap-3 w-[min(92vw,24rem)]">
+  <div class="toast-stack">
     <article
       *ngFor="let toast of toasts$ | async"
       [ngClass]="[
-        'pointer-events-auto rounded-2xl border p-4 text-xs shadow-xl backdrop-blur-md flex items-start justify-between gap-3 animate-fade-in',
+        'toast-message',
         toastClass(toast.type)
       ]"
     >
-      <div class="flex items-start gap-3">
-        <span class="material-symbols-rounded text-lg mt-0.5">
-          {{ toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : 'info' }}
-        </span>
-        <p class="leading-relaxed font-semibold">{{ toast.message }}</p>
+      <div class="flex items-start gap-2.5">
+        <app-icon [name]="toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : 'info'" class="text-base mt-0.5"></app-icon>
+        <p>{{ toast.message }}</p>
       </div>
       <button
         type="button"
-        class="text-xs opacity-60 hover:opacity-100 p-1 rounded-lg hover:bg-black/5"
+        class="text-xs opacity-60 hover:opacity-100 p-1 rounded hover:bg-black/5"
         (click)="closeToast(toast.id)"
         aria-label="Dismiss alert"
       >
-        <span class="material-symbols-rounded text-base">close</span>
+        <app-icon name="close" class="text-sm"></app-icon>
       </button>
     </article>
   </div>

@@ -5,12 +5,15 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Account, BankConnection, BankFeedTransaction, SePayConnectResponse } from '../../shared/models';
 
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { IconComponent } from '../../shared/icons/icon.component';
+
 type InboxTab = 'pending_review' | 'auto_ready' | 'posted' | 'ignored' | 'all';
 
 @Component({
   selector: 'app-sepay',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, TranslatePipe, IconComponent],
   templateUrl: './sepay.component.html',
 })
 export class SePayComponent implements OnInit {

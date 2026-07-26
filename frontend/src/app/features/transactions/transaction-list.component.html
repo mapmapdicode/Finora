@@ -1,326 +1,224 @@
 <section class="space-y-6">
   <!-- Page Header -->
-  <div class="m3-page-header">
+  <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="m3-page-title">Transactions</h1>
-      <p class="m3-page-subtitle">Track, filter, and record all financial transactions and transfers.</p>
+      <h1 class="text-2xl font-bold tracking-tight text-[var(--text-main)]">
+        {{ 'transactions.title' | translate }}
+      </h1>
+      <p class="text-xs text-[var(--text-muted)] mt-0.5 font-medium">
+        {{ 'transactions.subtitle' | translate }}
+      </p>
     </div>
   </div>
 
   <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
-    <span class="material-symbols-rounded">lock</span>
-    <span>This workspace is read-only. You can only view transactions and bank feed history.</span>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
+    <app-icon name="lock"></app-icon>
+    <span>{{ 'common.readonly_warning' | translate }}</span>
   </div>
 
-  <!-- Filter Card -->
-  <div class="m3-card max-w-5xl">
-    <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">filter_list</span> Search & Filter Transactions
-        </h3>
-        <p class="m3-card-subtitle">Refine transactions by account, type, status, category, date range, or keywords.</p>
+  <!-- Mode Selector Pills -->
+  <div class="flex items-center gap-2">
+    <button
+      type="button"
+      (click)="setMode('transaction')"
+      class="w-btn text-xs"
+      [class.w-btn-primary]="mode === 'transaction'"
+      [class.w-btn-outline]="mode !== 'transaction'"
+    >
+      <app-icon name="payments" class="text-base"></app-icon> {{ 'transactions.standard_mode' | translate }}
+    </button>
+    <button
+      type="button"
+      (click)="setMode('transfer')"
+      class="w-btn text-xs"
+      [class.w-btn-primary]="mode === 'transfer'"
+      [class.w-btn-outline]="mode !== 'transfer'"
+    >
+      <app-icon name="swap_horiz" class="text-base"></app-icon> {{ 'transactions.transfer_mode' | translate }}
+    </button>
+  </div>
+
+  <!-- Entry Card Form (Full Screen Width) -->
+  <div class="w-card w-full" [class.border-2]="mode === 'transfer'" [class.border-[var(--accent-primary)]]="mode === 'transfer'">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+          <app-icon [name]="mode === 'transfer' ? 'swap_horizontal_circle' : 'post_add'"></app-icon>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-[var(--text-main)]">
+            {{ mode === 'transfer' ? ('transactions.new_transfer' | translate) : ('transactions.new_entry' | translate) }}
+          </h3>
+          <p class="text-xs text-[var(--text-muted)]">
+            {{ mode === 'transfer' ? 'Move money between two accounts in your balance sheet.' : 'Record income, expense, or valuation entry.' }}
+          </p>
+        </div>
       </div>
     </div>
 
-    <form [formGroup]="filterForm" class="space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
+      <!-- Standard Transaction Fields -->
+      <div *ngIf="mode === 'transaction'" class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="m3-label block mb-1">Account</label>
-          <select formControlName="accountId" class="m3-select">
-            <option value="">All Accounts</option>
-            <option *ngFor="let item of accounts" [value]="item.id">
-              {{ item.name }} ({{ item.currency }})
-            </option>
+          <label class="w-label">{{ 'common.account' | translate }}</label>
+          <select formControlName="accountId" class="w-select">
+            <option value="">-- {{ 'common.account' | translate }} --</option>
+            <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
           </select>
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Type</label>
-          <select formControlName="type" class="m3-select">
-            <option value="">All Types</option>
-            <option value="income">Income</option>
-            <option value="expense">Expense</option>
-            <option value="loan_payment">Loan Payment</option>
-            <option value="loan_disbursement">Loan Disbursement</option>
-            <option value="investment_funding">Investment Funding</option>
-            <option value="valuation_adjustment">Valuation Adjustment</option>
-            <option value="transfer">Transfer</option>
+          <label class="w-label">{{ 'common.type' | translate }}</label>
+          <select formControlName="type" class="w-select">
+            <option value="expense">{{ 'transactions.type_expense' | translate }}</option>
+            <option value="income">{{ 'transactions.type_income' | translate }}</option>
+            <option value="valuation_adjustment">{{ 'transactions.type_valuation' | translate }}</option>
           </select>
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Status</label>
-          <select formControlName="status" class="m3-select">
-            <option value="">All Statuses</option>
-            <option value="posted">Posted</option>
-            <option value="pending">Pending</option>
-            <option value="reconciled">Reconciled</option>
-            <option value="voided">Voided</option>
-            <option value="draft">Draft</option>
-          </select>
+          <label class="w-label">{{ 'common.amount' | translate }}</label>
+          <input formControlName="amount" placeholder="0.00" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Category ID</label>
-          <input formControlName="categoryId" placeholder="Search Category ID" class="m3-input" />
+          <label class="w-label">{{ 'common.category' | translate }} / Tag (Combobox)</label>
+          <input formControlName="categoryId" list="categorySuggestions" placeholder="Select or type category (e.g. Salary, Food...)" class="w-input" />
+          <datalist id="categorySuggestions">
+            <option value="Salary"></option>
+            <option value="Food & Dining"></option>
+            <option value="Housing & Utilities"></option>
+            <option value="Transportation"></option>
+            <option value="Shopping"></option>
+            <option value="Entertainment"></option>
+            <option value="Healthcare"></option>
+            <option value="Investment"></option>
+            <option value="Subscriptions"></option>
+            <option value="Education"></option>
+            <option value="Freelance"></option>
+            <option value="Bonus"></option>
+            <option value="Gift"></option>
+          </datalist>
         </div>
 
         <div class="md:col-span-2">
-          <label class="m3-label block mb-1">Search Keywords</label>
-          <input formControlName="search" placeholder="Search notes, categories, accounts..." class="m3-input" />
-        </div>
-
-        <div>
-          <label class="m3-label block mb-1">From Date</label>
-          <input formControlName="from" type="datetime-local" class="m3-input" />
-        </div>
-
-        <div>
-          <label class="m3-label block mb-1">To Date</label>
-          <input formControlName="to" type="datetime-local" class="m3-input" />
-        </div>
-
-        <div>
-          <label class="m3-label block mb-1">Page Limit</label>
-          <input formControlName="limit" type="number" min="1" class="m3-input" />
+          <label class="w-label">{{ 'transactions.note_label' | translate }}</label>
+          <input formControlName="note" placeholder="Memo details..." class="w-input" />
         </div>
       </div>
-
-      <div class="flex gap-3 justify-end pt-2">
-        <button type="button" (click)="clearFilters()" class="m3-btn m3-btn-outlined">
-          <span class="material-symbols-rounded">clear_all</span> Reset Filters
-        </button>
-        <button type="button" (click)="applyFilters()" class="m3-btn m3-btn-primary">
-          <span class="material-symbols-rounded">search</span> Apply Filters
-        </button>
-      </div>
-    </form>
-  </div>
-
-  <!-- Create Transaction / Transfer Form Card -->
-  <div class="m3-card max-w-4xl">
-    <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">add_circle</span> New Record Entry
-        </h3>
-        <p class="m3-card-subtitle">Record a single transaction or inter-account transfer.</p>
-      </div>
-
-      <!-- Mode Selector Pills -->
-      <div class="flex p-1 bg-[var(--m3-surface-variant)] rounded-full border border-[var(--m3-outline)]">
-        <button
-          type="button"
-          (click)="setMode('transaction')"
-          class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all"
-          [class.bg-[var(--m3-surface)]]="mode === 'transaction'"
-          [class.shadow-sm]="mode === 'transaction'"
-          [class.text-[var(--m3-primary)]]="mode === 'transaction'"
-        >
-          Transaction
-        </button>
-        <button
-          type="button"
-          (click)="setMode('transfer')"
-          class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all"
-          [class.bg-[var(--m3-surface)]]="mode === 'transfer'"
-          [class.shadow-sm]="mode === 'transfer'"
-          [class.text-[var(--m3-primary)]]="mode === 'transfer'"
-        >
-          Transfer
-        </button>
-      </div>
-    </div>
-
-    <form (ngSubmit)="submit()" [formGroup]="form" class="space-y-4">
-      <input type="hidden" formControlName="mode" />
-
-      <!-- Transaction Mode Fields -->
-      <ng-container *ngIf="mode === 'transaction'">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="md:col-span-2">
-            <label class="m3-label block mb-1">Target Account</label>
-            <select formControlName="accountId" class="m3-select">
-              <option value="" disabled>Select account</option>
-              <option *ngFor="let item of accounts" [value]="item.id">
-                {{ item.name }} ({{ item.currency }})
-              </option>
-            </select>
-          </div>
-
-          <div>
-            <label class="m3-label block mb-1">Transaction Type</label>
-            <select formControlName="type" class="m3-select">
-              <option value="income">Income</option>
-              <option value="expense">Expense</option>
-              <option value="loan_payment">Loan Payment</option>
-              <option value="loan_disbursement">Loan Disbursement</option>
-              <option value="investment_funding">Investment Funding</option>
-              <option value="valuation_adjustment">Valuation Adjustment</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="m3-label block mb-1">Posting Status</label>
-            <select formControlName="status" class="m3-select">
-              <option value="posted">Posted</option>
-              <option value="pending">Pending</option>
-              <option value="reconciled">Reconciled</option>
-              <option value="voided">Voided</option>
-              <option value="draft">Draft</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="m3-label block mb-1">Amount</label>
-            <input formControlName="amount" placeholder="0.00" class="m3-input" />
-          </div>
-
-          <div>
-            <label class="m3-label block mb-1">Currency</label>
-            <input formControlName="currency" placeholder="VND" class="m3-input" />
-          </div>
-
-          <div>
-            <label class="m3-label block mb-1">Date & Time</label>
-            <input formControlName="occurredAt" type="datetime-local" class="m3-input" />
-          </div>
-
-          <div>
-            <label class="m3-label block mb-1">Category (Optional)</label>
-            <input formControlName="categoryId" placeholder="Category ID" class="m3-input" />
-          </div>
-
-          <div class="md:col-span-2">
-            <label class="m3-label block mb-1">Note / Description</label>
-            <input formControlName="note" placeholder="Transaction description or memo..." class="m3-input" />
-          </div>
-        </div>
-      </ng-container>
 
       <!-- Transfer Mode Fields -->
-      <ng-container *ngIf="mode === 'transfer'">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="m3-label block mb-1">Source Account (From)</label>
-            <select formControlName="fromAccountId" class="m3-select">
-              <option value="" disabled>Select source account</option>
-              <option *ngFor="let item of accounts" [value]="item.id">
-                {{ item.name }} ({{ item.currency }})
-              </option>
-            </select>
-          </div>
-
-          <div>
-            <label class="m3-label block mb-1">Destination Account (To)</label>
-            <select formControlName="toAccountId" class="m3-select">
-              <option value="" disabled>Select destination account</option>
-              <option *ngFor="let item of accounts" [value]="item.id">
-                {{ item.name }} ({{ item.currency }})
-              </option>
-            </select>
-          </div>
-
-          <div>
-            <label class="m3-label block mb-1">Transfer Amount</label>
-            <input formControlName="amount" placeholder="0.00" class="m3-input" />
-          </div>
-
-          <div>
-            <label class="m3-label block mb-1">Currency</label>
-            <input formControlName="currency" placeholder="VND" class="m3-input" />
-          </div>
-
-          <div class="md:col-span-2">
-            <label class="m3-label block mb-1">Date & Time</label>
-            <input formControlName="occurredAt" type="datetime-local" class="m3-input" />
-          </div>
-
-          <div class="md:col-span-2">
-            <label class="m3-label block mb-1">Transfer Memo / Note</label>
-            <input formControlName="note" placeholder="Inter-account transfer description..." class="m3-input" />
-          </div>
+      <div *ngIf="mode === 'transfer'" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="w-label">{{ 'transactions.source_account' | translate }}</label>
+          <select formControlName="fromAccountId" class="w-select">
+            <option value="">-- {{ 'transactions.source_account' | translate }} --</option>
+            <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
+          </select>
         </div>
-      </ng-container>
 
-      <div class="flex justify-end pt-2">
-        <button class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate || submitInFlight">
-          <span class="material-symbols-rounded">check</span>
-          {{ mode === 'transaction' ? 'Create Transaction' : 'Create Transfer' }}
+        <div>
+          <label class="w-label">{{ 'transactions.destination_account' | translate }}</label>
+          <select formControlName="toAccountId" class="w-select">
+            <option value="">-- {{ 'transactions.destination_account' | translate }} --</option>
+            <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="w-label">{{ 'common.amount' | translate }}</label>
+          <input formControlName="amount" placeholder="0.00" class="w-input" />
+        </div>
+
+        <div>
+          <label class="w-label">{{ 'transactions.note_label' | translate }}</label>
+          <input formControlName="note" placeholder="Reason for transfer..." class="w-input" />
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-1">
+        <button type="submit" class="w-btn w-btn-primary" [disabled]="submitInFlight || !auth.canMutate">
+          <app-icon name="check"></app-icon>
+          {{ submitInFlight ? ('common.loading' | translate) : (mode === 'transfer' ? ('transactions.transfer_button' | translate) : ('transactions.record_button' | translate)) }}
         </button>
       </div>
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
 
-  <!-- Transactions List Card -->
-  <div class="m3-card">
-    <div class="m3-card-header">
+  <!-- Filter & Ledger Table Card -->
+  <div class="w-card">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
       <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">list_alt</span> Transaction Journal
-        </h3>
-        <p class="m3-card-subtitle">
-          Showing {{ items.length }} records{{ totalFiltered ? ` · Matched ${totalFiltered}+` : '' }}
-          <span *ngIf="selectedCount" class="ml-2 font-semibold text-[var(--m3-primary)]">
-            · {{ selectedCount }} Selected · {{ selectedAmountText }}
-          </span>
-        </p>
+        <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'transactions.title' | translate }}</h3>
+        <p class="text-xs text-[var(--text-muted)]">Showing {{ items.length }} recorded entries.</p>
       </div>
+
+      <!-- Filter Form Controls -->
+      <form [formGroup]="filterForm" (ngSubmit)="applyFilters()" class="flex flex-wrap items-center gap-2">
+        <select formControlName="accountId" class="w-select w-select-sm text-xs w-40" (change)="applyFilters()">
+          <option value="">{{ 'common.all_accounts' | translate }}</option>
+          <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
+        </select>
+
+        <select formControlName="type" class="w-select w-select-sm text-xs w-36" (change)="applyFilters()">
+          <option value="">{{ 'common.all_types' | translate }}</option>
+          <option value="expense">{{ 'transactions.type_expense' | translate }}</option>
+          <option value="income">{{ 'transactions.type_income' | translate }}</option>
+          <option value="transfer">Transfer</option>
+        </select>
+
+        <button type="button" class="w-btn w-btn-ghost text-xs h-8 px-2" (click)="clearFilters()">
+          {{ 'common.reset' | translate }}
+        </button>
+      </form>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="!items.length && !loading" class="m3-empty-state">
-      <div class="m3-empty-icon">
-        <span class="material-symbols-rounded">receipt_long</span>
+    <div *ngIf="!items.length" class="w-empty-state">
+      <div class="w-empty-icon">
+        <app-icon name="receipt_long"></app-icon>
       </div>
-      <p class="m3-empty-title">No Transactions Found</p>
-      <p class="m3-empty-desc">No transactions matched your filter criteria or no records created yet.</p>
-    </div>
-
-    <div *ngIf="loading" class="p-8 text-center text-xs text-[var(--m3-on-surface-variant)] flex items-center justify-center gap-2">
-      <span class="material-symbols-rounded animate-spin">sync</span> Loading transaction ledger...
+      <p class="w-empty-title">No Transactions Found</p>
+      <p class="w-empty-desc">Record income or expenses using the form above to populate your journal.</p>
     </div>
 
     <!-- Transactions Table -->
-    <div *ngIf="items.length" class="m3-table-container">
-      <table class="m3-table">
+    <div *ngIf="items.length" class="w-table-container">
+      <table class="w-table">
         <thead>
           <tr>
-            <th class="w-10"></th>
-            <th>Date & Time</th>
-            <th>Account</th>
-            <th>Type & Note</th>
-            <th>Status</th>
-            <th class="text-right">Amount</th>
+            <th>{{ 'common.date' | translate }}</th>
+            <th>{{ 'common.account' | translate }}</th>
+            <th>{{ 'common.type' | translate }}</th>
+            <th>{{ 'common.description' | translate }}</th>
+            <th>{{ 'common.amount' | translate }}</th>
+            <th>{{ 'common.status' | translate }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let tx of items">
+          <tr *ngFor="let item of items">
+            <td class="font-semibold text-xs whitespace-nowrap">{{ item.occurredAt | date: 'medium' }}</td>
+            <td class="font-bold text-xs text-[var(--text-main)]">{{ accountLabel(item.accountId) }}</td>
             <td>
-              <input type="checkbox" [checked]="isSelected(tx.id)" (change)="toggleSelection(tx.id)" class="rounded border-[var(--m3-outline)] cursor-pointer" />
-            </td>
-            <td class="font-medium text-xs">{{ tx.occurredAt | date: 'medium' }}</td>
-            <td class="text-xs font-semibold">{{ accountLabel(tx.accountId) }}</td>
-            <td>
-              <p class="text-xs font-semibold text-[var(--m3-on-surface)]">{{ tx.note || tx.type }}</p>
-              <p class="text-[11px] text-[var(--m3-on-surface-variant)] uppercase">{{ tx.type }} · {{ tx.currency }}</p>
-            </td>
-            <td>
-              <span class="m3-badge uppercase text-[10px]" [ngClass]="{
-                'm3-badge-success': (tx.status || 'posted') === 'posted',
-                'm3-badge-warning': tx.status === 'pending',
-                'm3-badge-primary': tx.status === 'reconciled',
-                'm3-badge-danger': tx.status === 'voided'
+              <span class="w-badge uppercase text-[10px]" [ngClass]="{
+                'w-badge-danger': item.type === 'expense',
+                'w-badge-success': item.type === 'income',
+                'w-badge-indigo': item.type === 'transfer' || item.type === 'valuation_adjustment'
               }">
-                {{ tx.status || 'posted' }}
+                {{ item.type }}
               </span>
             </td>
-            <td class="text-right font-bold text-sm" [class.text-[var(--m3-danger)]]="tx.type === 'expense'">
-              {{ tx.amount | number: '1.0-2' }} {{ tx.currency }}
+            <td class="text-xs font-medium">{{ item.note || '-' }}</td>
+            <td class="font-bold text-sm" [class.text-rose-600]="item.type === 'expense'" [class.text-emerald-600]="item.type === 'income'">
+              {{ item.amount }} {{ item.currency || 'VND' }}
+            </td>
+            <td>
+              <span class="w-badge w-badge-neutral text-[10px]">
+                {{ item.status || 'posted' }}
+              </span>
             </td>
           </tr>
         </tbody>
@@ -328,9 +226,14 @@
     </div>
 
     <div *ngIf="nextCursor" class="mt-4 flex justify-center">
-      <button class="m3-btn m3-btn-outlined" (click)="loadMore()" [disabled]="loading">
-        <span class="material-symbols-rounded">expand_more</span>
-        {{ loading ? 'Loading Records...' : 'Load More Transactions' }}
+      <button
+        type="button"
+        class="w-btn w-btn-outline text-xs"
+        (click)="loadMore()"
+        [disabled]="loading"
+      >
+        <app-icon name="expand_more"></app-icon>
+        {{ loading ? ('common.loading' | translate) : ('common.load_more' | translate) }}
       </button>
     </div>
   </div>

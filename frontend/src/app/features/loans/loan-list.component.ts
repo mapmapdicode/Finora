@@ -4,11 +4,14 @@ import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { ApiService } from '../../core/services/api.service';
 import { Account, Loan, LoanAccruals, LoanPayment, LoanPaymentRequest } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
+import { IconComponent } from '../../shared/icons/icon.component';
+
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 
 @Component({
   selector: 'app-loan-list',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, IconComponent, TranslatePipe],
   templateUrl: './loan-list.component.html'
 })
 export class LoanListComponent implements OnInit {

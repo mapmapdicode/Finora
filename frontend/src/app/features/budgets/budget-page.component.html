@@ -2,106 +2,109 @@
   <!-- Page Header -->
   <div class="m3-page-header">
     <div>
-      <h1 class="m3-page-title">Monthly Budgets</h1>
-      <p class="m3-page-subtitle">Set monthly spending targets and monitor actual vs budgeted expenses.</p>
+      <h1 class="m3-page-title">{{ 'budgets.title' | translate }}</h1>
+      <p class="m3-page-subtitle">{{ 'budgets.subtitle' | translate }}</p>
     </div>
 
     <button
       type="button"
-      class="m3-btn m3-btn-outlined"
+      class="w-btn w-btn-outline text-xs h-9"
       (click)="loadBudget()"
       [disabled]="loading"
     >
-      <span class="material-symbols-rounded" [class.animate-spin]="loading">refresh</span>
-      {{ loading ? 'Loading...' : 'Refresh Budget' }}
+      <app-icon name="refresh" [class.animate-spin]="loading"></app-icon>
+      {{ loading ? ('common.loading' | translate) : ('common.refresh' | translate) }}
     </button>
   </div>
 
   <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-4 rounded-2xl bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)] text-xs flex items-center gap-2 border border-[var(--m3-warning)]">
-    <span class="material-symbols-rounded">lock</span>
-    <span>This workspace is read-only. You can still browse budget rows.</span>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
+    <app-icon name="lock"></app-icon>
+    <span>{{ 'common.readonly_warning' | translate }}</span>
   </div>
 
-  <!-- Create Budget Form Card (Max 900px) -->
-  <div class="m3-card max-w-4xl">
+  <!-- Create Budget Form Card (Full Screen Width) -->
+  <div class="w-card w-full">
     <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">pie_chart</span> Budget Limit Configuration
-        </h3>
-        <p class="m3-card-subtitle">Set category budget caps for a specific period (YYYY-MM).</p>
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+          <app-icon name="pie_chart"></app-icon>
+        </div>
+        <div>
+          <h3 class="m3-card-title">Budget Limit Configuration</h3>
+          <p class="m3-card-subtitle">Set category budget caps for a specific period (YYYY-MM).</p>
+        </div>
       </div>
     </div>
 
     <form (ngSubmit)="submit()" [formGroup]="form" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label class="m3-label block mb-1">Period (YYYY-MM)</label>
-          <input formControlName="period" placeholder="e.g. 2026-07" class="m3-input" />
+          <label class="w-label">{{ 'budgets.period' | translate }}</label>
+          <input formControlName="period" placeholder="e.g. 2026-07" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Category (Optional)</label>
-          <input formControlName="categoryId" placeholder="Category ID or Name" class="m3-input" />
+          <label class="w-label">Category (Optional)</label>
+          <input formControlName="categoryId" placeholder="Category ID or Name" class="w-input" />
         </div>
 
         <div>
-          <label class="m3-label block mb-1">Spending Limit</label>
-          <input formControlName="limit" placeholder="e.g. 5000000" class="m3-input" />
+          <label class="w-label">{{ 'budgets.spending_limit' | translate }}</label>
+          <input formControlName="limit" placeholder="e.g. 5000000" class="w-input" />
         </div>
       </div>
 
-      <div class="flex justify-end pt-2">
-        <button class="m3-btn m3-btn-primary" [disabled]="!auth.canMutate">
-          <span class="material-symbols-rounded">save</span> Save Budget Limit
+      <div class="flex justify-end pt-1">
+        <button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
+          <app-icon name="save"></app-icon> {{ 'budgets.save_button' | translate }}
         </button>
       </div>
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--m3-on-surface-variant)]">{{ statusMessage }}</p>
+  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
 
   <!-- Budget Breakdown Card -->
-  <div class="m3-card">
+  <div class="w-card">
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <span class="material-symbols-rounded text-[var(--m3-primary)]">bar_chart</span> Budget Overview: {{ summary?.period || form.value.period }}
+          <app-icon name="bar_chart" class="text-[var(--accent-primary)]"></app-icon> Budget Overview: {{ summary?.period || form.value.period }}
         </h3>
         <p class="m3-card-subtitle">Category breakdown vs actual expenditures.</p>
       </div>
-      <span class="m3-badge m3-badge-primary">{{ summary?.rows?.length || 0 }} Categories</span>
+      <span class="w-badge w-badge-indigo">{{ summary?.rows?.length || 0 }} Categories</span>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="!summary?.rows?.length" class="m3-empty-state">
-      <div class="m3-empty-icon">
-        <span class="material-symbols-rounded">pie_chart</span>
+    <div *ngIf="!summary?.rows?.length" class="w-empty-state">
+      <div class="w-empty-icon">
+        <app-icon name="pie_chart"></app-icon>
       </div>
-      <p class="m3-empty-title">No Budget Items</p>
-      <p class="m3-empty-desc">No category budget limits have been created for {{ summary?.period || form.value.period }}.</p>
+      <p class="w-empty-title">No Budget Items</p>
+      <p class="w-empty-desc">No category budget limits have been created for {{ summary?.period || form.value.period }}.</p>
     </div>
 
     <!-- Budget Table -->
-    <div *ngIf="summary?.rows?.length" class="m3-table-container">
-      <table class="m3-table">
+    <div *ngIf="summary?.rows?.length" class="w-table-container">
+      <table class="w-table">
         <thead>
           <tr>
-            <th>Category</th>
-            <th>Spending Limit</th>
-            <th>Actual Spent</th>
-            <th>Currency</th>
+            <th>{{ 'common.category' | translate }}</th>
+            <th>{{ 'budgets.spending_limit' | translate }}</th>
+            <th>Spent</th>
+            <th>{{ 'common.currency' | translate }}</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let row of summary?.rows || []">
-            <td class="font-semibold text-[var(--m3-on-surface)] flex items-center gap-2">
-              <span class="material-symbols-rounded text-base text-[var(--m3-primary)]">folder</span>
+            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
+              <app-icon name="folder" class="text-[var(--accent-primary)]"></app-icon>
               #{{ row.categoryId || 'uncategorized' }}
             </td>
-            <td class="font-bold text-[var(--m3-on-surface)]">{{ row.limit }}</td>
-            <td class="font-bold text-[var(--m3-danger)]">{{ row.spent }}</td>
+            <td class="font-bold text-[var(--text-main)]">{{ row.limit }}</td>
+            <td class="font-bold text-rose-600">{{ row.spent }}</td>
             <td class="font-mono text-xs">{{ row.currency || 'VND' }}</td>
           </tr>
         </tbody>

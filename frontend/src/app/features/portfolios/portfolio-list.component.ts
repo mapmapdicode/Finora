@@ -5,10 +5,13 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Portfolio, NetWorthSummary, PortfolioSnapshotPage } from '../../shared/models';
 
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { IconComponent } from '../../shared/icons/icon.component';
+
 @Component({
   selector: 'app-portfolio-list',
   standalone: true,
-  imports: [CommonModule, NgForOf, NgIf, ReactiveFormsModule],
+  imports: [CommonModule, NgForOf, NgIf, ReactiveFormsModule, TranslatePipe, IconComponent],
   templateUrl: './portfolio-list.component.html',
 })
 export class PortfolioListComponent implements OnInit {

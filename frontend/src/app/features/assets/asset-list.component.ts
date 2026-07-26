@@ -4,11 +4,14 @@ import { CommonModule } from '@angular/common';
 import { ApiService } from '../../core/services/api.service';
 import { Asset, AssetValuation } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
+import { IconComponent } from '../../shared/icons/icon.component';
+
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 
 @Component({
   selector: 'app-asset-list',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, IconComponent, TranslatePipe],
   templateUrl: './asset-list.component.html'
 })
 export class AssetListComponent implements OnInit {

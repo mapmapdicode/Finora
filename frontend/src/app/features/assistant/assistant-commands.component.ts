@@ -5,10 +5,13 @@ import { ApiService } from '../../core/services/api.service';
 import { AssistantCommand } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
 
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { IconComponent } from '../../shared/icons/icon.component';
+
 @Component({
   selector: 'app-assistant-commands',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, TranslatePipe, IconComponent],
   templateUrl: './assistant-commands.component.html',
 })
 export class AssistantCommandsComponent implements OnInit {
