@@ -27,6 +27,11 @@ type Store interface {
 	GetAccount(id domain.ID) (*domain.Account, bool)
 	CreateAccount(input domain.Account) (domain.Account, error)
 	ListAccounts(workspaceID domain.ID) []domain.Account
+	DeleteAccount(workspaceID domain.ID, id domain.ID) error
+	DeletePortfolio(workspaceID domain.ID, id domain.ID) error
+	DeleteLoan(workspaceID domain.ID, id domain.ID) error
+	DeleteProperty(workspaceID domain.ID, id domain.ID) error
+	DeleteAsset(workspaceID domain.ID, id domain.ID) error
 
 	CreateTransactionStrict(input domain.Transaction) (domain.Transaction, error)
 	CreateTransaction(input domain.Transaction) (domain.Transaction, error)

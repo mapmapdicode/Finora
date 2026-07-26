@@ -112,7 +112,10 @@ func (s *InMemoryStore) SeedDemoUser(email, name string, password string) domain
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	id := newID()
+	id := domain.ID("demo-user")
+	if email != "demo@wealthos.vn" && email != "" {
+		id = newID()
+	}
 	s.users[id] = &domain.User{
 		Timestamped: domain.Timestamped{
 			ID:        id,
@@ -490,6 +493,61 @@ func (s *InMemoryStore) ListAccounts(workspaceID domain.ID) []domain.Account {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+func (s *InMemoryStore) DeleteAccount(workspaceID domain.ID, id domain.ID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok || a.WorkspaceID != workspaceID {
+		return errors.New("account not found")
+	}
+	delete(s.accounts, id)
+	return nil
+}
+
+func (s *InMemoryStore) DeletePortfolio(workspaceID domain.ID, id domain.ID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.portfolios[id]
+	if !ok || p.WorkspaceID != workspaceID {
+		return errors.New("portfolio not found")
+	}
+	delete(s.portfolios, id)
+	return nil
+}
+
+func (s *InMemoryStore) DeleteLoan(workspaceID domain.ID, id domain.ID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l, ok := s.loans[id]
+	if !ok || l.WorkspaceID != workspaceID {
+		return errors.New("loan not found")
+	}
+	delete(s.loans, id)
+	return nil
+}
+
+func (s *InMemoryStore) DeleteProperty(workspaceID domain.ID, id domain.ID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pr, ok := s.properties[id]
+	if !ok || pr.WorkspaceID != workspaceID {
+		return errors.New("property not found")
+	}
+	delete(s.properties, id)
+	return nil
+}
+
+func (s *InMemoryStore) DeleteAsset(workspaceID domain.ID, id domain.ID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ast, ok := s.assets[id]
+	if !ok || ast.WorkspaceID != workspaceID {
+		return errors.New("asset not found")
+	}
+	delete(s.assets, id)
+	return nil
 }
 
 func (s *InMemoryStore) CreateTransaction(input domain.Transaction) (domain.Transaction, error) {

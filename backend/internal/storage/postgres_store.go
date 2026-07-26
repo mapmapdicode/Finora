@@ -346,6 +346,31 @@ func (s *PostgresStore) ListAccounts(workspaceID domain.ID) []domain.Account {
 	return out
 }
 
+func (s *PostgresStore) DeleteAccount(workspaceID domain.ID, id domain.ID) error {
+	_, err := s.pool.Exec(context.Background(), `DELETE FROM accounts WHERE id=$1 AND workspace_id=$2`, id, workspaceID)
+	return err
+}
+
+func (s *PostgresStore) DeletePortfolio(workspaceID domain.ID, id domain.ID) error {
+	_, err := s.pool.Exec(context.Background(), `DELETE FROM portfolios WHERE id=$1 AND workspace_id=$2`, id, workspaceID)
+	return err
+}
+
+func (s *PostgresStore) DeleteLoan(workspaceID domain.ID, id domain.ID) error {
+	_, err := s.pool.Exec(context.Background(), `DELETE FROM loans WHERE id=$1 AND workspace_id=$2`, id, workspaceID)
+	return err
+}
+
+func (s *PostgresStore) DeleteProperty(workspaceID domain.ID, id domain.ID) error {
+	_, err := s.pool.Exec(context.Background(), `DELETE FROM properties WHERE id=$1 AND workspace_id=$2`, id, workspaceID)
+	return err
+}
+
+func (s *PostgresStore) DeleteAsset(workspaceID domain.ID, id domain.ID) error {
+	_, err := s.pool.Exec(context.Background(), `DELETE FROM assets WHERE id=$1 AND workspace_id=$2`, id, workspaceID)
+	return err
+}
+
 func (s *PostgresStore) CreateTransactionStrict(input domain.Transaction) (domain.Transaction, error) {
 	if input.WorkspaceID == "" || input.AccountID == "" || input.Currency == "" {
 		return domain.Transaction{}, errors.New("workspaceId, accountId and currency are required")

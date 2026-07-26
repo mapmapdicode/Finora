@@ -475,6 +475,89 @@ func (h *WealthHandler) CreateAccount(c *gin.Context) {
 	c.JSON(http.StatusCreated, account)
 }
 
+func (h *WealthHandler) DeleteAccount(c *gin.Context) {
+	if !h.requireEditorRole(c) {
+		return
+	}
+	accountID := domain.ID(c.Param("id"))
+	wsID := domain.ID(h.requireWorkspaceID(c))
+
+	account, ok := h.store.GetAccount(accountID)
+	targetWsID := wsID
+	if ok && account.WorkspaceID != "" {
+		targetWsID = account.WorkspaceID
+	}
+
+	txs := h.store.ListTransactions(targetWsID, accountID)
+	if len(txs) > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"code":    "ACCOUNT_HAS_TRANSACTIONS",
+			"message": "Không thể xóa tài khoản này vì đang có giao dịch hoặc dòng tiền liên kết.",
+		})
+		return
+	}
+
+	err := h.store.DeleteAccount(targetWsID, accountID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	h.recordAudit(c, "", "account", accountID, nil, nil, "success", "deleted account")
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+func (h *WealthHandler) DeletePortfolio(c *gin.Context) {
+	if !h.requireEditorRole(c) {
+		return
+	}
+	id := domain.ID(c.Param("id"))
+	wsID := domain.ID(h.requireWorkspaceID(c))
+	if err := h.store.DeletePortfolio(wsID, id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+func (h *WealthHandler) DeleteLoan(c *gin.Context) {
+	if !h.requireEditorRole(c) {
+		return
+	}
+	id := domain.ID(c.Param("id"))
+	wsID := domain.ID(h.requireWorkspaceID(c))
+	if err := h.store.DeleteLoan(wsID, id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+func (h *WealthHandler) DeleteProperty(c *gin.Context) {
+	if !h.requireEditorRole(c) {
+		return
+	}
+	id := domain.ID(c.Param("id"))
+	wsID := domain.ID(h.requireWorkspaceID(c))
+	if err := h.store.DeleteProperty(wsID, id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+func (h *WealthHandler) DeleteAsset(c *gin.Context) {
+	if !h.requireEditorRole(c) {
+		return
+	}
+	id := domain.ID(c.Param("id"))
+	wsID := domain.ID(h.requireWorkspaceID(c))
+	if err := h.store.DeleteAsset(wsID, id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
 func (h *WealthHandler) ListTransactions(c *gin.Context) {
 	query := dto.TransactionListQuery{
 		AccountID:  strings.TrimSpace(c.Query("accountId")),

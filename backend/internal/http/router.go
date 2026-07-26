@@ -63,11 +63,13 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 		workspaceRequired.Use(middleware.WorkspaceMembershipMiddleware(store, false))
 		workspaceRequired.GET("/portfolios", h.ListPortfolios)
 		workspaceRequired.POST("/portfolios", middleware.IdempotencyGuard(store), h.CreatePortfolio)
+		workspaceRequired.DELETE("/portfolios/:id", h.DeletePortfolio)
 		workspaceRequired.GET("/portfolios/:id/net-worth", h.GetPortfolioNetWorth)
 		workspaceRequired.GET("/portfolios/:id/snapshots", h.ListPortfolioSnapshots)
 
 		workspaceRequired.GET("/accounts", h.ListAccounts)
 		workspaceRequired.POST("/accounts", middleware.IdempotencyGuard(store), h.CreateAccount)
+		workspaceRequired.DELETE("/accounts/:id", h.DeleteAccount)
 
 		workspaceRequired.GET("/transactions", h.ListTransactions)
 		workspaceRequired.POST("/transactions", middleware.IdempotencyGuard(store), h.CreateTransaction)
@@ -76,15 +78,18 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 
 		workspaceRequired.GET("/loans", h.ListLoans)
 		workspaceRequired.POST("/loans", middleware.IdempotencyGuard(store), h.CreateLoan)
+		workspaceRequired.DELETE("/loans/:id", h.DeleteLoan)
 		workspaceRequired.GET("/loans/:id/accruals", h.GetLoanAccruals)
 		workspaceRequired.POST("/loans/:id/payments", middleware.IdempotencyGuard(store), h.CreateLoanPayment)
 
 		workspaceRequired.GET("/properties", h.ListProperties)
 		workspaceRequired.POST("/properties", middleware.IdempotencyGuard(store), h.CreateProperty)
+		workspaceRequired.DELETE("/properties/:id", h.DeleteProperty)
 		workspaceRequired.POST("/properties/:id/valuations", middleware.IdempotencyGuard(store), h.AddPropertyValuation)
 
 		workspaceRequired.GET("/assets", h.ListAssets)
 		workspaceRequired.POST("/assets", middleware.IdempotencyGuard(store), h.CreateAsset)
+		workspaceRequired.DELETE("/assets/:id", h.DeleteAsset)
 		workspaceRequired.POST("/assets/:id/valuations", middleware.IdempotencyGuard(store), h.AddAssetValuation)
 
 		workspaceRequired.GET("/budgets/:period", h.GetBudget)
