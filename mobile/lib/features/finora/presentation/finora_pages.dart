@@ -1554,7 +1554,7 @@ class _HomePageState extends State<HomePage> {
         children: [
           Positioned.fill(
             child: Image.asset(
-              'assets/images/login_bg.png',
+              'assets/images/app_bg_maple_light.png',
               fit: BoxFit.cover,
               alignment: Alignment.center,
             ),
