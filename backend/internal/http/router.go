@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -35,7 +37,14 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 	r := gin.New()
 	r.Use(middleware.CORS(cfg.CorsOrigins))
 	r.Use(gin.Logger())
-	r.Use(gin.Recovery())
+	r.Use(gin.CustomRecovery(func(c *gin.Context, recovered any) {
+		traceID := middleware.RequestIDFromContext(c)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    "INTERNAL_SERVER_ERROR",
+			"message": "Internal server panic: " + strings.TrimSpace(fmt.Sprintf("%v", recovered)),
+			"traceId": traceID,
+		})
+	}))
 	r.Use(middleware.RequestID(cfg.RequestIDHeader))
 	r.Use(middleware.ErrorEnvelope())
 

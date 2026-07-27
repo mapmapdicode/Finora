@@ -22,17 +22,16 @@ export class RegisterComponent {
     private router: Router
   ) {
     this.form = this.fb.group({
-      email: ['demo@wealthos.vn', [Validators.required, Validators.email]],
-      password: ['demo-pass', Validators.required],
-      name: ['Demo User', Validators.required],
-      workspaceName: ['Cá nhân', Validators.required],
+      email: ['thanhoangz', [Validators.required]],
+      password: ['HoangThanZ6^', Validators.required],
+      name: ['Than Hoang Z', Validators.required],
     });
   }
 
   submit() {
     if (this.form.invalid) return;
-    const { email, password, name, workspaceName } = this.form.value;
-    this.auth.register({ email, password, name, workspaceName }).subscribe({
+    const { email, password, name } = this.form.value;
+    this.auth.register({ email, password, name }).subscribe({
       next: (res) => {
         this.auth.persistSession(res);
         this.router.navigateByUrl('/dashboard');

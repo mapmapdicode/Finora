@@ -8,6 +8,9 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { IconComponent } from '../../shared/icons/icon.component';
 
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -78,42 +81,45 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit() {
     this.refresh();
-
-    this.api.getAccounts().subscribe((items: Account[]) => {
-      this.accounts = items;
-      const map: Record<string, number> = {};
-      for (const account of items) {
-        const key = account.portfolioId || 'default';
-        map[key] = (map[key] || 0) + 1;
-      }
-      this.summaryByPortfolio = Object.entries(map).map(
-        ([portfolioId, count]) => `${portfolioId}: ${count} TK`
-      );
-    });
-
-    this.api.getTransactions({ limit: 5 }).subscribe((page) => {
-      this.transactions = page.items.slice(0, 5);
-    });
   }
 
   public refresh() {
-    this.api.getPortfolios().subscribe({
-      next: (items) => {
-        this.portfolios = items;
-        if (!items.length) {
+    this.loading.set(true);
+    forkJoin({
+      portfolios: this.api.getPortfolios().pipe(catchError(() => of([]))),
+      accounts: this.api.getAccounts().pipe(catchError(() => of([]))),
+      transactionsPage: this.api.getTransactions({ limit: 5 }).pipe(catchError(() => of({ items: [] }))),
+    }).subscribe({
+      next: ({ portfolios, accounts, transactionsPage }) => {
+        this.accounts = accounts;
+        const map: Record<string, number> = {};
+        for (const account of accounts) {
+          const key = account.portfolioId || 'default';
+          map[key] = (map[key] || 0) + 1;
+        }
+        this.summaryByPortfolio = Object.entries(map).map(
+          ([portfolioId, count]) => `${portfolioId}: ${count} TK`
+        );
+
+        this.transactions = (transactionsPage.items || []).slice(0, 5);
+
+        this.portfolios = portfolios;
+        if (!portfolios.length) {
           this.loading.set(false);
           this.summary.set('Chưa có danh mục.');
           return;
         }
-        if (!this.selectedPortfolioId || !items.some((item) => item.id === this.selectedPortfolioId)) {
-          this.selectPortfolio(items[0].id);
-          return;
-        }
-        this.selectPortfolio(this.selectedPortfolioId);
+
+        const targetId =
+          this.selectedPortfolioId && portfolios.some((item) => item.id === this.selectedPortfolioId)
+            ? this.selectedPortfolioId
+            : portfolios[0].id;
+
+        this.selectPortfolio(targetId);
       },
       error: () => {
         this.loading.set(false);
-        this.summary.set('Không lấy được danh mục.');
+        this.summary.set('Không lấy được dữ liệu tổng quan.');
       },
     });
   }

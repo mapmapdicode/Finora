@@ -142,6 +142,7 @@ export interface Transaction {
   accountId: string;
   categoryId?: string;
   portfolioId?: string;
+  name?: string;
   type: 'income' | 'expense' | 'transfer' | 'investment_funding' | 'loan_disbursement' | 'loan_payment' | 'valuation_adjustment';
   amount: string;
   currency: string;

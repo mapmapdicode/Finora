@@ -18,7 +18,7 @@ type RegisterRequest struct {
 	Email         string `json:"email"`
 	Password      string `json:"password"`
 	Name          string `json:"name"`
-	WorkspaceName string `json:"workspaceName"`
+	WorkspaceName string `json:"workspaceName,omitempty"`
 }
 
 type WorkspaceCreateRequest struct {
@@ -64,16 +64,52 @@ type AccountCreateRequest struct {
 	Currency    string `json:"currency"`
 }
 
+type FlexibleTime struct {
+	time.Time
+}
+
+func (ft *FlexibleTime) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), "\"")
+	if s == "" || s == "null" {
+		ft.Time = time.Time{}
+		return nil
+	}
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02T15:04:05.999999999",
+		"2006-01-02T15:04:05.999999",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	}
+	for _, l := range layouts {
+		if t, err := time.Parse(l, s); err == nil {
+			ft.Time = t.UTC()
+			return nil
+		}
+	}
+	return fmt.Errorf("cannot parse time: %s", s)
+}
+
+func (ft FlexibleTime) MarshalJSON() ([]byte, error) {
+	if ft.IsZero() {
+		return []byte("null"), nil
+	}
+	return []byte(fmt.Sprintf("%q", ft.Time.Format(time.RFC3339Nano))), nil
+}
+
 type TransactionCreateRequest struct {
-	AccountID   string    `json:"accountId"`
-	CategoryID  string    `json:"categoryId"`
-	PortfolioID string    `json:"portfolioId"`
-	Type        string    `json:"type"`
-	Amount      string    `json:"amount"`
-	Currency    string    `json:"currency"`
-	Note        string    `json:"note"`
-	Status      string    `json:"status"`
-	OccurredAt  time.Time `json:"occurredAt"`
+	AccountID   string       `json:"accountId"`
+	CategoryID  string       `json:"categoryId"`
+	PortfolioID string       `json:"portfolioId"`
+	Name        string       `json:"name"`
+	Type        string       `json:"type"`
+	Amount      string       `json:"amount"`
+	Currency    string       `json:"currency"`
+	Note        string       `json:"note"`
+	Status      string       `json:"status"`
+	OccurredAt  FlexibleTime `json:"occurredAt"`
 }
 
 type TransactionListQuery struct {
@@ -126,33 +162,33 @@ func EncodeTransactionCursor(t time.Time, id string) string {
 }
 
 type TransferCreateRequest struct {
-	FromAccountID string    `json:"fromAccountId"`
-	ToAccountID   string    `json:"toAccountId"`
-	Amount        string    `json:"amount"`
-	Currency      string    `json:"currency"`
-	Note          string    `json:"note"`
-	OccurredAt    time.Time `json:"occurredAt"`
+	FromAccountID string       `json:"fromAccountId"`
+	ToAccountID   string       `json:"toAccountId"`
+	Amount        string       `json:"amount"`
+	Currency      string       `json:"currency"`
+	Note          string       `json:"note"`
+	OccurredAt    FlexibleTime `json:"occurredAt"`
 }
 
 type LoanCreateRequest struct {
-	PortfolioID         string    `json:"portfolioId"`
-	Counterparty        string    `json:"counterparty"`
-	Direction           string    `json:"direction"`
-	PrincipalInitial    string    `json:"principalInitial"`
-	AnnualRate          string    `json:"annualRate"`
-	DayCountBasis       string    `json:"dayCountBasis"`
-	StartAt             time.Time `json:"startAt"`
-	DueAt               time.Time `json:"dueAt"`
-	InterestCompounding bool      `json:"interestCompounding"`
+	PortfolioID         string       `json:"portfolioId"`
+	Counterparty        string       `json:"counterparty"`
+	Direction           string       `json:"direction"`
+	PrincipalInitial    string       `json:"principalInitial"`
+	AnnualRate          string       `json:"annualRate"`
+	DayCountBasis       string       `json:"dayCountBasis"`
+	StartAt             FlexibleTime `json:"startAt"`
+	DueAt               FlexibleTime `json:"dueAt"`
+	InterestCompounding bool         `json:"interestCompounding"`
 }
 
 type LoanPaymentRequest struct {
-	LoanID     string    `json:"loanId"`
-	Principal  string    `json:"principalAmount"`
-	Interest   string    `json:"interestAmount"`
-	Fee        string    `json:"feeAmount"`
-	Waived     string    `json:"waivedAmount"`
-	OccurredAt time.Time `json:"occurredAt"`
+	LoanID     string       `json:"loanId"`
+	Principal  string       `json:"principalAmount"`
+	Interest   string       `json:"interestAmount"`
+	Fee        string       `json:"feeAmount"`
+	Waived     string       `json:"waivedAmount"`
+	OccurredAt FlexibleTime `json:"occurredAt"`
 }
 
 type PropertyCreateRequest struct {
@@ -163,10 +199,10 @@ type PropertyCreateRequest struct {
 }
 
 type PropertyValuationRequest struct {
-	ValuationAmount string    `json:"valuationAmount"`
-	Currency        string    `json:"currency"`
-	Source          string    `json:"source"`
-	EffectiveAt     time.Time `json:"effectiveAt"`
+	ValuationAmount string       `json:"valuationAmount"`
+	Currency        string       `json:"currency"`
+	Source          string       `json:"source"`
+	EffectiveAt     FlexibleTime `json:"effectiveAt"`
 }
 
 type AssetCreateRequest struct {
@@ -176,11 +212,11 @@ type AssetCreateRequest struct {
 }
 
 type AssetValuationRequest struct {
-	AssetID         string    `json:"assetId"`
-	ValuationAmount string    `json:"valuationAmount"`
-	Currency        string    `json:"currency"`
-	Source          string    `json:"source"`
-	EffectiveAt     time.Time `json:"effectiveAt"`
+	AssetID         string       `json:"assetId"`
+	ValuationAmount string       `json:"valuationAmount"`
+	Currency        string       `json:"currency"`
+	Source          string       `json:"source"`
+	EffectiveAt     FlexibleTime `json:"effectiveAt"`
 }
 
 type BudgetRequest struct {

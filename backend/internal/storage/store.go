@@ -207,8 +207,24 @@ func (s *InMemoryStore) UpsertUserSettings(input domain.UserSettings) (*domain.U
 func (s *InMemoryStore) GetUserByEmail(email string) (*domain.User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	cleanEmail := strings.ToLower(strings.TrimSpace(email))
+	if cleanEmail == "" {
+		return nil, false
+	}
+	prefix := cleanEmail
+	if idx := strings.Index(cleanEmail, "@"); idx != -1 {
+		prefix = cleanEmail[:idx]
+	}
+
 	for _, u := range s.users {
-		if u.Email == email {
+		uEmail := strings.ToLower(strings.TrimSpace(u.Email))
+		uName := strings.ToLower(strings.TrimSpace(u.Name))
+		uPrefix := uEmail
+		if idx := strings.Index(uEmail, "@"); idx != -1 {
+			uPrefix = uEmail[:idx]
+		}
+
+		if uEmail == cleanEmail || uName == cleanEmail || (prefix != "" && prefix == uPrefix) {
 			cp := *u
 			return &cp, true
 		}

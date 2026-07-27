@@ -45,7 +45,7 @@ export class AuthService {
     return this.http.post<AuthResponse>(`${environment.apiBase}/api/v1/auth/login`, { email, password });
   }
 
-  register(payload: { email: string; password: string; name: string; workspaceName: string }) {
+  register(payload: { email: string; password: string; name: string; workspaceName?: string }) {
     return this.http.post<AuthResponse>(`${environment.apiBase}/api/v1/auth/register`, payload);
   }
 

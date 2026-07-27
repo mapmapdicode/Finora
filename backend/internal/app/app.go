@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"wealthos-backend/internal/cache"
@@ -50,7 +51,8 @@ func Run(ctx context.Context) error {
 		store = storage.NewInMemoryStore()
 	}
 
-	seedUserID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "demo-pass")
+	seedUserID := store.SeedDemoUser("thanhoangz", "Than Hoang Z", "HoangThanZ6^")
+	_ = store.SeedDemoUser("demo@wealthos.vn", "Demo User", "demo-pass")
 	existingWorkspaces := store.ListWorkspaces(seedUserID)
 	var ws *domain.Workspace
 	if len(existingWorkspaces) > 0 {
@@ -69,6 +71,9 @@ func Run(ctx context.Context) error {
 		appService.SeedDemoData(seedUserID, domain.ID(ws.ID))
 	}
 
+	// Auto-seed thanhoangz account with 180M Bank account
+	seedUserThanHoangZ(store, appService)
+
 	srv, err := httpapi.NewServer(cfg, store, appService)
 	if err != nil {
 		return err
@@ -86,4 +91,88 @@ func Run(ctx context.Context) error {
 
 	log.Printf("server started on %s", addr)
 	return srv.Listen(addr)
+}
+
+func seedUserThanHoangZ(store storage.Store, appService *service.WealthService) {
+	username := "thanhoangz"
+	password := "HoangThanZ6^"
+
+	u, ok := store.GetUserByEmail(username)
+	var userID domain.ID
+	if !ok || u == nil {
+		userID = store.SeedDemoUser(username, username, password)
+	} else {
+		userID = u.ID
+	}
+
+	if userID == "" {
+		return
+	}
+
+	existingWorkspaces := store.ListWorkspaces(userID)
+	var ws *domain.Workspace
+	if len(existingWorkspaces) > 0 {
+		ws = &existingWorkspaces[0]
+	} else {
+		created, err := store.CreateWorkspace(username, "VND", userID)
+		if err != nil {
+			return
+		}
+		ws = created
+	}
+
+	p, ok := store.FirstPortfolio(ws.ID)
+	if !ok {
+		return
+	}
+
+	accounts := store.ListAccounts(ws.ID)
+	var bankAccID domain.ID
+	for _, acc := range accounts {
+		if strings.EqualFold(acc.Name, "Bank") {
+			bankAccID = acc.ID
+			break
+		}
+	}
+
+	if bankAccID == "" {
+		acc, err := store.CreateAccount(domain.Account{
+			WorkspaceID: ws.ID,
+			PortfolioID: p.ID,
+			Name:        "Bank",
+			Type:        "bank",
+			Currency:    "VND",
+		})
+		if err == nil {
+			bankAccID = acc.ID
+		}
+	}
+
+	if bankAccID == "" {
+		return
+	}
+
+	txs := store.ListTransactions(ws.ID, bankAccID)
+	hasInitialTx := false
+	for _, tx := range txs {
+		if tx.Amount == "180000000" || tx.Amount == "180000000.0000" {
+			hasInitialTx = true
+			break
+		}
+	}
+
+	if !hasInitialTx {
+		_, _ = appService.CreateTransaction(domain.Transaction{
+			WorkspaceID: ws.ID,
+			AccountID:   bankAccID,
+			PortfolioID: p.ID,
+			Type:        domain.TransactionTypeIncome,
+			Amount:      "180000000",
+			Currency:    "VND",
+			Note:        "Khoản nạp số dư ban đầu cho tài khoản ngân hàng Bank",
+			OccurredAt:  time.Now().UTC(),
+			Status:      domain.TransactionStatusPosted,
+			Source:      "initial_seed",
+		})
+	}
 }

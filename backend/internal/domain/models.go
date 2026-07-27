@@ -144,6 +144,7 @@ type Transaction struct {
 	AccountID   ID                `json:"accountId"`
 	CategoryID  ID                `json:"categoryId"`
 	PortfolioID ID                `json:"portfolioId"`
+	Name        string            `json:"name"`
 	Type        TransactionType   `json:"type"`
 	Amount      string            `json:"amount"`
 	Currency    string            `json:"currency"`

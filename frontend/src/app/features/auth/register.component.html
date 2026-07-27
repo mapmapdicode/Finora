@@ -6,8 +6,8 @@
         alt="WealthOS Logo"
         class="h-14 w-auto object-contain mx-auto mb-3 filter drop-shadow-md"
       />
-      <h2 class="text-2xl font-bold text-[var(--m3-on-surface)] tracking-tight">Create Workspace</h2>
-      <p class="text-xs text-[var(--m3-on-surface-variant)] mt-1">Register user account and initial workspace container</p>
+      <h2 class="text-2xl font-bold text-[var(--m3-on-surface)] tracking-tight">Create Account</h2>
+      <p class="text-xs text-[var(--m3-on-surface-variant)] mt-1">Register a new user account</p>
     </div>
 
     <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
@@ -24,11 +24,6 @@
       <div>
         <label class="m3-label block mb-1">Password</label>
         <input formControlName="password" type="password" class="m3-input" placeholder="Create password" />
-      </div>
-
-      <div>
-        <label class="m3-label block mb-1">Workspace Name</label>
-        <input formControlName="workspaceName" class="m3-input" placeholder="e.g. Household Finance" />
       </div>
 
       <button class="m3-btn m3-btn-primary w-full py-2.5 mt-2">

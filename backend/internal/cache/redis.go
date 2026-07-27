@@ -33,13 +33,19 @@ func NewRedisCache(redisURL string) *RedisCache {
 			Addr: redisURL,
 		}
 	}
+	opts.MaxRetries = 1
+	opts.DialTimeout = 500 * time.Millisecond
+	opts.ReadTimeout = 500 * time.Millisecond
+	opts.WriteTimeout = 500 * time.Millisecond
 
 	rdb := redis.NewClient(opts)
 	// Test ping
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		log.Printf("[Redis] Warning: failed to ping Redis at %s: %v", redisURL, err)
+		log.Printf("[Redis] Warning: failed to ping Redis at %s: %v. Caching disabled.", redisURL, err)
+		_ = rdb.Close()
+		rdb = nil
 	} else {
 		log.Printf("[Redis] Successfully connected to Redis at %s", redisURL)
 	}

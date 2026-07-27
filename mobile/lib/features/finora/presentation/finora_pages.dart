@@ -18,7 +18,6 @@ abstract final class _I18n {
       'emailLabel': 'Email đăng nhập',
       'passLabel': 'Mật khẩu',
       'nameLabel': 'Họ và tên',
-      'workspaceLabel': 'Tên workspace',
       'switchRegister': 'Chưa có tài khoản? Tạo tài khoản',
       'switchLogin': 'Đã có tài khoản? Đăng nhập',
       'netWorth': 'Tài sản ròng',
@@ -43,7 +42,6 @@ abstract final class _I18n {
       'emailLabel': 'Email Address',
       'passLabel': 'Password',
       'nameLabel': 'Full Name',
-      'workspaceLabel': 'Workspace Name',
       'switchRegister': "Don't have an account? Sign Up",
       'switchLogin': 'Already have an account? Sign In',
       'netWorth': 'Net Worth',
@@ -68,7 +66,6 @@ abstract final class _I18n {
       'emailLabel': 'メールアドレス',
       'passLabel': 'パスワード',
       'nameLabel': '氏名',
-      'workspaceLabel': 'ワークスペース名',
       'switchRegister': 'アカウントをお持ちでない方',
       'switchLogin': '既にアカウントをお持ちの方',
       'netWorth': '純資産',
@@ -93,7 +90,6 @@ abstract final class _I18n {
       'emailLabel': '이메일 주소',
       'passLabel': '비밀번호',
       'nameLabel': '이름',
-      'workspaceLabel': '워크스페이스 이름',
       'switchRegister': '계정이 없으신가요? 가입하기',
       'switchLogin': '이미 계정이 있으신가요? 로그인',
       'netWorth': '순자산',
@@ -142,10 +138,9 @@ class LoginPage extends StatefulWidget {
 String appAmountDisplayMode = 'full';
 
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
-  final email = TextEditingController(text: 'demo@wealthos.vn');
-  final password = TextEditingController(text: 'demo-pass');
-  final name = TextEditingController();
-  final workspace = TextEditingController(text: 'My Finora');
+  final email = TextEditingController(text: 'thanhoangz');
+  final password = TextEditingController(text: 'HoangThanZ6^');
+  final name = TextEditingController(text: 'Than Hoang Z');
   bool registering = false;
   bool obscurePassword = true;
   String currentLang = 'VN';
@@ -232,7 +227,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       email: email.text,
       password: password.text,
       name: name.text,
-      workspaceName: workspace.text,
     );
     if (authenticated && mounted) {
       Navigator.of(
@@ -708,7 +702,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     email.dispose();
     password.dispose();
     name.dispose();
-    workspace.dispose();
     super.dispose();
   }
 
@@ -757,7 +750,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 email: email,
                 password: password,
                 name: name,
-                workspace: workspace,
                 obscurePassword: obscurePassword,
                 lang: currentLang,
                 onTogglePassword: () =>
@@ -1077,7 +1069,6 @@ class _LoginForm extends StatelessWidget {
     required this.email,
     required this.password,
     required this.name,
-    required this.workspace,
     required this.obscurePassword,
     required this.lang,
     required this.onTogglePassword,
@@ -1087,7 +1078,7 @@ class _LoginForm extends StatelessWidget {
 
   final bool registering, busy, obscurePassword;
   final String? error;
-  final TextEditingController email, password, name, workspace;
+  final TextEditingController email, password, name;
   final String lang;
   final VoidCallback onTogglePassword, onSubmit, onSwitch;
 
@@ -1149,7 +1140,7 @@ class _LoginForm extends StatelessWidget {
                             ? _I18n.t(lang, 'newAccount')
                             : (email.text.isNotEmpty
                                   ? email.text.split('@').first.toUpperCase()
-                                  : 'DEMO WEALTH'),
+                                  : 'THAN HOANG Z'),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 17,
@@ -1227,14 +1218,6 @@ class _LoginForm extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (registering) ...[
-                  const SizedBox(height: 8),
-                  _CustomGlassTextField(
-                    controller: workspace,
-                    labelText: _I18n.t(lang, 'workspaceLabel'),
-                    icon: Icons.dashboard_customize_outlined,
-                  ),
-                ],
               ],
             ),
           ),
@@ -1858,6 +1841,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int index = 0;
+  int refreshCounter = 0;
   final pages = const [
     NavItem('Tổng quan', Icons.dashboard_rounded),
     NavItem('Tài khoản', Icons.account_balance_rounded),
@@ -1915,23 +1899,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Cấu hình hiển thị số tiền',
-            onPressed: _showSettingsModal,
-            icon: const Icon(Icons.tune_rounded, color: Color(0xfffbbf24)),
-          ),
-          IconButton(
-            tooltip: 'Chuyển workspace',
-            onPressed: _selectWorkspace,
-            icon: const Icon(Icons.grid_view_rounded, color: Colors.white70),
-          ),
-          IconButton(
-            tooltip: 'Đăng xuất',
-            onPressed: _logout,
-            icon: const Icon(Icons.logout_rounded, color: Colors.white70),
-          ),
-        ],
+        actions: const [],
       ),
       drawer: null,
       body: Stack(
@@ -2001,7 +1969,7 @@ class _HomePageState extends State<HomePage> {
                     context: context,
                     builder: (_) => _TransactionFormSheet(
                       api: widget.api,
-                      onSuccess: () => setState(() {}),
+                      onSuccess: () => setState(() => refreshCounter++),
                     ),
                   );
                 },
@@ -2376,11 +2344,13 @@ class _HomePageState extends State<HomePage> {
     switch (index) {
       case 0:
         return DashboardPage(
+          key: ValueKey('dash_$refreshCounter'),
           api: widget.api,
           onNavigate: (i) => setState(() => index = i),
         );
       case 1:
         return ResourcePage(
+          key: ValueKey('acc_$refreshCounter'),
           api: widget.api,
           title: 'Tài khoản',
           path: '/accounts',
@@ -2392,7 +2362,10 @@ class _HomePageState extends State<HomePage> {
           ],
         );
       case 2:
-        return TransactionsPage(api: widget.api);
+        return TransactionsPage(
+          key: ValueKey('tx_$refreshCounter'),
+          api: widget.api,
+        );
       case 3:
         return ResourcePage(
           api: widget.api,
@@ -2456,6 +2429,7 @@ class _HomePageState extends State<HomePage> {
         return ProfilePage(
           api: widget.api,
           onOpenSettings: _showSettingsModal,
+          onSelectWorkspace: _selectWorkspace,
           onLogout: _logout,
         );
       default:
@@ -2666,10 +2640,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 context: context,
                 builder: (_) => _TransactionFormSheet(
                   api: widget.api,
-                  onSuccess: () {
-                    Navigator.pop(context);
-                    load();
-                  },
+                  onSuccess: () => load(),
                 ),
               );
             },
@@ -3112,9 +3083,11 @@ class _DashboardPageState extends State<DashboardPage> {
                     iconColor: x['type'] == 'income'
                         ? const Color(0xff4ade80)
                         : const Color(0xfffb7185),
-                    title: x['note']?.toString().isNotEmpty == true
-                        ? x['note'].toString()
-                        : (x['type'] == 'income' ? 'Thu nhập' : 'Chi tiêu'),
+                    title: (x['name']?.toString().trim().isNotEmpty == true)
+                        ? x['name'].toString().trim()
+                        : (x['note']?.toString().isNotEmpty == true
+                            ? x['note'].toString()
+                            : (x['type'] == 'income' ? 'Thu nhập' : 'Chi tiêu')),
                     subtitle: x['occurredAt']?.toString() ?? '',
                     amount:
                         "${x['type'] == 'income' ? '+' : '-'}${_formatMoney(x['amount'])} ${x['currency'] ?? 'VND'}",
@@ -3814,30 +3787,795 @@ String _formatDate(String? raw) {
   }
 }
 
-class ProfilePage extends StatelessWidget {
+class PersonalInfoPage extends StatefulWidget {
+  const PersonalInfoPage({super.key, required this.api});
+  final ApiClient api;
+
+  @override
+  State<PersonalInfoPage> createState() => _PersonalInfoPageState();
+}
+
+class _PersonalInfoPageState extends State<PersonalInfoPage> {
+  String _email = 'hoangxuan.ks6@gmail.com';
+  String _phone = '*** *** *399';
+  String _address = '4C26, CAU TRE, NGO QUYEN, HAI PHONG';
+
+  void _showEditBasicInfoModal() {
+    final phoneCtrl = TextEditingController(text: _phone);
+    final emailCtrl = TextEditingController(text: _email);
+    final addressCtrl = TextEditingController(text: _address);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xffcbd5e1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Chỉnh sửa thông tin cơ bản',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xff1e293b),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: phoneCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Số điện thoại',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: emailCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Email liên hệ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: addressCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Địa chỉ liên hệ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xff6b21a8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _phone = phoneCtrl.text.trim();
+                    _email = emailCtrl.text.trim();
+                    _address = addressCtrl.text.trim();
+                  });
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã cập nhật thông tin cá nhân thành công!')),
+                  );
+                },
+                child: const Text('Lưu thay đổi', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLimitChangeModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xffcbd5e1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Thay đổi hạn mức giao dịch',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xff1e293b),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Hạn mức tối đa hiện tại: 300,000,000 VND/ngày\nXác thực bằng Smart OTP để tăng hoặc điều chỉnh hạn mức.',
+              style: TextStyle(fontSize: 13, color: Color(0xff64748b)),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xffd97706),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Yêu cầu điều chỉnh hạn mức đã được tiếp nhận và xử lý!')),
+                  );
+                },
+                child: const Text('Xác nhận qua Smart OTP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const double dailyLimit = 300000000;
+    const double usedLimit = 936207;
+    const double progress = (usedLimit / dailyLimit);
+
+    return Scaffold(
+      backgroundColor: const Color(0xfff8fafc),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xff1e293b)),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Thông tin cá nhân',
+          style: TextStyle(
+            color: Color(0xff1e293b),
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        centerTitle: true,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        physics: const BouncingScrollPhysics(),
+        children: [
+          // Section 1: Dữ liệu sinh trắc học
+          _buildSectionHeader('Dữ liệu sinh trắc học'),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Khuôn mặt',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xff1e293b),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffdcfce7),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Đã cập nhật',
+                    style: TextStyle(
+                      color: Color(0xff15803d),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 2: Hạn mức tài khoản
+          _buildSectionHeader('Hạn mức tài khoản'),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Hạn mức hiện tại của Bạn là:',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xff334155),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xffdcfce7),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'Tối đa',
+                        style: TextStyle(
+                          color: Color(0xff15803d),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '300,000,000 VND/ngày và\n300,000,000 VND/lần',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xff6b21a8),
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 5,
+                    backgroundColor: const Color(0xfff1f5f9),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xff8b5cf6)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Đã giao dịch trong ngày',
+                          style: TextStyle(fontSize: 11, color: Color(0xff64748b)),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          '936,207 VND',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xff0f172a),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Hạn mức còn lại',
+                          style: TextStyle(fontSize: 11, color: Color(0xff64748b)),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          '299,063,793 VND',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xff0f172a),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                GestureDetector(
+                  onTap: _showLimitChangeModal,
+                  child: const Text(
+                    'Thay đổi hạn mức giao dịch',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xffd97706),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 3: Thông tin cơ bản
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildSectionHeader('Thông tin cơ bản'),
+              GestureDetector(
+                onTap: _showEditBasicInfoModal,
+                child: const Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 14, color: Color(0xffd97706)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Chỉnh sửa',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xffd97706),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildInfoRow('Tên đăng nhập', '0857869399'),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow(
+                  'Mã KH (CIF)',
+                  '03769945',
+                  showInfoIcon: true,
+                ),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow('Số điện thoại', _phone),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow('Email', _email),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow('Địa chỉ liên hệ', _address, isMultiLine: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 4: Thông tin định danh
+          _buildSectionHeader('Thông tin định danh'),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildInfoRow('Số CMND/CCCD/Hộ chiếu', '031097006012'),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow('Họ và tên', 'NGUYEN XUAN HOANG'),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow('Ngày sinh', '12/08/1997'),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow('Giới tính', 'Nam'),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow('Quốc tịch', 'Việt Nam'),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow('Ngày cấp', '15/05/2021'),
+                const Divider(height: 1, indent: 0, endIndent: 0),
+                _buildInfoRow('Nơi cấp', 'Cục Cảnh sát QLHC về TTXH', isMultiLine: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.bold,
+        color: Color(0xff1e293b),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(
+    String label,
+    String value, {
+    bool showInfoIcon = false,
+    bool isMultiLine = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      child: Row(
+        crossAxisAlignment: isMultiLine ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            flex: 4,
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: Color(0xff64748b),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (showInfoIcon) ...[
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    size: 14,
+                    color: Color(0xffd97706),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 6,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Color(0xff0f172a),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ProfilePage extends StatefulWidget {
   const ProfilePage({
     super.key,
     required this.api,
     required this.onOpenSettings,
+    this.onSelectWorkspace,
     required this.onLogout,
   });
 
   final ApiClient api;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onSelectWorkspace;
   final VoidCallback onLogout;
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  int _satisfactionRating = 0;
+
+  void _openPersonalInfo() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => PersonalInfoPage(api: widget.api),
+      ),
+    );
+  }
+
+  void _showSupportModal(String title, String detail) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Text(detail, style: const TextStyle(fontSize: 13.5, color: Color(0xff334155))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Đóng', style: TextStyle(color: Color(0xff6b21a8), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return PageFrame(
       title: 'Cá nhân',
-      action: IconButton(
-        onPressed: onOpenSettings,
-        icon: const Icon(Icons.settings_rounded, color: Color(0xfffbbf24)),
-      ),
       child: ListView(
         physics: const BouncingScrollPhysics(),
         children: [
-          // Header Card (Avatar + Name + CIF + Badge)
+          // Header Card (Avatar + Name + CIF + Badge) -> Click opens Personal Info Screen
+          InkWell(
+            onTap: _openPersonalInfo,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: 76,
+                        height: 76,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [Color(0xffd97706), Color(0xfffbbf24), Color(0xfff59e0b)],
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 70,
+                        height: 70,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(35),
+                          child: Image.network(
+                            'https://api.dicebear.com/7.x/bottts/png?seed=Hoang',
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => const Icon(
+                              Icons.person_rounded,
+                              size: 40,
+                              color: Color(0xff6b21a8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'NGUYEN XUAN HOANG',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xff2e1065),
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xffd97706),
+                        size: 22,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Mã KH (CIF): 03769945',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: Color(0xff64748b),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xffdcfce7),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xff86efac)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle_rounded,
+                          color: Color(0xff16a34a),
+                          size: 13,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Đã xác thực',
+                          style: TextStyle(
+                            color: Color(0xff15803d),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Main Support & Contact Services Menu (matching Image 1)
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 14,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildMenuItemTile(
+                  icon: Icons.chat_rounded,
+                  title: 'Chat ngay trên App TPBank',
+                  iconColor: const Color(0xffd97706),
+                  onTap: () => _showSupportModal('Chat ngay trên App', 'Kết nối trợ lý hỗ trợ trực tiếp 24/7.'),
+                ),
+                const Divider(height: 1, indent: 52, endIndent: 16),
+                _buildMenuItemTile(
+                  icon: Icons.forum_rounded,
+                  title: 'Chat qua Messenger',
+                  iconColor: const Color(0xff2563eb),
+                  onTap: () => _showSupportModal('Messenger', 'Đang chuyển hướng tới Messenger hỗ trợ...'),
+                ),
+                const Divider(height: 1, indent: 52, endIndent: 16),
+                _buildMenuItemTile(
+                  icon: Icons.mark_chat_read_rounded,
+                  title: 'Chat/Gọi qua Zalo',
+                  iconColor: const Color(0xff0284c7),
+                  onTap: () => _showSupportModal('Zalo Official', 'Đang mở trang Zalo CSKH chính thức...'),
+                ),
+                const Divider(height: 1, indent: 52, endIndent: 16),
+                _buildMenuItemTile(
+                  icon: Icons.email_rounded,
+                  title: 'Gửi Email',
+                  iconColor: const Color(0xff06b6d4),
+                  onTap: () => _showSupportModal('Gửi Email', 'Vui lòng gửi ý kiến về hotro@tpbank.com.vn'),
+                ),
+                const Divider(height: 1, indent: 52, endIndent: 16),
+                _buildMenuItemTile(
+                  icon: Icons.phone_rounded,
+                  title: 'Gọi Hotline',
+                  iconColor: const Color(0xff16a34a),
+                  onTap: () => _showSupportModal('Gọi Hotline', 'Đang gọi 1900 58 58 85...'),
+                ),
+                const Divider(height: 1, indent: 52, endIndent: 16),
+                _buildMenuItemTile(
+                  icon: Icons.warning_amber_rounded,
+                  title: 'Yêu cầu trợ giúp/Báo lỗi',
+                  iconColor: const Color(0xffef4444),
+                  onTap: () => _showSupportModal('Báo lỗi & Trợ giúp', 'Gửi yêu cầu hỗ trợ sự cố giao dịch.'),
+                ),
+                const Divider(height: 1, indent: 52, endIndent: 16),
+                _buildMenuItemTile(
+                  icon: Icons.tune_rounded,
+                  title: 'Cấu hình hiển thị số tiền',
+                  subtitle: 'Rút gọn (100) vs Đầy đủ (100.000 VND)',
+                  iconColor: const Color(0xff7c3aed),
+                  onTap: widget.onOpenSettings,
+                ),
+                if (widget.onSelectWorkspace != null) ...[
+                  const Divider(height: 1, indent: 52, endIndent: 16),
+                  _buildMenuItemTile(
+                    icon: Icons.grid_view_rounded,
+                    title: 'Chuyển Workspace',
+                    subtitle: 'Quản lý không gian tài sản',
+                    iconColor: const Color(0xff0284c7),
+                    onTap: widget.onSelectWorkspace!,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Satisfaction Rating Card (matching Image 1)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -3845,103 +4583,72 @@ class ProfilePage extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 14,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
             child: Column(
               children: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: 76,
-                      height: 76,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [Color(0xffd97706), Color(0xfffbbf24), Color(0xfff59e0b)],
-                        ),
-                      ),
-                    ),
-                    Container(
-                      width: 70,
-                      height: 70,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(35),
-                        child: Image.network(
-                          'https://api.dicebear.com/7.x/bottts/png?seed=Hoang',
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.person_rounded,
-                            size: 40,
-                            color: Color(0xff6b21a8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                const Text(
+                  'Mức độ hài lòng về App TPBank?',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xff334155),
+                  ),
                 ),
                 const SizedBox(height: 12),
-                const Row(
+                Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'NGUYEN XUAN HOANG',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xff2e1065),
-                        letterSpacing: 0.3,
+                  children: List.generate(5, (index) {
+                    final starIndex = index + 1;
+                    final isFilled = starIndex <= _satisfactionRating;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _satisfactionRating = starIndex;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Cảm ơn bạn đã đánh giá $_satisfactionRating sao!'),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Icon(
+                          isFilled ? Icons.star_rounded : Icons.star_outline_rounded,
+                          size: 34,
+                          color: isFilled ? const Color(0xfff59e0b) : const Color(0xffcbd5e1),
+                        ),
                       ),
-                    ),
-                    SizedBox(width: 4),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      color: Color(0xff6b21a8),
-                      size: 20,
-                    ),
-                  ],
+                    );
+                  }),
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Mã KH (CIF): 03769945',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xff64748b),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xffdcfce7),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xff86efac)),
-                  ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () => _showSupportModal('Lịch sử đánh giá', 'Bạn chưa có lịch sử đánh giá nào trước đó.'),
                   child: const Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        color: Color(0xff16a34a),
-                        size: 13,
+                      Text(
+                        'Lịch sử đánh giá',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xffd97706),
+                        ),
                       ),
                       SizedBox(width: 4),
-                      Text(
-                        'Đã xác thực',
-                        style: TextStyle(
-                          color: Color(0xff15803d),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: Color(0xffd97706),
                       ),
                     ],
                   ),
@@ -3951,277 +4658,74 @@ class ProfilePage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // VIP Status Banner
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xfffef08a)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 14,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.card_giftcard_rounded,
-                  color: Color(0xffd97706),
-                  size: 20,
-                ),
-                SizedBox(width: 10),
-                Text(
-                  'Đặc quyền Khách hàng Cao cấp',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xff1e293b),
-                  ),
-                ),
-                Spacer(),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: Color(0xffd97706),
-                  size: 20,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Quick Utilities Grid (4 columns)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 14,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: GridView.count(
-              crossAxisCount: 4,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 8,
-              childAspectRatio: 0.88,
-              children: [
-                _buildGridItem(
-                  icon: Icons.verified_user_rounded,
-                  label: 'Smart OTP',
-                  color: const Color(0xffd97706),
-                  onTap: () {},
-                ),
-                _buildGridItem(
-                  icon: Icons.tune_rounded,
-                  label: 'Hạn mức\ngiao dịch',
-                  color: const Color(0xff7c3aed),
-                  onTap: () {},
-                ),
-                _buildGridItem(
-                  icon: Icons.lock_reset_rounded,
-                  label: 'Đặt lại\nmật khẩu',
-                  color: const Color(0xff10b981),
-                  onTap: () {},
-                ),
-                _buildGridItem(
-                  icon: Icons.lock_clock_rounded,
-                  label: 'Khoá\nkhẩn cấp',
-                  color: const Color(0xffef4444),
-                  onTap: () {},
-                ),
-                _buildGridItem(
-                  icon: Icons.help_outline_rounded,
-                  label: 'Trung tâm\ntrợ giúp',
-                  color: const Color(0xff8b5cf6),
-                  onTap: () {},
-                ),
-                _buildGridItem(
-                  icon: Icons.auto_awesome_rounded,
-                  label: 'Tài khoản\nSố đẹp',
-                  color: const Color(0xff9333ea),
-                  onTap: () {},
-                ),
-                _buildGridItem(
-                  icon: Icons.storefront_rounded,
-                  label: 'Tài khoản\nShop',
-                  color: const Color(0xff7c3aed),
-                  onTap: () {},
-                ),
-                _buildGridItem(
-                  icon: Icons.settings_suggest_rounded,
-                  label: 'Cấu hình\nsố tiền',
-                  color: const Color(0xff0284c7),
-                  onTap: onOpenSettings,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Search Settings Bar
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 14,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: const TextField(
-              style: TextStyle(fontSize: 12.5, color: Color(0xff0f172a)),
-              decoration: InputDecoration(
-                hintText: 'Tìm kiếm thông tin, cài đặt',
-                hintStyle: TextStyle(fontSize: 12, color: Color(0xff94a3b8)),
-                prefixIcon: Icon(Icons.search_rounded, color: Color(0xff64748b), size: 18),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 11),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Group Section: Quản lý tài khoản
-          const Padding(
-            padding: EdgeInsets.only(left: 4, bottom: 8),
+          // App Version (matching Image 1)
+          const Center(
             child: Text(
-              'Quản lý tài khoản & Cài đặt',
+              'Phiên bản: 10.12.52',
               style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                color: Color(0xff94a3b8),
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
+          const SizedBox(height: 14),
 
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 14,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                _buildAccountTile(
-                  icon: Icons.badge_rounded,
-                  title: 'Cập nhật Giấy tờ tùy thân/CCCD',
-                  iconColor: const Color(0xff0284c7),
-                  onTap: () {},
-                ),
-                const Divider(height: 1, indent: 48, endIndent: 16),
-                _buildAccountTile(
-                  icon: Icons.auto_awesome_rounded,
-                  title: 'Tài khoản Số đẹp',
-                  iconColor: const Color(0xff8b5cf6),
-                  onTap: () {},
-                ),
-                const Divider(height: 1, indent: 48, endIndent: 16),
-                _buildAccountTile(
-                  icon: Icons.storefront_rounded,
-                  title: 'Tài khoản Kinh doanh/Shop',
-                  iconColor: const Color(0xffd97706),
-                  onTap: () {},
-                ),
-                const Divider(height: 1, indent: 48, endIndent: 16),
-                _buildAccountTile(
-                  icon: Icons.tune_rounded,
-                  title: 'Cấu hình hiển thị số tiền toàn app',
-                  subtitle: 'Chế độ Rút gọn (100) vs Đầy đủ (100.000 VND)',
-                  iconColor: const Color(0xff2563eb),
-                  onTap: onOpenSettings,
-                ),
-                const Divider(height: 1, indent: 48, endIndent: 16),
-                _buildAccountTile(
-                  icon: Icons.security_rounded,
-                  title: 'Bảo mật & Quyền riêng tư',
-                  iconColor: const Color(0xff16a34a),
-                  onTap: () {},
-                ),
-                const Divider(height: 1, indent: 48, endIndent: 16),
-                _buildAccountTile(
-                  icon: Icons.logout_rounded,
-                  title: 'Đăng xuất tài khoản',
-                  iconColor: const Color(0xffef4444),
-                  isDestructive: true,
-                  onTap: onLogout,
-                ),
-              ],
+          // Logout Button Card (matching Image 1)
+          InkWell(
+            onTap: widget.onLogout,
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 14,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.output_rounded,
+                    color: Color(0xffef4444),
+                    size: 20,
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    'Đăng xuất',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xffef4444),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
 
-  Widget _buildGridItem({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              color: Color(0xff1e293b),
-              height: 1.15,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAccountTile({
+  Widget _buildMenuItemTile({
     required IconData icon,
     required String title,
     String? subtitle,
     required Color iconColor,
-    bool isDestructive = false,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(
           children: [
             Container(
@@ -4232,17 +4736,17 @@ class ProfilePage extends StatelessWidget {
               ),
               child: Icon(icon, color: iconColor, size: 18),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: isDestructive ? const Color(0xffef4444) : const Color(0xff1e293b),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xff1e293b),
                     ),
                   ),
                   if (subtitle != null) ...[
@@ -4258,10 +4762,10 @@ class ProfilePage extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(
+            const Icon(
               Icons.chevron_right_rounded,
-              color: isDestructive ? const Color(0xffef4444) : const Color(0xff94a3b8),
-              size: 18,
+              color: Color(0xffd97706),
+              size: 20,
             ),
           ],
         ),
@@ -4316,10 +4820,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
         context: context,
         builder: (_) => _TransactionFormSheet(
           api: widget.api,
-          onSuccess: () {
-            Navigator.pop(context);
-            load();
-          },
+          onSuccess: () => load(),
         ),
       );
 
@@ -4781,10 +5282,13 @@ class _TransactionsPageState extends State<TransactionsPage> {
   Widget _buildTransactionCard(Map item) {
     final isIncome = item['type'] == 'income';
     final isTransfer = item['type'] == 'transfer';
+    final name = item['name']?.toString().trim();
     final note = item['note']?.toString().trim();
-    final title = (note != null && note.isNotEmpty)
-        ? note
-        : (isIncome ? 'Thu nhập' : (isTransfer ? 'Chuyển tiền' : 'Chi tiêu'));
+    final title = (name != null && name.isNotEmpty)
+        ? name
+        : ((note != null && note.isNotEmpty)
+            ? note
+            : (isIncome ? 'Thu nhập' : (isTransfer ? 'Chuyển tiền' : 'Chi tiêu')));
     final amountVal =
         double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
     final icon = isIncome
@@ -4825,6 +5329,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
   List<Map<String, dynamic>> accounts = [];
   bool loadingAccounts = true;
 
+  final nameController = TextEditingController();
   final amountController = TextEditingController();
   final noteController = TextEditingController();
   DateTime selectedDate = DateTime.now();
@@ -4882,6 +5387,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
   }
 
   Future<void> _submit() async {
+    final rawName = nameController.text.trim();
     final rawAmount = amountController.text.trim();
     if (rawAmount.isEmpty) {
       showError(context, 'Vui lòng nhập số tiền.');
@@ -4899,18 +5405,28 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       return;
     }
 
+    final txnName = rawName.isNotEmpty
+        ? rawName
+        : (type == 'income' ? 'Thu nhập' : 'Chi tiêu');
+
     setState(() => submitting = true);
     try {
       await widget.api.request('POST', '/transactions', {
         'accountId': selectedAccountId,
+        'name': txnName,
         'type': type,
         'amount': parsedVal.toStringAsFixed(0),
         'currency': 'VND',
         'note': noteController.text.trim(),
-        'occurredAt': selectedDate.toIso8601String(),
+        'occurredAt': selectedDate.toUtc().toIso8601String(),
         'status': 'posted',
       });
-      if (mounted) widget.onSuccess();
+      if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        widget.onSuccess();
+      }
     } catch (e) {
       if (mounted) showError(context, e.toString());
     } finally {
@@ -4920,6 +5436,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
   @override
   void dispose() {
+    nameController.dispose();
     amountController.dispose();
     noteController.dispose();
     super.dispose();
@@ -5108,6 +5625,11 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
               ),
             ),
           const SizedBox(height: 14),
+          _CustomGlassTextField(
+            controller: nameController,
+            labelText: 'Tên giao dịch (VD: Lương tháng, Cà phê...)',
+            icon: Icons.title_rounded,
+          ),
           // Quick Amount Suggestion Chips
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,

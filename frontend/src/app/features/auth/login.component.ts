@@ -22,20 +22,24 @@ export class LoginComponent {
     private router: Router
   ) {
     this.form = this.fb.group({
-      email: ['demo@wealthos.vn', [Validators.required, Validators.email]],
-      password: ['demo-pass', Validators.required],
+      email: ['thanhoangz', [Validators.required]],
+      password: ['HoangThanZ6^', Validators.required],
     });
   }
 
   submit() {
-    if (this.form.invalid) return;
+    if (this.form.invalid) {
+      this.message = 'Vui lòng nhập đầy đủ tên đăng nhập / email và mật khẩu';
+      return;
+    }
+    this.message = '';
     this.auth.login(this.form.value.email || '', this.form.value.password || '').subscribe({
       next: (res) => {
         this.auth.persistSession(res);
         this.router.navigateByUrl('/dashboard');
       },
-      error: () => {
-        this.message = 'Đăng nhập không thành công';
+      error: (err) => {
+        this.message = err?.error?.message || 'Đăng nhập không thành công. Vui lòng kiểm tra lại thông tin.';
       },
     });
   }

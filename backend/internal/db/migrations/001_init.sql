@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE SET NULL,
+    name TEXT DEFAULT '',
     type TEXT NOT NULL,
     amount NUMERIC(24,4) NOT NULL,
     currency VARCHAR(10) NOT NULL DEFAULT 'VND',

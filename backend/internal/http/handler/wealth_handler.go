@@ -461,6 +461,21 @@ func (h *WealthHandler) ListAccounts(c *gin.Context) {
 	c.JSON(http.StatusOK, list)
 }
 
+func (h *WealthHandler) getOrCreatePrimaryPortfolio(wsID domain.ID) domain.Portfolio {
+	if p, ok := h.store.FirstPortfolio(wsID); ok {
+		return p
+	}
+	p, err := h.store.CreatePortfolio(domain.Portfolio{
+		WorkspaceID:  wsID,
+		Name:         "Cá nhân",
+		BaseCurrency: "VND",
+	})
+	if err == nil {
+		return p
+	}
+	return domain.Portfolio{}
+}
+
 func (h *WealthHandler) CreateAccount(c *gin.Context) {
 	if !h.requireEditorRole(c) {
 		return
@@ -470,9 +485,14 @@ func (h *WealthHandler) CreateAccount(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
 		return
 	}
+	wsID := domain.ID(h.requireWorkspaceID(c))
+	pID := domain.ID(body.PortfolioID)
+	if pID == "" {
+		pID = h.getOrCreatePrimaryPortfolio(wsID).ID
+	}
 	account, err := h.store.CreateAccount(domain.Account{
-		WorkspaceID: domain.ID(h.requireWorkspaceID(c)),
-		PortfolioID: domain.ID(body.PortfolioID),
+		WorkspaceID: wsID,
+		PortfolioID: pID,
 		Name:        body.Name,
 		Type:        body.Type,
 		Currency:    body.Currency,
@@ -705,15 +725,27 @@ func (h *WealthHandler) CreateTransaction(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
 		return
 	}
-	happened := body.OccurredAt
+	happened := body.OccurredAt.Time
 	if happened.IsZero() {
 		happened = time.Now().UTC()
 	}
+	wsID := domain.ID(h.requireWorkspaceID(c))
+	pID := domain.ID(body.PortfolioID)
+	accID := domain.ID(body.AccountID)
+	if pID == "" && accID != "" {
+		if acc, ok := h.store.GetAccount(accID); ok && acc.PortfolioID != "" {
+			pID = acc.PortfolioID
+		}
+	}
+	if pID == "" {
+		pID = h.getOrCreatePrimaryPortfolio(wsID).ID
+	}
 	item, err := h.service.CreateTransaction(domain.Transaction{
-		WorkspaceID: domain.ID(h.requireWorkspaceID(c)),
-		AccountID:   domain.ID(body.AccountID),
+		WorkspaceID: wsID,
+		AccountID:   accID,
 		CategoryID:  domain.ID(body.CategoryID),
-		PortfolioID: domain.ID(body.PortfolioID),
+		PortfolioID: pID,
+		Name:        body.Name,
 		Type:        domain.TransactionType(body.Type),
 		Amount:      body.Amount,
 		Currency:    body.Currency,
@@ -738,7 +770,7 @@ func (h *WealthHandler) CreateTransfer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
 		return
 	}
-	happened := body.OccurredAt
+	happened := body.OccurredAt.Time
 	if happened.IsZero() {
 		happened = time.Now().UTC()
 	}
@@ -773,11 +805,11 @@ func (h *WealthHandler) CreateLoan(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
 		return
 	}
-	startAt := body.StartAt
+	startAt := body.StartAt.Time
 	if startAt.IsZero() {
 		startAt = time.Now().UTC()
 	}
-	dueAt := body.DueAt
+	dueAt := body.DueAt.Time
 	if dueAt.IsZero() {
 		dueAt = startAt.AddDate(0, 1, 0)
 	}
@@ -855,7 +887,7 @@ func (h *WealthHandler) CreateLoanPayment(c *gin.Context) {
 		Interest:    body.Interest,
 		Fee:         body.Fee,
 		Waived:      body.Waived,
-		OccurredAt:  nowOrUTC(body.OccurredAt),
+		OccurredAt:  nowOrUTC(body.OccurredAt.Time),
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
@@ -921,7 +953,7 @@ func (h *WealthHandler) AddPropertyValuation(c *gin.Context) {
 		Amount:      body.ValuationAmount,
 		Currency:    body.Currency,
 		Source:      body.Source,
-		EffectiveAt: nowOrUTC(body.EffectiveAt),
+		EffectiveAt: nowOrUTC(body.EffectiveAt.Time),
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
@@ -989,7 +1021,7 @@ func (h *WealthHandler) AddAssetValuation(c *gin.Context) {
 		Amount:      body.ValuationAmount,
 		Currency:    body.Currency,
 		Source:      body.Source,
-		EffectiveAt: nowOrUTC(body.EffectiveAt),
+		EffectiveAt: nowOrUTC(body.EffectiveAt.Time),
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
@@ -2474,7 +2506,7 @@ func currentUser(c *gin.Context) string {
 
 func defaultWorkspaceName(name string) string {
 	if strings.TrimSpace(name) == "" {
-		return "Default Workspace"
+		return "Tài khoản cá nhân"
 	}
 	return name
 }

@@ -84,3 +84,26 @@ func TestErrorEnvelopeSkipsTraceForNonCodeErrorPayloads(t *testing.T) {
 		t.Fatalf("expected original plain body, got: %q", resp.Body.String())
 	}
 }
+
+func TestErrorEnvelopeLogsStatusCodes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	statuses := []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError}
+
+	for _, st := range statuses {
+		r := gin.New()
+		r.Use(ErrorEnvelope())
+		r.GET("/err", func(c *gin.Context) {
+			c.Set("user_id", "user-123")
+			c.Set("request_id", "trace-test")
+			c.JSON(st, gin.H{"code": "ERROR_CODE", "message": "error occurred"})
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/err", nil)
+		resp := httptest.NewRecorder()
+		r.ServeHTTP(resp, req)
+
+		if got := resp.Result().StatusCode; got != st {
+			t.Fatalf("status %d mismatch, got %d", st, got)
+		}
+	}
+}

@@ -125,12 +125,22 @@ func (s *PostgresStore) GetUserByID(id domain.ID) (*domain.User, bool) {
 }
 
 func (s *PostgresStore) GetUserByEmail(email string) (*domain.User, bool) {
-	if email == "" {
+	cleanEmail := strings.ToLower(strings.TrimSpace(email))
+	if cleanEmail == "" {
 		return nil, false
 	}
+	prefix := cleanEmail
+	if idx := strings.Index(cleanEmail, "@"); idx != -1 {
+		prefix = cleanEmail[:idx]
+	}
+
 	row := s.pool.QueryRow(context.Background(), `
 		SELECT id, email, name, password_hash, created_at, updated_at
-		FROM users WHERE email=$1`, email)
+		FROM users
+		WHERE LOWER(TRIM(email)) = $1
+		   OR LOWER(TRIM(name)) = $1
+		   OR LOWER(TRIM(SPLIT_PART(email, '@', 1))) = $2
+		LIMIT 1`, cleanEmail, prefix)
 	var u domain.User
 	var pass string
 	if err := row.Scan(&u.ID, &u.Email, &u.Name, &pass, &u.CreatedAt, &u.UpdatedAt); err != nil {
@@ -444,13 +454,13 @@ func (s *PostgresStore) CreateTransaction(input domain.Transaction) (domain.Tran
 	ctx := context.Background()
 	var out domain.Transaction
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO transactions(workspace_id, account_id, category_id, portfolio_id, type, amount, currency, note, occurred_at, status, source)
-		VALUES($1, $2, $3, $4, $5, CAST($6 as NUMERIC), $7, $8, $9, $10)
+		INSERT INTO transactions(workspace_id, account_id, category_id, portfolio_id, name, type, amount, currency, note, occurred_at, status, source)
+		VALUES($1, $2, $3, $4, $5, $6, CAST($7 as NUMERIC), $8, $9, $10, $11, $12)
 		RETURNING id, workspace_id, account_id, COALESCE(category_id::text, ''), COALESCE(portfolio_id::text, ''),
-		          type, amount::text, currency, note, occurred_at, status, source, created_at, updated_at
-	`, input.WorkspaceID, input.AccountID, nilUUID(input.CategoryID), nilUUID(input.PortfolioID), input.Type,
+		          COALESCE(name, ''), type, amount::text, currency, note, occurred_at, status, source, created_at, updated_at
+	`, input.WorkspaceID, input.AccountID, nilUUID(input.CategoryID), nilUUID(input.PortfolioID), input.Name, input.Type,
 		input.Amount, input.Currency, input.Note, input.OccurredAt.UTC(), defaultStatus(input.Status), input.Source).Scan(
-		&out.ID, &out.WorkspaceID, &out.AccountID, &out.CategoryID, &out.PortfolioID,
+		&out.ID, &out.WorkspaceID, &out.AccountID, &out.CategoryID, &out.PortfolioID, &out.Name,
 		&out.Type, &out.Amount, &out.Currency, &out.Note, &out.OccurredAt, &out.Status, &out.Source, &out.CreatedAt, &out.UpdatedAt,
 	)
 	if err != nil {
@@ -462,11 +472,11 @@ func (s *PostgresStore) CreateTransaction(input domain.Transaction) (domain.Tran
 func (s *PostgresStore) GetTransaction(id domain.ID) (*domain.Transaction, bool) {
 	row := s.pool.QueryRow(context.Background(), `
 		SELECT id, workspace_id, account_id, COALESCE(category_id::text, ''), COALESCE(portfolio_id::text, ''),
-		       type, amount::text, currency, note, occurred_at, status, source, created_at, updated_at
+		       COALESCE(name, ''), type, amount::text, currency, note, occurred_at, status, source, created_at, updated_at
 		FROM transactions WHERE id=$1
 	`, id)
 	var t domain.Transaction
-	if err := row.Scan(&t.ID, &t.WorkspaceID, &t.AccountID, &t.CategoryID, &t.PortfolioID,
+	if err := row.Scan(&t.ID, &t.WorkspaceID, &t.AccountID, &t.CategoryID, &t.PortfolioID, &t.Name,
 		&t.Type, &t.Amount, &t.Currency, &t.Note, &t.OccurredAt, &t.Status, &t.Source, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return nil, false
 	}
@@ -476,7 +486,7 @@ func (s *PostgresStore) GetTransaction(id domain.ID) (*domain.Transaction, bool)
 func (s *PostgresStore) ListTransactions(workspaceID domain.ID, accountID domain.ID) []domain.Transaction {
 	query := `
 		SELECT id, workspace_id, account_id, COALESCE(category_id::text, ''), COALESCE(portfolio_id::text, ''),
-		       type, amount::text, currency, note, occurred_at, status, source, created_at, updated_at
+		       COALESCE(name, ''), type, amount::text, currency, note, occurred_at, status, source, created_at, updated_at
 		FROM transactions
 		WHERE workspace_id=$1`
 	args := []any{workspaceID}
@@ -493,7 +503,7 @@ func (s *PostgresStore) ListTransactions(workspaceID domain.ID, accountID domain
 	out := make([]domain.Transaction, 0)
 	for rows.Next() {
 		var t domain.Transaction
-		if err := rows.Scan(&t.ID, &t.WorkspaceID, &t.AccountID, &t.CategoryID, &t.PortfolioID,
+		if err := rows.Scan(&t.ID, &t.WorkspaceID, &t.AccountID, &t.CategoryID, &t.PortfolioID, &t.Name,
 			&t.Type, &t.Amount, &t.Currency, &t.Note, &t.OccurredAt, &t.Status, &t.Source, &t.CreatedAt, &t.UpdatedAt); err == nil {
 			out = append(out, t)
 		}

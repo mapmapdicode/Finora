@@ -22,8 +22,6 @@ class AuthRemoteService {
       'email': credentials.email,
       'password': credentials.password,
       if (credentials.name != null) 'name': credentials.name,
-      if (credentials.workspaceName != null)
-        'workspaceName': credentials.workspaceName,
     });
     if (response is! Map) {
       throw const ApiException('Phản hồi xác thực không hợp lệ');

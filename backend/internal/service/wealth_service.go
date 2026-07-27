@@ -272,8 +272,10 @@ func (s *WealthService) RegisterUser(email, password, name string) (domain.User,
 }
 
 func (s *WealthService) Authenticate(email, password string) (LoginResult, error) {
+	email = strings.TrimSpace(email)
+	password = strings.TrimSpace(password)
 	u, ok := s.store.GetUserByEmail(email)
-	if !ok || u.Password != password {
+	if !ok || strings.TrimSpace(u.Password) != password {
 		return LoginResult{}, errors.New("invalid credentials")
 	}
 	wsList := s.store.ListWorkspaces(u.ID)
@@ -358,13 +360,13 @@ func (s *WealthService) computeNetWorthForPortfolioAt(workspaceID, portfolioID d
 }
 
 func (s *WealthService) portfolioAccounts(workspaceID, portfolioID domain.ID) []domain.Account {
-	if portfolioID == "" {
-		return nil
-	}
 	accounts := s.store.ListAccounts(workspaceID)
+	if portfolioID == "" {
+		return accounts
+	}
 	result := make([]domain.Account, 0)
 	for _, account := range accounts {
-		if account.PortfolioID == portfolioID {
+		if account.PortfolioID == portfolioID || account.PortfolioID == "" {
 			result = append(result, account)
 		}
 	}
@@ -419,17 +421,21 @@ func (s *WealthService) matchesPortfolio(portfolioID, txPortfolioID, txAccountID
 	if portfolioID == "" {
 		return true
 	}
-	if txPortfolioID != "" {
-		return txPortfolioID == portfolioID
+	if txPortfolioID == portfolioID {
+		return true
 	}
-	if txAccountID == "" {
+	if txPortfolioID != "" && txPortfolioID != portfolioID {
 		return false
 	}
-	account, ok := accountByID[txAccountID]
-	if !ok {
-		return false
+	if txAccountID != "" {
+		if account, ok := accountByID[txAccountID]; ok {
+			return account.PortfolioID == portfolioID || account.PortfolioID == ""
+		}
+		if acc, ok2 := s.store.GetAccount(txAccountID); ok2 {
+			return acc.PortfolioID == portfolioID || acc.PortfolioID == ""
+		}
 	}
-	return account.PortfolioID == portfolioID
+	return true
 }
 
 func (s *WealthService) snapshotAtOrBefore(workspaceID, portfolioID domain.ID, asOf time.Time) (netWorthSnapshot, bool) {
@@ -582,7 +588,7 @@ func (s *WealthService) matchesEntityToPortfolio(scopePortfolioID, entityPortfol
 	if scopePortfolioID == "" {
 		return true
 	}
-	return scopePortfolioID == entityPortfolioID
+	return scopePortfolioID == entityPortfolioID || entityPortfolioID == ""
 }
 
 func (s *WealthService) loanAccrualsByLoan(loan domain.Loan, asOf time.Time) ([]LoanAccrualRow, LoanAccrualSummary) {

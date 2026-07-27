@@ -19,7 +19,6 @@ class LoginViewModel extends ChangeNotifier {
     required String email,
     required String password,
     String? name,
-    String? workspaceName,
   }) async {
     if (_isBusy) return false;
     _isBusy = true;
@@ -30,7 +29,6 @@ class LoginViewModel extends ChangeNotifier {
         email: email.trim(),
         password: password,
         name: registering ? name?.trim() : null,
-        workspaceName: registering ? workspaceName?.trim() : null,
       );
       if (registering) {
         await _repository.register(credentials);
