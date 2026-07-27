@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"wealthos-backend/internal/cache"
 	"wealthos-backend/internal/config"
 	"wealthos-backend/internal/db"
 	"wealthos-backend/internal/domain"
@@ -20,6 +21,8 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	redisCache := cache.NewRedisCache(cfg.RedisURL)
 
 	var store storage.Store
 	var cleanup func()
@@ -60,7 +63,8 @@ func Run(ctx context.Context) error {
 		ws = created
 	}
 
-	appService := service.NewWealthService(store)
+	appService := service.NewWealthService(store, redisCache)
+
 	if ws != nil {
 		appService.SeedDemoData(seedUserID, domain.ID(ws.ID))
 	}

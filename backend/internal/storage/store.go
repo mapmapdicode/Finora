@@ -42,6 +42,7 @@ type InMemoryStore struct {
 	bankPaymentReqs   map[domain.ID]*domain.BankPaymentRequest
 	assistantCmds     map[domain.ID]*domain.AssistantCommand
 	auditLogs         map[domain.ID]*domain.AuditLog
+	userSettings      map[domain.ID]*domain.UserSettings
 	// idempotency keeps track of processed idempotency keys in-memory.
 	idempotencyKeys map[string]time.Time
 }
@@ -49,6 +50,7 @@ type InMemoryStore struct {
 func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{
 		users:             map[domain.ID]*domain.User{},
+		userSettings:      map[domain.ID]*domain.UserSettings{},
 		workspaces:        map[domain.ID]*domain.Workspace{},
 		memberships:       map[domain.ID]*domain.WorkspaceMember{},
 		portfolios:        map[domain.ID]*domain.Portfolio{},
@@ -173,6 +175,34 @@ func (s *InMemoryStore) GetUser(id domain.ID) (*domain.User, bool) {
 	cp := *u
 	return &cp, true
 }
+
+func (s *InMemoryStore) GetUserSettings(userID domain.ID) (*domain.UserSettings, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	st, ok := s.userSettings[userID]
+	if !ok {
+		return &domain.UserSettings{
+			UserID:            userID,
+			AmountDisplayMode: domain.AmountDisplayModeFull,
+			UpdatedAt:         time.Now(),
+		}, nil
+	}
+	cp := *st
+	return &cp, nil
+}
+
+func (s *InMemoryStore) UpsertUserSettings(input domain.UserSettings) (*domain.UserSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if input.AmountDisplayMode != domain.AmountDisplayModeCompact && input.AmountDisplayMode != domain.AmountDisplayModeFull {
+		input.AmountDisplayMode = domain.AmountDisplayModeFull
+	}
+	input.UpdatedAt = time.Now()
+	s.userSettings[input.UserID] = &input
+	cp := input
+	return &cp, nil
+}
+
 
 func (s *InMemoryStore) GetUserByEmail(email string) (*domain.User, bool) {
 	s.mu.RLock()

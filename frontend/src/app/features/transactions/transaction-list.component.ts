@@ -42,6 +42,22 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   selectedTransactionIds = new Set<string>();
   accountNameById = new Map<string, string>();
 
+  get totalIncome(): number {
+    return this.items
+      .filter((x) => x.type === 'income')
+      .reduce((sum, x) => sum + (Number.parseFloat(String(x.amount)) || 0), 0);
+  }
+
+  get totalExpense(): number {
+    return this.items
+      .filter((x) => x.type === 'expense')
+      .reduce((sum, x) => sum + (Number.parseFloat(String(x.amount)) || 0), 0);
+  }
+
+  get netCashFlow(): number {
+    return this.totalIncome - this.totalExpense;
+  }
+
   private readonly destroy$ = new Subject<void>();
 
   constructor(

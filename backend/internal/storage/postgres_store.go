@@ -140,6 +140,48 @@ func (s *PostgresStore) GetUserByEmail(email string) (*domain.User, bool) {
 	return &u, true
 }
 
+func (s *PostgresStore) GetUserSettings(userID domain.ID) (*domain.UserSettings, error) {
+	row := s.pool.QueryRow(context.Background(), `
+		SELECT user_id, amount_display_mode, updated_at
+		FROM user_settings WHERE user_id=$1`, userID)
+	var st domain.UserSettings
+	var modeStr string
+	if err := row.Scan(&st.UserID, &modeStr, &st.UpdatedAt); err != nil {
+		// Default if not found
+		return &domain.UserSettings{
+			UserID:            userID,
+			AmountDisplayMode: domain.AmountDisplayModeFull,
+			UpdatedAt:         time.Now(),
+		}, nil
+	}
+	st.AmountDisplayMode = domain.AmountDisplayMode(modeStr)
+	return &st, nil
+}
+
+func (s *PostgresStore) UpsertUserSettings(input domain.UserSettings) (*domain.UserSettings, error) {
+	if input.AmountDisplayMode != domain.AmountDisplayModeCompact && input.AmountDisplayMode != domain.AmountDisplayModeFull {
+		input.AmountDisplayMode = domain.AmountDisplayModeFull
+	}
+	now := time.Now()
+	row := s.pool.QueryRow(context.Background(), `
+		INSERT INTO user_settings (user_id, amount_display_mode, created_at, updated_at)
+		VALUES ($1, $2, $3, $3)
+		ON CONFLICT (user_id) DO UPDATE SET
+			amount_display_mode = EXCLUDED.amount_display_mode,
+			updated_at = EXCLUDED.updated_at
+		RETURNING user_id, amount_display_mode, updated_at
+	`, input.UserID, string(input.AmountDisplayMode), now)
+
+	var res domain.UserSettings
+	var modeStr string
+	if err := row.Scan(&res.UserID, &modeStr, &res.UpdatedAt); err != nil {
+		return nil, err
+	}
+	res.AmountDisplayMode = domain.AmountDisplayMode(modeStr)
+	return &res, nil
+}
+
+
 func (s *PostgresStore) GetWorkspace(id domain.ID) (*domain.Workspace, bool) {
 	row := s.pool.QueryRow(context.Background(), `
 		SELECT id, name, base_currency, COALESCE(fiscal_year_end::text, ''),

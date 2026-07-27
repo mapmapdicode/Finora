@@ -84,6 +84,8 @@ export class AppComponent implements OnDestroy {
     this.langService.setLanguage(lang);
   }
 
+  amountDisplayMode: 'full' | 'compact' = 'full';
+
   toggleDarkMode() {
     this.isDarkMode = !this.isDarkMode;
     if (this.isDarkMode) {
@@ -91,6 +93,18 @@ export class AppComponent implements OnDestroy {
     } else {
       document.documentElement.removeAttribute('data-theme');
     }
+  }
+
+  toggleAmountDisplayMode() {
+    this.amountDisplayMode = this.amountDisplayMode === 'full' ? 'compact' : 'full';
+    this.api.request('PUT', '/user/settings', { amountDisplayMode: this.amountDisplayMode }).subscribe({
+      next: () => {
+        this.toastService.showSuccess(
+          `Đã chuyển chế độ hiển thị số tiền sang: ${this.amountDisplayMode === 'compact' ? 'Viết tắt (100)' : 'Đầy đủ (100.000 VND)'}`
+        );
+      },
+      error: () => {}
+    });
   }
 
   toastClass(type: 'info' | 'success' | 'error') {

@@ -21,6 +21,7 @@ type Config struct {
 	SePayWebhookSecret    string
 	TelegramWebhookSecret string
 	HermesExecutorSecret  string
+	RedisURL              string
 }
 
 func Load() (*Config, error) {
@@ -33,6 +34,7 @@ func Load() (*Config, error) {
 		StaticToken:           os.Getenv("APP_STATIC_TOKEN"),
 		JWTSecret:             os.Getenv("APP_JWT_SECRET"),
 		DatabaseURL:           os.Getenv("DATABASE_URL"),
+		RedisURL:              os.Getenv("REDIS_URL"),
 		RequestIDHeader:       os.Getenv("REQUEST_ID_HEADER"),
 		LogLevel:              os.Getenv("LOG_LEVEL"),
 		SePayWebhookSecret:    os.Getenv("SEPAY_WEBHOOK_SECRET"),

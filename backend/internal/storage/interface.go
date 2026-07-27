@@ -13,6 +13,9 @@ type Store interface {
 	GetUser(id domain.ID) (*domain.User, bool)
 	GetUserByID(id domain.ID) (*domain.User, bool)
 	GetUserByEmail(email string) (*domain.User, bool)
+	GetUserSettings(userID domain.ID) (*domain.UserSettings, error)
+	UpsertUserSettings(settings domain.UserSettings) (*domain.UserSettings, error)
+
 
 	GetWorkspace(id domain.ID) (*domain.Workspace, bool)
 	CreateWorkspace(name, baseCurrency string, ownerID domain.ID) (*domain.Workspace, error)

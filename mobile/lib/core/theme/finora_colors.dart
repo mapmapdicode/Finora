@@ -25,11 +25,7 @@ abstract final class FinoraColors {
     end: Alignment.bottomRight,
   );
   static const bgGradient = LinearGradient(
-    colors: [
-      Color(0x220f172a),
-      Color(0x331a052e),
-      Color(0x55000000),
-    ],
+    colors: [Color(0x220f172a), Color(0x331a052e), Color(0x55000000)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );

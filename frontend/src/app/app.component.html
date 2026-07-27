@@ -71,6 +71,21 @@
         </select>
       </div>
 
+      <!-- Amount Display Mode Toggle Button -->
+      <button
+        *ngIf="isAuthenticated"
+        type="button"
+        (click)="toggleAmountDisplayMode()"
+        class="bg-[var(--bg-subtle)] border border-[var(--border-strong)] rounded-xl px-2.5 py-1 text-xs font-bold flex items-center gap-1.5 hover:bg-black/10 transition-colors cursor-pointer"
+        [title]="'Chế độ số tiền: ' + (amountDisplayMode === 'compact' ? 'Viết tắt (100)' : 'Đầy đủ (100.000 VND)')"
+      >
+        <app-icon name="tune" class="text-xs text-[var(--accent-primary)]"></app-icon>
+        <span class="text-[11px] font-semibold">
+          {{ amountDisplayMode === 'compact' ? 'Rút gọn (100)' : 'Đầy đủ' }}
+        </span>
+      </button>
+
+
       <!-- Dark Mode & Logout -->
       <div class="flex items-center gap-1.5" *ngIf="isAuthenticated">
         <button

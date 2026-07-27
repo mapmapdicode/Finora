@@ -11,6 +11,44 @@
     </div>
   </div>
 
+  <!-- KPI Metrics Overview Banner -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <!-- Total Income Card -->
+    <div class="bg-white border border-emerald-200/80 p-4.5 rounded-2xl flex items-center gap-3.5 shadow-md shadow-slate-200/50">
+      <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+        <app-icon name="arrow_downward" class="text-xl font-bold"></app-icon>
+      </div>
+      <div>
+        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Thu</p>
+        <p class="text-xl font-black text-emerald-600 mt-0.5 tracking-tight">+{{ totalIncome | number:'1.0-0' }} VND</p>
+      </div>
+    </div>
+
+    <!-- Total Expense Card -->
+    <div class="bg-white border border-rose-200/80 p-4.5 rounded-2xl flex items-center gap-3.5 shadow-md shadow-slate-200/50">
+      <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+        <app-icon name="arrow_upward" class="text-xl font-bold"></app-icon>
+      </div>
+      <div>
+        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Chi</p>
+        <p class="text-xl font-black text-rose-600 mt-0.5 tracking-tight">-{{ totalExpense | number:'1.0-0' }} VND</p>
+      </div>
+    </div>
+
+    <!-- Net Cashflow Card -->
+    <div [class]="netCashFlow >= 0 ? 'bg-white border border-emerald-200/80 p-4.5 rounded-2xl flex items-center gap-3.5 shadow-md shadow-slate-200/50' : 'bg-white border border-rose-200/80 p-4.5 rounded-2xl flex items-center gap-3.5 shadow-md shadow-slate-200/50'">
+      <div [class]="netCashFlow >= 0 ? 'w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100' : 'w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100'">
+        <app-icon [name]="netCashFlow >= 0 ? 'trending_up' : 'trending_down'" class="text-xl font-bold"></app-icon>
+      </div>
+      <div>
+        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Dòng Tiền Ròng</p>
+        <p [class]="netCashFlow >= 0 ? 'text-xl font-black text-emerald-600 mt-0.5 tracking-tight' : 'text-xl font-black text-rose-600 mt-0.5 tracking-tight'">
+          {{ netCashFlow >= 0 ? '+' : '' }}{{ netCashFlow | number:'1.0-0' }} VND
+        </p>
+      </div>
+    </div>
+  </div>
+
   <!-- Readonly Warning -->
   <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
     <app-icon name="lock"></app-icon>

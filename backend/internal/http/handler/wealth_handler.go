@@ -193,7 +193,7 @@ type WealthHandler struct {
 func NewWealthHandler(store storage.Store, svc *service.WealthService, cfg *config.Config) *WealthHandler {
 	svcRef := svc
 	if svcRef == nil {
-		svcRef = service.NewWealthService(store)
+		svcRef = service.NewWealthService(store, nil)
 	}
 	secret := ""
 	telegramSecret := ""
@@ -365,8 +365,18 @@ func (h *WealthHandler) GetPortfolioNetWorth(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, nw)
+	mode := h.getAmountDisplayMode(c)
+	resp := dto.PortfolioNetWorthResponse{
+		AsOfAt:            nw.AsOfAt,
+		BaseCurrency:      nw.BaseCurrency,
+		NetWorth:          nw.NetWorth,
+		Cash:              nw.Cash,
+		Liabilities:       nw.Liabilities,
+		AmountDisplayMode: mode,
+	}
+	c.JSON(http.StatusOK, resp)
 }
+
 
 func (h *WealthHandler) requireEditorRole(c *gin.Context) bool {
 	_, ok := h.requireWorkspaceOrReject(c)
@@ -677,11 +687,14 @@ func (h *WealthHandler) ListTransactions(c *gin.Context) {
 		nextCursor = dto.EncodeTransactionCursor(last.OccurredAt, string(last.ID))
 	}
 
+	mode := h.getAmountDisplayMode(c)
 	c.JSON(http.StatusOK, dto.TransactionListResponse{
-		Items:      out,
-		NextCursor: nextCursor,
+		Items:             out,
+		NextCursor:        nextCursor,
+		AmountDisplayMode: mode,
 	})
 }
+
 
 func (h *WealthHandler) CreateTransaction(c *gin.Context) {
 	if !h.requireEditorRole(c) {
@@ -2746,3 +2759,61 @@ func marshalAuditPayload(v any) string {
 		return string(raw)
 	}
 }
+
+func (h *WealthHandler) getAmountDisplayMode(c *gin.Context) string {
+	if header := strings.TrimSpace(c.GetHeader("X-Amount-Display-Mode")); header != "" {
+		if header == string(domain.AmountDisplayModeCompact) || header == string(domain.AmountDisplayModeFull) {
+			return header
+		}
+	}
+	userID := c.GetString("user_id")
+	if userID != "" {
+		st, err := h.service.GetUserSettings(c.Request.Context(), domain.ID(userID))
+		if err == nil && st != nil && st.AmountDisplayMode != "" {
+			return string(st.AmountDisplayMode)
+		}
+	}
+	return string(domain.AmountDisplayModeFull)
+}
+
+func (h *WealthHandler) GetUserSettings(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "user context missing"})
+		return
+	}
+	st, err := h.service.GetUserSettings(c.Request.Context(), domain.ID(userID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "INTERNAL_ERROR", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, dto.UserSettingsResponse{
+		UserID:            string(st.UserID),
+		AmountDisplayMode: string(st.AmountDisplayMode),
+		UpdatedAt:         st.UpdatedAt.Format(time.RFC3339),
+	})
+}
+
+func (h *WealthHandler) UpdateUserSettings(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "user context missing"})
+		return
+	}
+	var body dto.UserSettingsRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+	st, err := h.service.UpdateUserSettings(c.Request.Context(), domain.ID(userID), domain.AmountDisplayMode(body.AmountDisplayMode))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, dto.UserSettingsResponse{
+		UserID:            string(st.UserID),
+		AmountDisplayMode: string(st.AmountDisplayMode),
+		UpdatedAt:         st.UpdatedAt.Format(time.RFC3339),
+	})
+}
+

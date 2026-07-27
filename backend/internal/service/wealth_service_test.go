@@ -69,7 +69,7 @@ func TestProcessQueuedBankFeed_OutboundAutoExpense(t *testing.T) {
 		t.Fatalf("create connection: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 	feed, err := svc.ProcessSePayIncoming(SePayWebhookEvent{
 		ConnectionID: string(conn.ID),
 		AccountID:    string(conn.ID),
@@ -122,7 +122,7 @@ func TestEnqueueAndProcessSePayEvent(t *testing.T) {
 		t.Fatalf("create connection: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 	event, err := svc.EnqueueSePayIncoming(SePayWebhookEvent{
 		ConnectionID: string(conn.ID),
 		Direction:    "out",
@@ -179,7 +179,7 @@ func TestEnqueueSePayEventDeduplicatesByExternalID(t *testing.T) {
 		t.Fatalf("create connection: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 	payload := SePayWebhookEvent{
 		ConnectionID: string(conn.ID),
 		Direction:    "in",
@@ -218,7 +218,7 @@ func TestProcessQueuedBankFeed_InboundAutoIncome(t *testing.T) {
 		t.Fatalf("create connection: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 	feed, err := svc.ProcessSePayIncoming(SePayWebhookEvent{
 		ConnectionID: string(conn.ID),
 		Direction:    "in",
@@ -271,7 +271,7 @@ func TestProcessQueuedBankFeed_InboundTransferNeedsReview(t *testing.T) {
 		t.Fatalf("create connection: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 	feed, err := svc.ProcessSePayIncoming(SePayWebhookEvent{
 		ConnectionID: string(conn.ID),
 		Direction:    "in",
@@ -317,7 +317,7 @@ func TestReclassifyBankFeedClearsRuleIDAndPosts(t *testing.T) {
 		t.Fatalf("create connection: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 	feed, err := svc.ProcessSePayIncoming(SePayWebhookEvent{
 		ConnectionID: string(conn.ID),
 		Direction:    "in",
@@ -416,7 +416,7 @@ func TestComputeNetWorthAttributionAndVersioning(t *testing.T) {
 		t.Fatalf("add asset valuation: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 
 	first, err := svc.ComputeNetWorth(ws.ID)
 	if err != nil {
@@ -567,7 +567,7 @@ func TestComputeNetWorthAtHistoricalCutsByAsOf(t *testing.T) {
 		t.Fatalf("create second income tx: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 
 	mid, err := svc.GetPortfolioNetWorthAt(string(pID), base.AddDate(0, 0, 3))
 	if err != nil {
@@ -713,7 +713,7 @@ func TestGetPortfolioNetWorthUsesPortfolioScope(t *testing.T) {
 		t.Fatalf("add p2 valuation: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 	p1Net, err := svc.GetPortfolioNetWorth(string(p1.ID))
 	if err != nil {
 		t.Fatalf("compute p1 net worth: %v", err)
@@ -760,7 +760,7 @@ func TestGetPortfolioSnapshotsPagination(t *testing.T) {
 		t.Fatalf("missing account")
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 	for i := 0; i < 5; i++ {
 		_, err := store.CreateTransaction(domain.Transaction{
 			WorkspaceID: ws.ID,
@@ -848,7 +848,7 @@ func TestGetPortfolioSnapshotsForPortfolio(t *testing.T) {
 		t.Fatalf("create account p2: %v", err)
 	}
 
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 	if _, err := store.CreateTransaction(domain.Transaction{
 		WorkspaceID: ws.ID,
 		AccountID:   acc1.ID,
@@ -928,7 +928,7 @@ func TestCreateTransactionRejectsInvalidStatus(t *testing.T) {
 	if len(accs) == 0 {
 		t.Fatal("missing account")
 	}
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 
 	_, err = svc.CreateTransaction(domain.Transaction{
 		WorkspaceID: ws.ID,
@@ -960,7 +960,7 @@ func TestCreateTransactionRejectsCrossWorkspaceAccount(t *testing.T) {
 	if len(accounts1) == 0 || len(accounts2) == 0 {
 		t.Fatal("missing accounts in workspace setup")
 	}
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 
 	_, err = svc.CreateTransaction(domain.Transaction{
 		WorkspaceID: ws1.ID,
@@ -986,7 +986,7 @@ func TestPendingTransactionDoesNotAffectNetWorth(t *testing.T) {
 	if len(accs) == 0 {
 		t.Fatal("missing account")
 	}
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 
 	posted, err := svc.CreateTransaction(domain.Transaction{
 		WorkspaceID: ws.ID,
@@ -1038,7 +1038,7 @@ func TestCreateTransactionRejectsNonPositiveAmount(t *testing.T) {
 	if len(accs) == 0 {
 		t.Fatal("missing account")
 	}
-	svc := NewWealthService(store)
+	svc := NewWealthService(store, nil)
 
 	_, err = svc.CreateTransaction(domain.Transaction{
 		WorkspaceID: ws.ID,

@@ -130,7 +130,7 @@ func TestListPortfolioSnapshotsRejectsInvalidLimit(t *testing.T) {
 		t.Fatalf("missing portfolio")
 	}
 
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	r := gin.New()
 	r.GET("/portfolios/:id/snapshots", h.ListPortfolioSnapshots)
 
@@ -166,7 +166,7 @@ func TestListPortfolioSnapshotsSupportsPagination(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 
-	svc := service.NewWealthService(store)
+	svc := service.NewWealthService(store, nil)
 	for i := 0; i < 4; i++ {
 		_, err := store.CreateTransaction(domain.Transaction{
 			WorkspaceID: ws.ID,
@@ -301,7 +301,7 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 		t.Fatalf("create tx3: %v", err)
 	}
 
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	r := gin.New()
 	r.GET("/transactions", h.ListTransactions)
 
@@ -387,7 +387,7 @@ func TestListTransactionsRejectsInvalidCursor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create workspace: %v", err)
 	}
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	r := gin.New()
 	r.GET("/transactions", h.ListTransactions)
 
@@ -481,7 +481,7 @@ func TestGetPortfolioNetWorthSupportsAsOfQuery(t *testing.T) {
 		t.Fatalf("create second income tx: %v", err)
 	}
 
-	svc := service.NewWealthService(store)
+	svc := service.NewWealthService(store, nil)
 	h := NewWealthHandler(store, svc, nil)
 	r := gin.New()
 	r.GET("/portfolios/:id/net-worth", h.GetPortfolioNetWorth)
@@ -607,7 +607,7 @@ func TestListAssistantCommandsFiltersByWorkspace(t *testing.T) {
 		t.Fatalf("create ws2 command: %v", err)
 	}
 
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	r := gin.New()
 	r.GET("/assistant/commands", h.ListAssistantCommands)
 
@@ -633,7 +633,7 @@ func TestListAssistantCommandsFiltersByWorkspace(t *testing.T) {
 
 func TestTelegramWebhookRejectsInvalidSecret(t *testing.T) {
 	store := storage.NewInMemoryStore()
-	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{
 		TelegramWebhookSecret: "top-secret",
 	})
 	r := gin.New()
@@ -658,7 +658,7 @@ func TestTelegramWebhookCreatesAssistantCommandForLinkedWorkspace(t *testing.T) 
 		t.Fatalf("create workspace: %v", err)
 	}
 
-	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{
 		TelegramWebhookSecret: "top-secret",
 	})
 	r := gin.New()
@@ -701,7 +701,7 @@ func TestTelegramWebhookCreatesAssistantCommandForLinkedWorkspace(t *testing.T) 
 
 func TestTelegramWebhookRequiresWorkspaceLink(t *testing.T) {
 	store := storage.NewInMemoryStore()
-	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{
 		TelegramWebhookSecret: "top-secret",
 	})
 	r := gin.New()
@@ -753,7 +753,7 @@ func TestCreateAssistantCommandSetsIntentAndStatus(t *testing.T) {
 			c.Set("workspace_id", string(ws.ID))
 			c.Set("workspace_role", "owner")
 			c.Set("user_id", string(ownerID))
-			h := NewWealthHandler(store, service.NewWealthService(store), nil)
+			h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 			h.CreateAssistantCommand(c)
 
 			if resp.Result().StatusCode != http.StatusCreated {
@@ -802,7 +802,7 @@ func TestApproveCommandTransitions(t *testing.T) {
 	c.Set("workspace_id", string(ws.ID))
 	c.Set("workspace_role", "owner")
 	c.Set("user_id", string(ownerID))
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	h.ApproveCommand(c)
 
 	var out domain.AssistantCommand
@@ -848,7 +848,7 @@ func TestApproveCommandRejectsInvalidTransition(t *testing.T) {
 	c.Set("workspace_id", string(ws.ID))
 	c.Set("workspace_role", "owner")
 	c.Set("user_id", string(ownerID))
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	h.ApproveCommand(c)
 
 	if resp.Result().StatusCode != http.StatusConflict {
@@ -895,7 +895,7 @@ func TestCancelCommandTransitionsAndTerminalRules(t *testing.T) {
 		c.Set("workspace_id", string(ws.ID))
 		c.Set("workspace_role", "owner")
 		c.Set("user_id", string(ownerID))
-		h := NewWealthHandler(store, service.NewWealthService(store), nil)
+		h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 		h.CancelCommand(c)
 
 		if resp.Result().StatusCode != http.StatusOK {
@@ -919,7 +919,7 @@ func TestCancelCommandTransitionsAndTerminalRules(t *testing.T) {
 		c.Set("workspace_id", string(ws.ID))
 		c.Set("workspace_role", "owner")
 		c.Set("user_id", string(ownerID))
-		h := NewWealthHandler(store, service.NewWealthService(store), nil)
+		h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 		h.CancelCommand(c)
 
 		if resp.Result().StatusCode != http.StatusConflict {
@@ -946,7 +946,7 @@ func TestApproveCommandRejectsReplayToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
 	}
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
 	approveReq := func() *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/assistant/commands/"+string(cmd.ID)+"/approve?approvalId="+string(cmd.ApprovalID), nil)
@@ -990,7 +990,7 @@ func TestTelegramApprovalCallbackSingleUse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
 	}
-	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{
 		TelegramWebhookSecret: "top-secret",
 	})
 	r := gin.New()
@@ -1044,7 +1044,7 @@ func TestExecutorEventsChecksSecretAndTransitionMapping(t *testing.T) {
 		t.Fatalf("create assistant command: %v", err)
 	}
 
-	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{
 		HermesExecutorSecret: "hermes-secret",
 	})
 	cases := []struct {
@@ -1103,7 +1103,7 @@ func TestCreateSePayConnectionReturnsConnectUrlAndPersistedState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create workspace: %v", err)
 	}
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/integrations/sepay/connect", strings.NewReader(`{"provider":"sepay","scope":"read_transactions"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -1191,7 +1191,7 @@ func TestSePayCallbackStrictStateValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create bank connection: %v", err)
 	}
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
 	t.Run("missing_state", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/integrations/sepay/callback?connectionId="+string(conn.ID), nil)
@@ -1257,7 +1257,7 @@ func TestSyncBankConnectionRateLimitsAndCooldown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create bank connection: %v", err)
 	}
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
 	request := func() int {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-connections/"+string(conn.ID)+"/sync", nil)
@@ -1302,7 +1302,7 @@ func TestCreateSePayConnectionRequiresOwnerRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create workspace: %v", err)
 	}
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
 	t.Run("viewer_rejected", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/integrations/sepay/connect", strings.NewReader(`{"provider":"sepay","scope":"read_transactions"}`))
@@ -1368,7 +1368,7 @@ func TestRevokeBankConnectionRequiresOwnerRole(t *testing.T) {
 		t.Fatalf("create bank connection: %v", err)
 	}
 
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
 	t.Run("viewer_rejected", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-connections/"+string(conn.ID)+"/revoke", nil)
@@ -1433,7 +1433,7 @@ func TestSyncBankConnectionRejectsViewerRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create bank connection: %v", err)
 	}
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
 	t.Run("viewer_rejected", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-connections/"+string(conn.ID)+"/sync", nil)
@@ -1468,7 +1468,7 @@ func TestRunForecastScenarioTransitionsToRunning(t *testing.T) {
 		t.Fatalf("create forecast scenario: %v", err)
 	}
 
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	body := strings.NewReader(`{"foo":"bar"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/forecast-scenarios/"+string(scenario.ID)+"/run", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -1533,7 +1533,7 @@ func TestBankAutomationRulesRequireEditorRole(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	body := `{"accountId":"` + string(acc.ID) + `","name":"Inbound rule","predicate":"in","type":"in","actionType":"income","direction":"in","priority":1,"enabled":true}`
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
 	t.Run("create_blocked_for_viewer", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/bank-automation-rules", strings.NewReader(body))
@@ -1619,7 +1619,7 @@ func TestModifyAutomationRulePatchOnlyNameKeepsEnabled(t *testing.T) {
 		t.Fatalf("create rule: %v", err)
 	}
 
-	h := NewWealthHandler(store, service.NewWealthService(store), nil)
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/bank-automation-rules/"+string(rule.ID), strings.NewReader(`{"name":"Updated name"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
@@ -1658,7 +1658,7 @@ func TestCreateAccountRecordsAuditLog(t *testing.T) {
 		t.Fatal("missing default portfolio")
 	}
 
-	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{})
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{})
 	payload := `{"portfolioId":"` + string(p.ID) + `","name":"Cash","type":"cash","currency":"VND"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts", strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
@@ -1714,7 +1714,7 @@ func TestListAuditLogsRequiresWorkspace(t *testing.T) {
 	if !ok {
 		t.Fatal("missing default portfolio")
 	}
-	h := NewWealthHandler(store, service.NewWealthService(store), &config.Config{})
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{})
 	payload := `{"portfolioId":"` + string(p.ID) + `","name":"Cash","type":"cash","currency":"VND"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts", strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")

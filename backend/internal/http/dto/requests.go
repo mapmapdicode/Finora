@@ -31,18 +31,30 @@ type PortfolioCreateRequest struct {
 	BaseCurrency string `json:"baseCurrency"`
 }
 
+type UserSettingsRequest struct {
+	AmountDisplayMode string `json:"amountDisplayMode"`
+}
+
+type UserSettingsResponse struct {
+	UserID            string `json:"userId"`
+	AmountDisplayMode string `json:"amountDisplayMode"`
+	UpdatedAt         string `json:"updatedAt"`
+}
+
 type PortfolioNetWorthResponse struct {
-	AsOfAt       time.Time `json:"asOfAt"`
-	BaseCurrency string    `json:"baseCurrency"`
-	NetWorth     string    `json:"netWorth"`
-	Cash         string    `json:"cash"`
-	Liabilities  string    `json:"liabilities"`
+	AsOfAt            time.Time `json:"asOfAt"`
+	BaseCurrency      string    `json:"baseCurrency"`
+	NetWorth          string    `json:"netWorth"`
+	Cash              string    `json:"cash"`
+	Liabilities       string    `json:"liabilities"`
+	AmountDisplayMode string    `json:"amountDisplayMode"`
 }
 
 type PortfolioSnapshotResponse struct {
-	AsOfAt      time.Time `json:"asOfAt"`
-	NetWorth    string    `json:"netWorth"`
-	Attribution string    `json:"attribution"`
+	AsOfAt            time.Time `json:"asOfAt"`
+	NetWorth          string    `json:"netWorth"`
+	Attribution       string    `json:"attribution"`
+	AmountDisplayMode string    `json:"amountDisplayMode"`
 }
 
 type AccountCreateRequest struct {
@@ -77,9 +89,11 @@ type TransactionListQuery struct {
 }
 
 type TransactionListResponse struct {
-	Items      []domain.Transaction `json:"items"`
-	NextCursor string               `json:"nextCursor"`
+	Items             []domain.Transaction `json:"items"`
+	NextCursor        string               `json:"nextCursor"`
+	AmountDisplayMode string               `json:"amountDisplayMode"`
 }
+
 
 type PaginatedCursor struct {
 	OccurredAt time.Time

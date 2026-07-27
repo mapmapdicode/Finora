@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,13 +15,16 @@ import (
 
 	"github.com/google/uuid"
 
+	"wealthos-backend/internal/cache"
 	"wealthos-backend/internal/domain"
 	"wealthos-backend/internal/storage"
 )
 
 type WealthService struct {
 	store storage.Store
+	cache cache.CacheService
 }
+
 
 type LoginResult struct {
 	User      domain.User       `json:"user"`
@@ -191,9 +195,66 @@ type PaymentRequestCreate struct {
 	Note      string
 }
 
-func NewWealthService(store storage.Store) *WealthService {
-	return &WealthService{store: store}
+func NewWealthService(store storage.Store, cacheService cache.CacheService) *WealthService {
+	return &WealthService{store: store, cache: cacheService}
 }
+
+func (s *WealthService) GetUserSettings(ctx context.Context, userID domain.ID) (*domain.UserSettings, error) {
+	if userID == "" {
+		return &domain.UserSettings{AmountDisplayMode: domain.AmountDisplayModeFull}, nil
+	}
+
+	// 1. Check Redis cache first
+	if s.cache != nil {
+		cached, err := s.cache.GetUserSettings(ctx, string(userID))
+		if err == nil && cached != nil {
+			return cached, nil
+		}
+	}
+
+	// 2. Fallback to PostgreSQL DB / Store
+	settings, err := s.store.GetUserSettings(userID)
+	if err != nil {
+		return &domain.UserSettings{
+			UserID:            userID,
+			AmountDisplayMode: domain.AmountDisplayModeFull,
+			UpdatedAt:         time.Now(),
+		}, nil
+	}
+
+	// 3. Populate Redis Cache asynchronously or synchronously
+	if s.cache != nil && settings != nil {
+		_ = s.cache.SetUserSettings(ctx, string(userID), settings)
+	}
+
+	return settings, nil
+}
+
+func (s *WealthService) UpdateUserSettings(ctx context.Context, userID domain.ID, mode domain.AmountDisplayMode) (*domain.UserSettings, error) {
+	if userID == "" {
+		return nil, errors.New("unauthorized: missing user ID")
+	}
+
+	if mode != domain.AmountDisplayModeCompact && mode != domain.AmountDisplayModeFull {
+		mode = domain.AmountDisplayModeFull
+	}
+
+	updated, err := s.store.UpsertUserSettings(domain.UserSettings{
+		UserID:            userID,
+		AmountDisplayMode: mode,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Update Redis cache
+	if s.cache != nil && updated != nil {
+		_ = s.cache.SetUserSettings(ctx, string(userID), updated)
+	}
+
+	return updated, nil
+}
+
 
 func (s *WealthService) RegisterUser(email, password, name string) (domain.User, error) {
 	if email == "" || password == "" || name == "" {

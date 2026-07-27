@@ -58,6 +58,9 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 		protected := api.Group("")
 		protected.Use(middleware.UserContextMiddleware(cfg.StaticToken, cfg.JWTSecret))
 		protected.GET("/workspaces", h.ListWorkspaces)
+		protected.GET("/user/settings", h.GetUserSettings)
+		protected.PUT("/user/settings", h.UpdateUserSettings)
+
 
 		workspaceRequired := protected.Group("")
 		workspaceRequired.Use(middleware.WorkspaceMembershipMiddleware(store, false))

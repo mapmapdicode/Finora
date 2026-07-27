@@ -87,6 +87,20 @@ type User struct {
 	Password string `json:"-"`
 }
 
+type AmountDisplayMode string
+
+const (
+	AmountDisplayModeFull    AmountDisplayMode = "full"
+	AmountDisplayModeCompact AmountDisplayMode = "compact"
+)
+
+type UserSettings struct {
+	UserID            ID                `json:"userId"`
+	AmountDisplayMode AmountDisplayMode `json:"amountDisplayMode"`
+	UpdatedAt         time.Time         `json:"updatedAt"`
+}
+
+
 type Workspace struct {
 	Timestamped
 	Name          string `json:"name"`
