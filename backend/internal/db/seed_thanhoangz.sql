@@ -2,7 +2,7 @@
 -- FINORA / WEALTHOS DATABASE SEED SCRIPT
 -- User: thanhoangz
 -- Password: HoangThanZ6^
--- Workspace: thanhoangz
+-- User: thanhoangz
 -- Account: Bank (Initial Balance: 180,000,000 VND)
 -- ============================================================================
 
@@ -32,8 +32,8 @@ VALUES (
 ON CONFLICT (user_id) DO UPDATE 
 SET amount_display_mode = 'full', updated_at = NOW();
 
--- 3. Insert Workspace: thanhoangz
-INSERT INTO workspaces (id, name, base_currency, fiscal_year_end, created_at, updated_at)
+-- 3. Insert User: thanhoangz
+INSERT INTO users (id, name, base_currency, fiscal_year_end, created_at, updated_at)
 VALUES (
     'e8190c42-7a1b-4f9e-a832-159c3d421890',
     'thanhoangz',
@@ -45,8 +45,8 @@ VALUES (
 ON CONFLICT (id) DO UPDATE 
 SET name = EXCLUDED.name, updated_at = NOW();
 
--- 4. Insert Workspace Member (Owner)
-INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
+-- 4. Insert User Member (Owner)
+INSERT INTO user_members (id, user_id, user_id, role, created_at, updated_at)
 VALUES (
     'f92a10b3-8c2d-4e11-9a43-260b4e532901',
     'e8190c42-7a1b-4f9e-a832-159c3d421890',
@@ -55,10 +55,10 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (workspace_id, user_id) DO NOTHING;
+ON CONFLICT (user_id, user_id) DO NOTHING;
 
 -- 5. Insert Portfolio: Default
-INSERT INTO portfolios (id, workspace_id, name, base_currency, created_at, updated_at)
+INSERT INTO portfolios (id, user_id, name, base_currency, created_at, updated_at)
 VALUES (
     'c38210a4-9b3e-4f12-8d54-371c5e643012',
     'e8190c42-7a1b-4f9e-a832-159c3d421890',
@@ -70,7 +70,7 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- 6. Insert Account: Bank
-INSERT INTO accounts (id, workspace_id, portfolio_id, name, type, currency, created_at, updated_at)
+INSERT INTO accounts (id, user_id, portfolio_id, name, type, currency, created_at, updated_at)
 VALUES (
     'a1928374-b567-4c89-9d01-23456789abcd',
     'e8190c42-7a1b-4f9e-a832-159c3d421890',
@@ -84,7 +84,7 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- 7. Insert Category: Số dư ban đầu
-INSERT INTO categories (id, workspace_id, name, kind, created_at, updated_at)
+INSERT INTO categories (id, user_id, name, kind, created_at, updated_at)
 VALUES (
     'd4719283-a1b2-4c3d-8e5f-678901234567',
     'e8190c42-7a1b-4f9e-a832-159c3d421890',
@@ -93,11 +93,11 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (workspace_id, name, kind) DO NOTHING;
+ON CONFLICT (user_id, name, kind) DO NOTHING;
 
 -- 8. Insert Transaction: Initial Deposit of 180,000,000 VND into Bank Account
 INSERT INTO transactions (
-    id, workspace_id, account_id, category_id, portfolio_id,
+    id, user_id, account_id, category_id, portfolio_id,
     type, amount, currency, note, occurred_at, status, source, created_at, updated_at
 )
 VALUES (

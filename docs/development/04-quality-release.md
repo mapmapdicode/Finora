@@ -55,7 +55,7 @@ Pull request thay financial logic phải có domain review. Pull request đổi 
 - Index lớn dùng concurrent strategy phù hợp PostgreSQL; không khóa bảng transaction trong giờ hoạt động.
 - Migration one-way có backup/restore plan, owner và thời lượng ước lượng.
 - API 2 replica rolling; worker version tương thích job payload cũ. Không deploy migration phá compatibility trước worker/API mới.
-- Feature flags: `sepay_connect`, `sepay_webhook_ingest`, `sepay_auto_expense`, `sepay_auto_income`, `telegram_read`. Flag server-side, có audit khi owner bật policy workspace.
+- Feature flags: `sepay_connect`, `sepay_webhook_ingest`, `sepay_auto_expense`, `sepay_auto_income`, `telegram_read`. Flag server-side, có audit khi owner bật policy user.
 
 ## Observability và SLO
 
@@ -75,7 +75,7 @@ SLO initial: API read/write p95 < 400 ms; webhook durable ACK < 2 s; bank-feed l
 - [ ] TLS everywhere, HSTS, secure cookie/JWT rotation, CSRF strategy nếu cookie session.
 - [ ] Password/provider token/account content không log; secret injected at runtime, rotated and revoked.
 - [ ] Encryption at rest for provider tokens and attachment; signed URL ngắn hạn + authorization trước issue.
-- [ ] Tenant isolation test: đổi ID/path/query không đọc được workspace khác (IDOR suite).
+- [ ] Tenant isolation test: đổi ID/path/query không đọc được user khác (IDOR suite).
 - [ ] HMAC raw body + replay window + dedupe for SePay; no unauthenticated production webhook.
 - [ ] Audit immutable/restricted write; export/delete/revoke/restructure have actor/reason.
 - [ ] Retention/redaction documented for raw bank event and attachment.
@@ -89,7 +89,7 @@ SLO initial: API read/write p95 < 400 ms; webhook durable ACK < 2 s; bank-feed l
 
 ### Private beta
 
-1. Internal workspace: manual transactions and snapshot only.
+1. Internal user: manual transactions and snapshot only.
 2. 5 users: asset/loan flow, support feedback, no auto income.
 3. 10 users: SePay ingest/review; auto expense behind per-account flag.
 4. 25 users: income rules only exact/user-confirmed; daily reconciliation monitoring.

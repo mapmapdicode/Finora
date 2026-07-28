@@ -21,11 +21,11 @@ func main() {
 	fmt.Println("=== TESTING IN-MEMORY STORE ===")
 	memStore := storage.NewInMemoryStore()
 	memSvc := service.NewWealthService(memStore, nil)
-	
+
 	// Seed demo users in memory
 	uID := memStore.SeedDemoUser("thanhoangz", "thanhoangz", "HoangThanZ6^")
 	fmt.Printf("InMemory Seed User ID: %s\n", uID)
-	
+
 	uMem, okMem := memStore.GetUserByEmail("thanhoangz")
 	if okMem {
 		fmt.Printf("GetUserByEmail('thanhoangz') found: ID=%s, Email=%s, Password=%s\n", uMem.ID, uMem.Email, uMem.Password)
@@ -37,7 +37,7 @@ func main() {
 	if errMem != nil {
 		fmt.Printf("memSvc.Authenticate('thanhoangz', 'HoangThanZ6^') FAILED: %v\n", errMem)
 	} else {
-		fmt.Printf("memSvc.Authenticate SUCCESS! User ID=%s, Workspace=%v, Token=%s\n", resMem.User.ID, resMem.Workspace, resMem.Token)
+		fmt.Printf("memSvc.Authenticate SUCCESS! User ID=%s, User=%v, Token=%s\n", resMem.User.ID, resMem.User, resMem.Token)
 	}
 
 	// 2. Test PostgreSQL if reachable

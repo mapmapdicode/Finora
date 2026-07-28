@@ -20,7 +20,7 @@ Tính năng không cải thiện một trong ba câu hỏi trên không nên và
 | Tài liệu/chứng từ cho tài sản | Trung bình–cao | Trung bình | Asset, storage, access control | Làm sau MVP |
 | Cảnh báo concentration và liquidity | Cao | Trung bình | Asset classification, forecast | Làm sau data-quality layer |
 | Mục tiêu tài sản và tiến độ | Trung bình | Thấp | Net worth, scenario | Làm sau snapshot |
-| Chia sẻ gia đình có quyền riêng tư | Cao | Cao | Workspace/RBAC/audit | Thiết kế sớm, triển khai muộn |
+| Chia sẻ gia đình có quyền riêng tư | Cao | Cao | User/RBAC/audit | Thiết kế sớm, triển khai muộn |
 | Import/migration từ Excel | Cao | Trung bình | Mapping, dedupe, audit | Ưu tiên cao khi onboarding |
 | Kết nối ngân hàng/broker | Trung bình | Cao | Consent, đối soát, đối tác theo thị trường | Theo từng thị trường |
 | Gợi ý AI/tư vấn đầu tư | Thấp hoặc rủi ro cao | Cao | Dữ liệu chất lượng, compliance | Chưa làm |
@@ -48,7 +48,7 @@ Tính năng không cải thiện một trong ba câu hỏi trên không nên và
 
 ### Dữ liệu tối thiểu
 
-`action_item(id, workspace_id, type, subject_type, subject_id, severity, due_at, state, rule_version, created_at, resolved_at)`; nội dung hiển thị được tái tạo từ dữ liệu nguồn để không thành một bản sao sự thật thứ hai.
+`action_item(id, user_id, type, subject_type, subject_id, severity, due_at, state, rule_version, created_at, resolved_at)`; nội dung hiển thị được tái tạo từ dữ liệu nguồn để không thành một bản sao sự thật thứ hai.
 
 ## 2. Đối soát tài sản ròng và data quality
 
@@ -133,7 +133,7 @@ CSV trước, `.xlsx` sau nếu chi phí parser/UX không tương xứng. Không
 
 ## 8. Chia sẻ gia đình và tách cá nhân–kinh doanh
 
-Đây là năng lực có giá trị nhưng là thay đổi trust model, không chỉ là thêm một nút “mời thành viên”. Thiết kế dữ liệu từ sớm với `workspace`, ownership và audit, nhưng chỉ mở UI sau khi có RBAC rõ ràng.
+Đây là năng lực có giá trị nhưng là thay đổi trust model, không chỉ là thêm một nút “mời thành viên”. Thiết kế dữ liệu từ sớm với `user`, ownership và audit, nhưng chỉ mở UI sau khi có RBAC rõ ràng.
 
 | Vai trò | Quyền gợi ý |
 |---|---|
@@ -142,7 +142,7 @@ CSV trước, `.xlsx` sau nếu chi phí parser/UX không tương xứng. Không
 | Viewer | Chỉ xem scope được cấp, không xem attachment nhạy cảm mặc định |
 | Accountant | Xem/đối soát ledger; không xem ghi chú cá nhân nếu không được cấp |
 
-Nên hỗ trợ tag hoặc portfolio `personal`/`business` trước. Tách workspace độc lập chỉ cần khi yêu cầu riêng tư, sổ sách hoặc quyền sở hữu thật sự khác nhau.
+Nên hỗ trợ tag hoặc portfolio `personal`/`business` trước. Tách user độc lập chỉ cần khi yêu cầu riêng tư, sổ sách hoặc quyền sở hữu thật sự khác nhau.
 
 ## Thứ tự đề xuất sau roadmap hiện tại
 
@@ -156,7 +156,7 @@ Nên hỗ trợ tag hoặc portfolio `personal`/`business` trước. Tách works
 ## Quyết định cần chốt trước khi triển khai
 
 1. Chu kỳ đối soát mặc định là tháng, quý hay do từng loại tài sản cấu hình?
-2. Ai được xem tên/ghi chú/chứng từ của counterparty trong workspace chung?
+2. Ai được xem tên/ghi chú/chứng từ của counterparty trong user chung?
 3. Revert import batch có được phép khi batch đã ảnh hưởng snapshot đã `locked` không?
 4. “Expected inflow có độ tin cậy cao” được xác định thủ công, theo trạng thái loan, hay cả hai?
-5. Ngưỡng stale, cash floor và concentration mặc định theo workspace hay do từng portfolio/asset class?
+5. Ngưỡng stale, cash floor và concentration mặc định theo user hay do từng portfolio/asset class?

@@ -25,11 +25,9 @@ type WealthService struct {
 	cache cache.CacheService
 }
 
-
 type LoginResult struct {
-	User      domain.User       `json:"user"`
-	Token     string            `json:"token"`
-	Workspace *domain.Workspace `json:"workspace,omitempty"`
+	User  domain.User `json:"user"`
+	Token string      `json:"token"`
 }
 
 type NetWorthResult struct {
@@ -46,17 +44,18 @@ type NetWorthResult struct {
 }
 
 type SePayWebhookEvent struct {
-	ConnectionID string `json:"connectionId"`
-	AccountID    string `json:"accountId"`
-	Direction    string `json:"direction"`
-	Amount       string `json:"amount"`
-	Currency     string `json:"currency"`
-	Counterparty string `json:"counterparty"`
-	Description  string `json:"description"`
-	Reference    string `json:"reference"`
-	Content      string `json:"content"`
-	ExternalID   string `json:"externalTransactionId"`
-	OccurredAt   string `json:"occurredAt"`
+	ConnectionID      string `json:"connectionId"`
+	ProviderAccountID string `json:"providerAccountId"`
+	AccountID         string `json:"accountId"`
+	Direction         string `json:"direction"`
+	Amount            string `json:"amount"`
+	Currency          string `json:"currency"`
+	Counterparty      string `json:"counterparty"`
+	Description       string `json:"description"`
+	Reference         string `json:"reference"`
+	Content           string `json:"content"`
+	ExternalID        string `json:"externalTransactionId"`
+	OccurredAt        string `json:"occurredAt"`
 }
 
 type bankFeedClassification struct {
@@ -90,9 +89,9 @@ var (
 
 var (
 	snapshotMu sync.RWMutex
-	// historyByWorkspace stores bounded net-worth snapshots per workspace and optional portfolio scope.
-	historyByWorkspace = map[domain.ID]map[domain.ID][]netWorthSnapshot{}
-	snapshotVersion    = map[domain.ID]map[domain.ID]int{}
+	// historyByUser stores bounded net-worth snapshots per user and optional portfolio scope.
+	historyByUser   = map[domain.ID]map[domain.ID][]netWorthSnapshot{}
+	snapshotVersion = map[domain.ID]map[domain.ID]int{}
 )
 
 type netWorthSnapshot struct {
@@ -154,7 +153,7 @@ type LoanAccrualRow struct {
 
 type LoanAccrualResponse struct {
 	LoanID               string           `json:"loanId"`
-	WorkspaceID          string           `json:"workspaceId"`
+	UserID               string           `json:"userId"`
 	AsOfAt               time.Time        `json:"asOfAt"`
 	Status               string           `json:"status"`
 	Currency             string           `json:"currency"`
@@ -182,10 +181,10 @@ type BudgetRow struct {
 }
 
 type BudgetPeriod struct {
-	Period      string      `json:"period"`
-	WorkspaceID string      `json:"workspaceId"`
-	AsOfAt      time.Time   `json:"asOfAt"`
-	Rows        []BudgetRow `json:"rows"`
+	Period string      `json:"period"`
+	UserID string      `json:"userId"`
+	AsOfAt time.Time   `json:"asOfAt"`
+	Rows   []BudgetRow `json:"rows"`
 }
 
 type PaymentRequestCreate struct {
@@ -255,7 +254,6 @@ func (s *WealthService) UpdateUserSettings(ctx context.Context, userID domain.ID
 	return updated, nil
 }
 
-
 func (s *WealthService) RegisterUser(email, password, name string) (domain.User, error) {
 	if email == "" || password == "" || name == "" {
 		return domain.User{}, errors.New("email, password, name are required")
@@ -278,51 +276,45 @@ func (s *WealthService) Authenticate(email, password string) (LoginResult, error
 	if !ok || strings.TrimSpace(u.Password) != password {
 		return LoginResult{}, errors.New("invalid credentials")
 	}
-	wsList := s.store.ListWorkspaces(u.ID)
-	var ws *domain.Workspace
-	if len(wsList) > 0 {
-		cp := wsList[0]
-		ws = &cp
-	}
 	token := "token-" + string(u.ID)
-	return LoginResult{User: *u, Token: token, Workspace: ws}, nil
+	return LoginResult{User: *u, Token: token}, nil
 }
 
-func (s *WealthService) CurrentNetWorth(workspaceID string) (NetWorthResult, error) {
-	return s.ComputeNetWorth(domain.ID(workspaceID))
+func (s *WealthService) CurrentNetWorth(userID string) (NetWorthResult, error) {
+	return s.ComputeNetWorth(domain.ID(userID))
 }
 
-func (s *WealthService) ComputeNetWorth(workspaceID domain.ID) (NetWorthResult, error) {
-	return s.ComputeNetWorthAt(workspaceID, time.Time{})
+func (s *WealthService) ComputeNetWorth(userID domain.ID) (NetWorthResult, error) {
+	return s.ComputeNetWorthAt(userID, time.Time{})
 }
 
-func (s *WealthService) ComputeNetWorthAt(workspaceID domain.ID, asOf time.Time) (NetWorthResult, error) {
-	return s.computeNetWorthForPortfolioAt(workspaceID, "", asOf, true)
+func (s *WealthService) ComputeNetWorthAt(userID domain.ID, asOf time.Time) (NetWorthResult, error) {
+	return s.computeNetWorthForPortfolioAt(userID, "", asOf, true)
 }
 
-func (s *WealthService) computeNetWorthForPortfolio(workspaceID, portfolioID domain.ID) (NetWorthResult, error) {
-	return s.computeNetWorthForPortfolioAt(workspaceID, portfolioID, time.Time{}, true)
+func (s *WealthService) computeNetWorthForPortfolio(userID, portfolioID domain.ID) (NetWorthResult, error) {
+	return s.computeNetWorthForPortfolioAt(userID, portfolioID, time.Time{}, true)
 }
 
-func (s *WealthService) computeNetWorthForPortfolioAt(workspaceID, portfolioID domain.ID, asOf time.Time, persist bool) (NetWorthResult, error) {
-	ws, ok := s.store.GetWorkspace(workspaceID)
+func (s *WealthService) computeNetWorthForPortfolioAt(userID, portfolioID domain.ID, asOf time.Time, persist bool) (NetWorthResult, error) {
+	ws, ok := s.store.GetUser(userID)
 	if !ok {
-		return NetWorthResult{}, errors.New("workspace not found")
+		return NetWorthResult{}, errors.New("user not found")
 	}
 
 	if asOf.IsZero() {
 		asOf = nowUTC()
 	}
 
-	cash := s.computeCash(workspaceID, portfolioID, asOf)
-	liabilities, accruedPayableInterest := s.computeLoanLiabilityExposure(workspaceID, portfolioID, asOf)
-	receivables, accruedReceivableInterest := s.computeLoanReceivableExposure(workspaceID, portfolioID, asOf)
-	property, otherAssets, staleValuations := s.computeAssetValuationWorkspace(workspaceID, portfolioID, asOf)
+	cash := s.computeCash(userID, portfolioID, asOf)
+	liabilities, accruedPayableInterest := s.computeLoanLiabilityExposure(userID, portfolioID, asOf)
+	receivables, accruedReceivableInterest := s.computeLoanReceivableExposure(userID, portfolioID, asOf)
+	property, otherAssets, staleValuations := s.computeAssetValuationUser(userID, portfolioID, asOf)
 	valuationAssets := property + otherAssets
 	accruedInterestNet := accruedReceivableInterest - accruedPayableInterest
-	reconciledAccounts := len(s.store.ListAccounts(workspaceID))
+	reconciledAccounts := len(s.store.ListAccounts(userID))
 	if portfolioID != "" {
-		reconciledAccounts = len(s.portfolioAccounts(workspaceID, portfolioID))
+		reconciledAccounts = len(s.portfolioAccounts(userID, portfolioID))
 	}
 
 	net := cash + valuationAssets + receivables + accruedReceivableInterest - liabilities - accruedPayableInterest
@@ -341,7 +333,7 @@ func (s *WealthService) computeNetWorthForPortfolioAt(workspaceID, portfolioID d
 		AccruedFee:         0,
 	}
 
-	prev, hasPrev := s.snapshotAtOrBefore(workspaceID, portfolioID, asOf)
+	prev, hasPrev := s.snapshotAtOrBefore(userID, portfolioID, asOf)
 	if hasPrev {
 		current.NetWorthChange = current.NetWorth - prev.NetWorth
 		current.ExternalCashFlow = s.computeExternalCashFlow(current, prev)
@@ -352,15 +344,15 @@ func (s *WealthService) computeNetWorthForPortfolioAt(workspaceID, portfolioID d
 	}
 
 	if persist {
-		recorded := s.addNetWorthSnapshot(workspaceID, portfolioID, current)
+		recorded := s.addNetWorthSnapshot(userID, portfolioID, current)
 		return s.formatNetWorthResult(recorded), nil
 	}
 
 	return s.formatNetWorthResult(current), nil
 }
 
-func (s *WealthService) portfolioAccounts(workspaceID, portfolioID domain.ID) []domain.Account {
-	accounts := s.store.ListAccounts(workspaceID)
+func (s *WealthService) portfolioAccounts(userID, portfolioID domain.ID) []domain.Account {
+	accounts := s.store.ListAccounts(userID)
 	if portfolioID == "" {
 		return accounts
 	}
@@ -373,11 +365,11 @@ func (s *WealthService) portfolioAccounts(workspaceID, portfolioID domain.ID) []
 	return result
 }
 
-func (s *WealthService) computeCash(workspaceID, portfolioID domain.ID, asOf time.Time) float64 {
-	txs := s.store.ListTransactions(workspaceID, "")
+func (s *WealthService) computeCash(userID, portfolioID domain.ID, asOf time.Time) float64 {
+	txs := s.store.ListTransactions(userID, "")
 	accountByID := map[domain.ID]domain.Account{}
 	if portfolioID != "" {
-		for _, account := range s.portfolioAccounts(workspaceID, portfolioID) {
+		for _, account := range s.portfolioAccounts(userID, portfolioID) {
 			accountByID[account.ID] = account
 		}
 	}
@@ -404,7 +396,7 @@ func (s *WealthService) computeCash(workspaceID, portfolioID domain.ID, asOf tim
 		case domain.TransactionTypeLoanPayment:
 			// Keep loan payment sign aligned with loan direction when possible.
 			sign := 1.0
-			if paymentSign, ok := s.loanPaymentSign(workspaceID, portfolioID, t); ok {
+			if paymentSign, ok := s.loanPaymentSign(userID, portfolioID, t); ok {
 				sign = paymentSign
 			}
 			cash += sign * amt
@@ -438,10 +430,10 @@ func (s *WealthService) matchesPortfolio(portfolioID, txPortfolioID, txAccountID
 	return true
 }
 
-func (s *WealthService) snapshotAtOrBefore(workspaceID, portfolioID domain.ID, asOf time.Time) (netWorthSnapshot, bool) {
+func (s *WealthService) snapshotAtOrBefore(userID, portfolioID domain.ID, asOf time.Time) (netWorthSnapshot, bool) {
 	snapshotMu.RLock()
 	defer snapshotMu.RUnlock()
-	scopeHistory, ok := historyByWorkspace[workspaceID]
+	scopeHistory, ok := historyByUser[userID]
 	if !ok {
 		return netWorthSnapshot{}, false
 	}
@@ -460,24 +452,24 @@ func (s *WealthService) snapshotAtOrBefore(workspaceID, portfolioID domain.ID, a
 	return netWorthSnapshot{}, false
 }
 
-func (s *WealthService) addNetWorthSnapshot(workspaceID, portfolioID domain.ID, snapshot netWorthSnapshot) netWorthSnapshot {
+func (s *WealthService) addNetWorthSnapshot(userID, portfolioID domain.ID, snapshot netWorthSnapshot) netWorthSnapshot {
 	snapshotMu.Lock()
 	defer snapshotMu.Unlock()
 
-	scopeVersions, ok := snapshotVersion[workspaceID]
+	scopeVersions, ok := snapshotVersion[userID]
 	if !ok {
 		scopeVersions = map[domain.ID]int{}
-		snapshotVersion[workspaceID] = scopeVersions
+		snapshotVersion[userID] = scopeVersions
 	}
 
 	nextVersion := scopeVersions[portfolioID] + 1
 	scopeVersions[portfolioID] = nextVersion
 	snapshot.SnapshotVersion = nextVersion
 
-	scopeHistory, ok := historyByWorkspace[workspaceID]
+	scopeHistory, ok := historyByUser[userID]
 	if !ok {
 		scopeHistory = map[domain.ID][]netWorthSnapshot{}
-		historyByWorkspace[workspaceID] = scopeHistory
+		historyByUser[userID] = scopeHistory
 	}
 
 	list := scopeHistory[portfolioID]
@@ -519,13 +511,13 @@ func (s *WealthService) formatNetWorthResult(snapshot netWorthSnapshot) NetWorth
 	}
 }
 
-func (s *WealthService) loanPaymentSign(workspaceID, portfolioID domain.ID, t domain.Transaction) (float64, bool) {
-	loans := s.store.ListLoans(workspaceID)
+func (s *WealthService) loanPaymentSign(userID, portfolioID domain.ID, t domain.Transaction) (float64, bool) {
+	loans := s.store.ListLoans(userID)
 	for _, ln := range loans {
 		if !s.matchesEntityToPortfolio(portfolioID, ln.PortfolioID) {
 			continue
 		}
-		pp := s.store.ListLoanPayments(workspaceID, ln.ID)
+		pp := s.store.ListLoanPayments(userID, ln.ID)
 		for _, p := range pp {
 			if p.TransactionID != "" && p.TransactionID == t.ID {
 				if ln.Direction == domain.LoanDirectionReceivable {
@@ -538,10 +530,10 @@ func (s *WealthService) loanPaymentSign(workspaceID, portfolioID domain.ID, t do
 	return 1, false
 }
 
-func (s *WealthService) computeLoanLiabilityExposure(workspaceID, portfolioID domain.ID, asOf time.Time) (float64, float64) {
+func (s *WealthService) computeLoanLiabilityExposure(userID, portfolioID domain.ID, asOf time.Time) (float64, float64) {
 	liability := 0.0
 	accrued := 0.0
-	loans := s.store.ListLoans(workspaceID)
+	loans := s.store.ListLoans(userID)
 	for _, loan := range loans {
 		if !s.matchesEntityToPortfolio(portfolioID, loan.PortfolioID) {
 			continue
@@ -561,10 +553,10 @@ func (s *WealthService) computeLoanLiabilityExposure(workspaceID, portfolioID do
 	return liability, accrued
 }
 
-func (s *WealthService) computeLoanReceivableExposure(workspaceID, portfolioID domain.ID, asOf time.Time) (float64, float64) {
+func (s *WealthService) computeLoanReceivableExposure(userID, portfolioID domain.ID, asOf time.Time) (float64, float64) {
 	receivable := 0.0
 	accrued := 0.0
-	loans := s.store.ListLoans(workspaceID)
+	loans := s.store.ListLoans(userID)
 	for _, loan := range loans {
 		if !s.matchesEntityToPortfolio(portfolioID, loan.PortfolioID) {
 			continue
@@ -612,7 +604,7 @@ func (s *WealthService) loanAccrualsByLoan(loan domain.Loan, asOf time.Time) ([]
 		daysPerYear = 365
 	}
 
-	payments := s.store.ListLoanPayments(loan.WorkspaceID, loan.ID)
+	payments := s.store.ListLoanPayments(loan.UserID, loan.ID)
 	sort.Slice(payments, func(i, j int) bool {
 		return payments[i].OccurredAt.Before(payments[j].OccurredAt)
 	})
@@ -713,7 +705,7 @@ func (s *WealthService) GetLoanAccruals(loanID string) (LoanAccrualResponse, err
 	}
 	return LoanAccrualResponse{
 		LoanID:               string(loan.ID),
-		WorkspaceID:          string(loan.WorkspaceID),
+		UserID:               string(loan.UserID),
 		AsOfAt:               asOf,
 		Status:               string(loan.Status),
 		Currency:             "VND",
@@ -752,9 +744,9 @@ func parseDayCountBasis(value string) int {
 	}
 }
 
-func (s *WealthService) GetBudget(workspaceID domain.ID, period string) (BudgetPeriod, error) {
-	if workspaceID == "" {
-		return BudgetPeriod{}, errors.New("workspaceId is required")
+func (s *WealthService) GetBudget(userID domain.ID, period string) (BudgetPeriod, error) {
+	if userID == "" {
+		return BudgetPeriod{}, errors.New("userId is required")
 	}
 	period = strings.TrimSpace(period)
 	if period == "" {
@@ -765,10 +757,10 @@ func (s *WealthService) GetBudget(workspaceID domain.ID, period string) (BudgetP
 		return BudgetPeriod{}, err
 	}
 
-	budgets := s.store.ListBudgets(workspaceID, period)
+	budgets := s.store.ListBudgets(userID, period)
 	rows := make([]BudgetRow, 0, len(budgets))
 	for _, budget := range budgets {
-		spent, currency := s.budgetSpentForPeriod(workspaceID, periodStart, periodEnd, budget.CategoryID)
+		spent, currency := s.budgetSpentForPeriod(userID, periodStart, periodEnd, budget.CategoryID)
 		rows = append(rows, BudgetRow{
 			CategoryID: string(budget.CategoryID),
 			Limit:      budget.Limit,
@@ -777,17 +769,17 @@ func (s *WealthService) GetBudget(workspaceID domain.ID, period string) (BudgetP
 		})
 	}
 	return BudgetPeriod{
-		Period:      period,
-		WorkspaceID: string(workspaceID),
-		AsOfAt:      nowUTC(),
-		Rows:        rows,
+		Period: period,
+		UserID: string(userID),
+		AsOfAt: nowUTC(),
+		Rows:   rows,
 	}, nil
 }
 
-func (s *WealthService) UpsertBudget(workspaceID domain.ID, period string, categoryID string, limit string) (domain.Budget, error) {
+func (s *WealthService) UpsertBudget(userID domain.ID, period string, categoryID string, limit string) (domain.Budget, error) {
 	period = strings.TrimSpace(period)
-	if workspaceID == "" {
-		return domain.Budget{}, errors.New("workspaceId is required")
+	if userID == "" {
+		return domain.Budget{}, errors.New("userId is required")
 	}
 	if period == "" {
 		return domain.Budget{}, errors.New("period is required")
@@ -800,15 +792,15 @@ func (s *WealthService) UpsertBudget(workspaceID domain.ID, period string, categ
 		categoryID = ""
 	}
 	return s.store.UpsertBudget(domain.Budget{
-		WorkspaceID: workspaceID,
-		Period:      period,
-		CategoryID:  domain.ID(categoryID),
-		Limit:       limit,
+		UserID:     userID,
+		Period:     period,
+		CategoryID: domain.ID(categoryID),
+		Limit:      limit,
 	})
 }
 
-func (s *WealthService) budgetSpentForPeriod(workspaceID domain.ID, start, end time.Time, categoryID domain.ID) (float64, string) {
-	transactions := s.store.ListTransactions(workspaceID, "")
+func (s *WealthService) budgetSpentForPeriod(userID domain.ID, start, end time.Time, categoryID domain.ID) (float64, string) {
+	transactions := s.store.ListTransactions(userID, "")
 	total := 0.0
 	currency := "VND"
 	for _, tx := range transactions {
@@ -847,18 +839,18 @@ func parseBudgetPeriod(period string) (time.Time, time.Time, error) {
 	return start, end, nil
 }
 
-func (s *WealthService) computeAssetValuationWorkspace(workspaceID, portfolioID domain.ID, asOf time.Time) (float64, float64, int) {
-	propertyValues := s.store.ListPropertyValues(workspaceID)
-	assetValues := s.store.ListAssetValues(workspaceID)
+func (s *WealthService) computeAssetValuationUser(userID, portfolioID domain.ID, asOf time.Time) (float64, float64, int) {
+	propertyValues := s.store.ListPropertyValues(userID)
+	assetValues := s.store.ListAssetValues(userID)
 	portfolioPropertyIDs := map[domain.ID]struct{}{}
 	portfolioAssetIDs := map[domain.ID]struct{}{}
 	if portfolioID != "" {
-		for _, p := range s.store.ListProperties(workspaceID) {
+		for _, p := range s.store.ListProperties(userID) {
 			if p.PortfolioID == portfolioID {
 				portfolioPropertyIDs[p.ID] = struct{}{}
 			}
 		}
-		for _, a := range s.store.ListAssets(workspaceID) {
+		for _, a := range s.store.ListAssets(userID) {
 			if a.PortfolioID == portfolioID {
 				portfolioAssetIDs[a.ID] = struct{}{}
 			}
@@ -964,8 +956,8 @@ func (s *WealthService) CreateTransaction(input domain.Transaction) (domain.Tran
 	if !ok {
 		return domain.Transaction{}, errors.New("account not found")
 	}
-	if acc.WorkspaceID != input.WorkspaceID {
-		return domain.Transaction{}, errors.New("account does not belong to workspace")
+	if acc.UserID != input.UserID {
+		return domain.Transaction{}, errors.New("account does not belong to user")
 	}
 	if input.Currency == "" {
 		input.Currency = acc.Currency
@@ -1005,8 +997,8 @@ func (s *WealthService) CreateTransfer(input domain.Transfer) (domain.Transfer, 
 	if !ok {
 		return domain.Transfer{}, errors.New("target account not found")
 	}
-	if from.WorkspaceID != input.WorkspaceID || to.WorkspaceID != input.WorkspaceID {
-		return domain.Transfer{}, errors.New("accounts must belong to workspace")
+	if from.UserID != input.UserID || to.UserID != input.UserID {
+		return domain.Transfer{}, errors.New("accounts must belong to user")
 	}
 	if input.Currency == "" {
 		input.Currency = from.Currency
@@ -1026,7 +1018,7 @@ func (s *WealthService) CreateTransfer(input domain.Transfer) (domain.Transfer, 
 
 	// Create two opposite transactions for transfer impact. Net-worth remains unchanged.
 	_, _ = s.CreateTransaction(domain.Transaction{
-		WorkspaceID: input.WorkspaceID,
+		UserID:      input.UserID,
 		AccountID:   from.ID,
 		Type:        domain.TransactionTypeTransfer,
 		Amount:      input.Amount,
@@ -1038,7 +1030,7 @@ func (s *WealthService) CreateTransfer(input domain.Transfer) (domain.Transfer, 
 		Source:      "transfer",
 	})
 	_, _ = s.CreateTransaction(domain.Transaction{
-		WorkspaceID: input.WorkspaceID,
+		UserID:      input.UserID,
 		AccountID:   to.ID,
 		Type:        domain.TransactionTypeTransfer,
 		Amount:      input.Amount,
@@ -1081,7 +1073,7 @@ func (s *WealthService) CreateLoanPayment(loanID string, payment domain.LoanPaym
 	}
 
 	payment.LoanID = domain.ID(loanID)
-	payment.WorkspaceID = loan.WorkspaceID
+	payment.UserID = loan.UserID
 	if payment.OccurredAt.IsZero() {
 		payment.OccurredAt = time.Now().UTC()
 	}
@@ -1099,7 +1091,7 @@ func (s *WealthService) CreateLoanPayment(loanID string, payment domain.LoanPaym
 	// Auto-post a loan payment ledger line when an account is provided or a default account exists.
 	postingAccountID := payment.AccountID
 	if postingAccountID == "" {
-		if accID := s.findFirstAccountID(loan.WorkspaceID, ""); accID != "" {
+		if accID := s.findFirstAccountID(loan.UserID, ""); accID != "" {
 			postingAccountID = accID
 		}
 	}
@@ -1107,7 +1099,7 @@ func (s *WealthService) CreateLoanPayment(loanID string, payment domain.LoanPaym
 	if postingAccountID != "" {
 		if acc, ok := s.store.GetAccount(postingAccountID); ok {
 			t, err := s.store.CreateTransaction(domain.Transaction{
-				WorkspaceID: loan.WorkspaceID,
+				UserID:      loan.UserID,
 				AccountID:   acc.ID,
 				PortfolioID: acc.PortfolioID,
 				Type:        domain.TransactionTypeLoanPayment,
@@ -1136,7 +1128,7 @@ func (s *WealthService) CreateLoanPayment(loanID string, payment domain.LoanPaym
 	return s.store.CreateLoanPayment(payment)
 }
 
-func (s *WealthService) CreateLoanPaymentRequest(workspaceID domain.ID, loanID domain.ID, req PaymentRequestCreate) (domain.BankPaymentRequest, error) {
+func (s *WealthService) CreateLoanPaymentRequest(userID domain.ID, loanID domain.ID, req PaymentRequestCreate) (domain.BankPaymentRequest, error) {
 	if loanID == "" {
 		return domain.BankPaymentRequest{}, errors.New("loanId is required")
 	}
@@ -1144,8 +1136,8 @@ func (s *WealthService) CreateLoanPaymentRequest(workspaceID domain.ID, loanID d
 	if !ok {
 		return domain.BankPaymentRequest{}, errors.New("loan not found")
 	}
-	if loan.WorkspaceID != workspaceID {
-		return domain.BankPaymentRequest{}, errors.New("loan does not belong to workspace")
+	if loan.UserID != userID {
+		return domain.BankPaymentRequest{}, errors.New("loan does not belong to user")
 	}
 	if loan.Direction != domain.LoanDirectionReceivable {
 		return domain.BankPaymentRequest{}, errors.New("loan payment request only allowed for receivable loans")
@@ -1172,15 +1164,15 @@ func (s *WealthService) CreateLoanPaymentRequest(workspaceID domain.ID, loanID d
 	code := reqCode
 
 	created, err := s.store.CreateBankPaymentRequest(domain.BankPaymentRequest{
-		WorkspaceID: workspaceID,
-		LoanID:      loanID,
-		Code:        code,
-		Amount:      formatMoney(amountValue),
-		Currency:    req.Currency,
-		ExpiresAt:   expiresAt,
-		Status:      "open",
-		Note:        req.Note,
-		Source:      "sepay_loan_request",
+		UserID:    userID,
+		LoanID:    loanID,
+		Code:      code,
+		Amount:    formatMoney(amountValue),
+		Currency:  req.Currency,
+		ExpiresAt: expiresAt,
+		Status:    "open",
+		Note:      req.Note,
+		Source:    "sepay_loan_request",
 	})
 	return created, err
 }
@@ -1191,7 +1183,7 @@ func (s *WealthService) GetPortfolioNetWorth(portfolioID string) (NetWorthResult
 	if !ok {
 		return NetWorthResult{}, errors.New("portfolio not found")
 	}
-	return s.computeNetWorthForPortfolio(portfolio.WorkspaceID, pID)
+	return s.computeNetWorthForPortfolio(portfolio.UserID, pID)
 }
 
 func (s *WealthService) GetPortfolioNetWorthAt(portfolioID string, asOf time.Time) (NetWorthResult, error) {
@@ -1200,18 +1192,18 @@ func (s *WealthService) GetPortfolioNetWorthAt(portfolioID string, asOf time.Tim
 	if !ok {
 		return NetWorthResult{}, errors.New("portfolio not found")
 	}
-	return s.computeNetWorthForPortfolioAt(portfolio.WorkspaceID, pID, asOf, false)
+	return s.computeNetWorthForPortfolioAt(portfolio.UserID, pID, asOf, false)
 }
 
-func (s *WealthService) GetPortfolioSnapshots(workspaceID domain.ID, limit int, cursor string) PortfolioSnapshotPage {
-	return s.getPortfolioSnapshots(workspaceID, "", limit, cursor)
+func (s *WealthService) GetPortfolioSnapshots(userID domain.ID, limit int, cursor string) PortfolioSnapshotPage {
+	return s.getPortfolioSnapshots(userID, "", limit, cursor)
 }
 
-func (s *WealthService) GetPortfolioSnapshotsForPortfolio(workspaceID, portfolioID domain.ID, limit int, cursor string) PortfolioSnapshotPage {
-	return s.getPortfolioSnapshots(workspaceID, portfolioID, limit, cursor)
+func (s *WealthService) GetPortfolioSnapshotsForPortfolio(userID, portfolioID domain.ID, limit int, cursor string) PortfolioSnapshotPage {
+	return s.getPortfolioSnapshots(userID, portfolioID, limit, cursor)
 }
 
-func (s *WealthService) getPortfolioSnapshots(workspaceID, portfolioID domain.ID, limit int, cursor string) PortfolioSnapshotPage {
+func (s *WealthService) getPortfolioSnapshots(userID, portfolioID domain.ID, limit int, cursor string) PortfolioSnapshotPage {
 	if limit <= 0 {
 		limit = defaultPortfolioSnapshotLimit
 	}
@@ -1220,16 +1212,16 @@ func (s *WealthService) getPortfolioSnapshots(workspaceID, portfolioID domain.ID
 	}
 
 	snapshotMu.RLock()
-	workspaceHistory := historyByWorkspace[workspaceID]
-	history := append([]netWorthSnapshot{}, workspaceHistory[portfolioID]...)
+	userHistory := historyByUser[userID]
+	history := append([]netWorthSnapshot{}, userHistory[portfolioID]...)
 	snapshotMu.RUnlock()
 	if len(history) == 0 {
-		if _, err := s.computeNetWorthForPortfolio(workspaceID, portfolioID); err != nil {
+		if _, err := s.computeNetWorthForPortfolio(userID, portfolioID); err != nil {
 			return PortfolioSnapshotPage{}
 		}
 		snapshotMu.RLock()
-		workspaceHistory = historyByWorkspace[workspaceID]
-		history = append([]netWorthSnapshot{}, workspaceHistory[portfolioID]...)
+		userHistory = historyByUser[userID]
+		history = append([]netWorthSnapshot{}, userHistory[portfolioID]...)
 		snapshotMu.RUnlock()
 	}
 
@@ -1287,7 +1279,7 @@ func (s *WealthService) ProcessSePayIncoming(raw SePayWebhookEvent) (domain.Bank
 		return domain.BankFeedTransaction{}, errors.New("amount must be positive")
 	}
 
-	workspaceID, err := s.resolveWorkspaceForFeed(raw.ConnectionID)
+	userID, err := s.resolveUserForFeed(raw.ConnectionID)
 	if err != nil {
 		return domain.BankFeedTransaction{}, err
 	}
@@ -1297,10 +1289,34 @@ func (s *WealthService) ProcessSePayIncoming(raw SePayWebhookEvent) (domain.Bank
 		return domain.BankFeedTransaction{}, err
 	}
 
+	accountID := domain.ID(raw.AccountID)
+	var sepayBankAccountID domain.ID
+	if raw.ProviderAccountID != "" {
+		if bankAccount, ok := s.store.GetSePayBankAccountByXID(raw.ProviderAccountID); ok {
+			userID, sepayBankAccountID = bankAccount.UserID, bankAccount.ID
+			if mapping, mapped := s.store.GetBankAccountMapping(bankAccount.ID); mapped && mapping.Status == "active" {
+				if mapping.UserID != userID {
+					return domain.BankFeedTransaction{}, errors.New("bank account mapping does not match connection user")
+				}
+				accountID = mapping.AccountID
+			}
+		}
+	}
+	if accountID == "" {
+		// Bank Hub IPN identifies the provider account, not the internal ledger
+		// account. Phase 1 uses the user's matching/default account until
+		// explicit per-bank-account mappings are introduced in Phase 2.
+		accountID = s.findFirstAccountID(userID, firstNonEmpty(raw.Currency, "VND"))
+	}
+	if accountID == "" {
+		return domain.BankFeedTransaction{}, errors.New("no Finora account is available for bank feed")
+	}
+
+	rawProviderData, _ := json.Marshal(raw)
 	feed, err := s.store.IngestBankFeed(domain.BankFeedTransaction{
-		WorkspaceID:  workspaceID,
+		UserID:       userID,
 		ConnectionID: domain.ID(raw.ConnectionID),
-		AccountID:    domain.ID(raw.AccountID),
+		AccountID:    accountID,
 		Amount:       raw.Amount,
 		Currency:     firstNonEmpty(raw.Currency, "VND"),
 		Direction:    direction,
@@ -1310,9 +1326,15 @@ func (s *WealthService) ProcessSePayIncoming(raw SePayWebhookEvent) (domain.Bank
 		OccurredAt:   occurredAt,
 		ExternalID:   raw.ExternalID,
 		PostedTxnID:  "",
-		PostingState: domain.PostingStateAutoReady,
-		Confidence:   0,
-		Evidence:     "received from sepay webhook",
+		// Bank feeds are immutable review items in this MVP. Classification may
+		// attach a suggestion later, but only the user can create the ledger
+		// transaction through confirm/correct.
+		PostingState:         domain.PostingStateReview,
+		Confidence:           0,
+		Evidence:             "received from sepay webhook; awaiting user review",
+		SePayBankAccountID:   sepayBankAccountID,
+		RawProviderData:      string(rawProviderData),
+		ClassificationStatus: "needs_review",
 	})
 	if err != nil {
 		return domain.BankFeedTransaction{}, err
@@ -1322,7 +1344,7 @@ func (s *WealthService) ProcessSePayIncoming(raw SePayWebhookEvent) (domain.Bank
 }
 
 func (s *WealthService) EnqueueSePayIncoming(raw SePayWebhookEvent) (domain.BankFeedEvent, error) {
-	workspaceID, err := s.resolveWorkspaceForFeed(raw.ConnectionID)
+	userID, err := s.resolveUserForFeed(raw.ConnectionID)
 	if err != nil {
 		return domain.BankFeedEvent{}, err
 	}
@@ -1341,13 +1363,18 @@ func (s *WealthService) EnqueueSePayIncoming(raw SePayWebhookEvent) (domain.Bank
 		return domain.BankFeedEvent{}, err
 	}
 
-	eventKey := strings.TrimSpace(raw.ExternalID)
+	// Provider transaction IDs are only guaranteed unique within the provider
+	// account. Keep that scope in the durable idempotency key.
+	eventKey := strings.TrimSpace("sepay::" + raw.ProviderAccountID + "::" + raw.ExternalID)
+	if raw.ProviderAccountID == "" {
+		eventKey = strings.TrimSpace("sepay::connection::" + raw.ConnectionID + "::" + raw.ExternalID)
+	}
 	if eventKey == "" {
 		eventKey = strings.TrimSpace(raw.ConnectionID + "::" + raw.Direction + "::" + raw.OccurredAt + "::" + raw.Amount + "::" + raw.Reference)
 	}
 
 	return s.store.EnqueueBankFeedEvent(domain.BankFeedEvent{
-		WorkspaceID:  workspaceID,
+		UserID:       userID,
 		ConnectionID: domain.ID(raw.ConnectionID),
 		Provider:     "sepay",
 		EventKey:     eventKey,
@@ -1359,25 +1386,11 @@ func (s *WealthService) EnqueueSePayIncoming(raw SePayWebhookEvent) (domain.Bank
 }
 
 func (s *WealthService) ProcessBankFeedEvent(eventID domain.ID) error {
-	ev, ok := s.store.GetBankFeedEvent(eventID)
-	if !ok {
-		return errors.New("bank feed event not found")
-	}
-	if ev.State != "" && ev.State != domain.BankFeedEventStateQueued && ev.State != domain.BankFeedEventStateRunning {
+	ev, claimed := s.store.ClaimBankFeedEvent(eventID)
+	if !claimed {
 		return nil
 	}
-	if ev.State == "" {
-		ev.State = domain.BankFeedEventStateQueued
-	}
-
-	nextAttempt := ev.Attempts + 1
-	if ok := s.store.UpdateBankFeedEvent(ev.ID, func(event *domain.BankFeedEvent) {
-		event.State = domain.BankFeedEventStateRunning
-		event.Attempts = nextAttempt
-		event.LastError = ""
-	}); !ok {
-		return errors.New("failed to mark event running")
-	}
+	nextAttempt := ev.Attempts
 
 	var payload SePayWebhookEvent
 	if err := json.Unmarshal([]byte(ev.Payload), &payload); err != nil {
@@ -1388,7 +1401,7 @@ func (s *WealthService) ProcessBankFeedEvent(eventID domain.ID) error {
 		return errors.New("invalid event payload")
 	}
 
-	_, err := s.ProcessSePayIncoming(payload)
+	feed, err := s.ProcessSePayIncoming(payload)
 	if err != nil {
 		next := nextFailureState(nextAttempt)
 		_ = s.store.UpdateBankFeedEvent(eventID, func(event *domain.BankFeedEvent) {
@@ -1400,6 +1413,9 @@ func (s *WealthService) ProcessBankFeedEvent(eventID domain.ID) error {
 		})
 		return err
 	}
+	// Classification is advisory only. The source event and bank-feed fields
+	// remain immutable; a separate suggestion record is what mobile renders.
+	s.createSuggestionIfMissing(feed)
 
 	_ = s.store.UpdateBankFeedEvent(eventID, func(event *domain.BankFeedEvent) {
 		event.State = domain.BankFeedEventStateDone
@@ -1410,6 +1426,163 @@ func (s *WealthService) ProcessBankFeedEvent(eventID domain.ID) error {
 		conn.LastSyncedAt = nowUTC()
 	})
 	return nil
+}
+
+func (s *WealthService) createSuggestionIfMissing(feed domain.BankFeedTransaction) {
+	if len(s.store.ListTransactionSuggestions(feed.ID)) > 0 {
+		return
+	}
+	// Exact user feedback is the highest-priority classifier. It only applies
+	// when a user explicitly asked Finora to remember that normalized provider
+	// content, and it can always point back to the original confirmation.
+	if feed.UserID != "" {
+		needle := normalizeSuggestionText(feed.Description + " " + feed.Reference)
+		for _, feedback := range s.store.ListClassificationFeedback(feed.UserID) {
+			if !feedback.RememberChoice || feedback.Action == "ignored" || feedback.Name == "" {
+				continue
+			}
+			prior, ok := s.store.GetBankFeed(feedback.BankFeedTransactionID)
+			if !ok || strings.ToLower(prior.Direction) != strings.ToLower(feed.Direction) || normalizeSuggestionText(prior.Description+" "+prior.Reference) != needle {
+				continue
+			}
+			_, _ = s.store.CreateTransactionSuggestion(domain.TransactionSuggestion{BankFeedTransactionID: feed.ID, SuggestedName: feedback.Name, SuggestedCategoryID: feedback.CategoryID, Source: "rule", Confidence: 100, Reason: "exact rule from user-confirmed choice", Version: "v1"})
+			return
+		}
+	}
+	if rule, confidence, reason := s.matchBestRule(feed.UserID, strings.ToLower(feed.Direction), feed); rule != nil {
+		_, _ = s.store.CreateTransactionSuggestion(domain.TransactionSuggestion{
+			BankFeedTransactionID: feed.ID, SuggestedName: suggestionName(feed.Description), SuggestedCategoryID: rule.CategoryID,
+			Source: "rule", Confidence: confidence, Reason: reason, Version: "v1",
+		})
+		return
+	}
+	// History requires the same direction, Finora account, normalized merchant
+	// text, a narrow amount range and a plausible recurring cadence. This keeps
+	// an old but superficially similar payment from becoming a category hint.
+	needle := normalizeSuggestionText(feed.Description + " " + feed.Reference)
+	if needle != "" {
+		for _, prior := range s.store.ListBankFeed(feed.UserID) {
+			if !isComparableHistoryFeed(feed, prior, needle) {
+				continue
+			}
+			if tx, ok := s.store.GetTransaction(prior.PostedTxnID); ok {
+				_, _ = s.store.CreateTransactionSuggestion(domain.TransactionSuggestion{BankFeedTransactionID: feed.ID, SuggestedName: tx.Name, SuggestedCategoryID: tx.CategoryID, Source: "history", Confidence: historyConfidence(feed, prior), Reason: "khớp lịch sử: nội dung, chiều tiền, tài khoản, khoảng tiền và chu kỳ", Version: "v1"})
+				return
+			}
+		}
+	}
+	// Semantic fallback runs only after exact rules/history. It compares
+	// normalized merchant tokens with user-confirmed history, preserves all
+	// provider fields, and remains deliberately below auto-confirm confidence.
+	if suggestion, ok := s.semanticSuggestion(feed); ok {
+		_, _ = s.store.CreateTransactionSuggestion(suggestion)
+		return
+	}
+	if name := suggestionName(feed.Description); name != "" {
+		_, _ = s.store.CreateTransactionSuggestion(domain.TransactionSuggestion{BankFeedTransactionID: feed.ID, SuggestedName: name, Source: "ai", Confidence: 35, Reason: "gợi ý semantic không đủ mạnh; cần xác nhận", Version: "v1"})
+	}
+}
+
+func (s *WealthService) semanticSuggestion(feed domain.BankFeedTransaction) (domain.TransactionSuggestion, bool) {
+	needle := normalizeSuggestionText(feed.Description + " " + feed.Reference)
+	if needle == "" {
+		return domain.TransactionSuggestion{}, false
+	}
+	bestScore := 0.0
+	var best domain.BankFeedTransaction
+	for _, prior := range s.store.ListBankFeed(feed.UserID) {
+		if prior.ID == feed.ID || prior.PostingState != domain.PostingStatePosted || prior.PostedTxnID == "" ||
+			strings.ToLower(prior.Direction) != strings.ToLower(feed.Direction) ||
+			(feed.AccountID != "" && prior.AccountID != feed.AccountID) {
+			continue
+		}
+		score := tokenJaccard(needle, normalizeSuggestionText(prior.Description+" "+prior.Reference))
+		if score > bestScore {
+			bestScore, best = score, prior
+		}
+	}
+	if bestScore < 0.60 {
+		return domain.TransactionSuggestion{}, false
+	}
+	tx, ok := s.store.GetTransaction(best.PostedTxnID)
+	if !ok {
+		return domain.TransactionSuggestion{}, false
+	}
+	confidence := math.Min(70, math.Round((40+bestScore*35)*10)/10)
+	return domain.TransactionSuggestion{BankFeedTransactionID: feed.ID, SuggestedName: tx.Name, SuggestedCategoryID: tx.CategoryID, Source: "ai", Confidence: confidence, Reason: "semantic match với lịch sử đã xác nhận; cần xác nhận", Version: "v1"}, true
+}
+
+func tokenJaccard(left, right string) float64 {
+	a, b := map[string]struct{}{}, map[string]struct{}{}
+	for _, token := range strings.Fields(left) {
+		if len([]rune(token)) > 1 {
+			a[token] = struct{}{}
+		}
+	}
+	for _, token := range strings.Fields(right) {
+		if len([]rune(token)) > 1 {
+			b[token] = struct{}{}
+		}
+	}
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	intersection := 0
+	for token := range a {
+		if _, ok := b[token]; ok {
+			intersection++
+		}
+	}
+	return float64(intersection) / float64(len(a)+len(b)-intersection)
+}
+
+func isComparableHistoryFeed(feed, prior domain.BankFeedTransaction, needle string) bool {
+	if prior.ID == feed.ID || prior.PostingState != domain.PostingStatePosted || prior.PostedTxnID == "" ||
+		strings.ToLower(prior.Direction) != strings.ToLower(feed.Direction) ||
+		normalizeSuggestionText(prior.Description+" "+prior.Reference) != needle {
+		return false
+	}
+	if feed.AccountID != "" && prior.AccountID != feed.AccountID {
+		return false
+	}
+	amount, amountErr := parseAmount(feed.Amount)
+	priorAmount, priorAmountErr := parseAmount(prior.Amount)
+	if amountErr != nil || priorAmountErr != nil || amount <= 0 || priorAmount <= 0 {
+		return false
+	}
+	// Five percent permits small bill variations while remaining conservative.
+	if math.Abs(amount-priorAmount)/math.Max(amount, priorAmount) > 0.05 {
+		return false
+	}
+	days := math.Abs(feed.OccurredAt.Sub(prior.OccurredAt).Hours() / 24)
+	// A direct repeat (same day) and monthly-ish recurrence are meaningful;
+	// unrelated old history is not.
+	return days <= 1 || (days >= 20 && days <= 40)
+}
+
+func historyConfidence(feed, prior domain.BankFeedTransaction) float64 {
+	days := math.Abs(feed.OccurredAt.Sub(prior.OccurredAt).Hours() / 24)
+	if days >= 20 && days <= 40 {
+		return 88
+	}
+	return 82
+}
+
+func normalizeSuggestionText(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = regexp.MustCompile(`[^a-z0-9à-ỹ]+`).ReplaceAllString(value, " ")
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func suggestionName(description string) string {
+	description = strings.TrimSpace(description)
+	if description == "" {
+		return ""
+	}
+	if len([]rune(description)) > 80 {
+		return string([]rune(description)[:80])
+	}
+	return description
 }
 
 func nextFailureState(attempt int) string {
@@ -1428,22 +1601,22 @@ func (s *WealthService) ProcessQueuedBankFeed(feedID domain.ID) (domain.BankFeed
 		return *feed, nil
 	}
 
-	out, err := s.applyBankFeedPolicy(*feed, feed.WorkspaceID, strings.ToLower(feed.Direction))
+	out, err := s.applyBankFeedPolicy(*feed, feed.UserID, strings.ToLower(feed.Direction))
 	if err != nil {
 		return out, nil
 	}
 	return out, nil
 }
 
-func (s *WealthService) applyBankFeedPolicy(feed domain.BankFeedTransaction, workspaceID domain.ID, direction string) (domain.BankFeedTransaction, error) {
+func (s *WealthService) applyBankFeedPolicy(feed domain.BankFeedTransaction, userID domain.ID, direction string) (domain.BankFeedTransaction, error) {
 	if direction == bankDirectionOut {
-		return s.applyOutboundRule(feed, workspaceID)
+		return s.applyOutboundRule(feed, userID)
 	}
-	return s.applyInboundRule(feed, workspaceID)
+	return s.applyInboundRule(feed, userID)
 }
 
-func (s *WealthService) applyOutboundRule(feed domain.BankFeedTransaction, workspaceID domain.ID) (domain.BankFeedTransaction, error) {
-	accountID := s.resolveFeedAccount(feed, workspaceID, feed.AccountID)
+func (s *WealthService) applyOutboundRule(feed domain.BankFeedTransaction, userID domain.ID) (domain.BankFeedTransaction, error) {
+	accountID := s.resolveFeedAccount(feed, userID, feed.AccountID)
 	if accountID == "" {
 		s.updateFeedReason(feed.ID, domain.PostingStateReview, "no account available for outbound bank feed")
 		if updated, ok := s.store.GetBankFeed(feed.ID); ok {
@@ -1452,7 +1625,7 @@ func (s *WealthService) applyOutboundRule(feed domain.BankFeedTransaction, works
 		return feed, nil
 	}
 
-	rule, confidence, reason := s.matchBestRule(workspaceID, bankDirectionOut, feed)
+	rule, confidence, reason := s.matchBestRule(userID, bankDirectionOut, feed)
 	if rule != nil {
 		if strings.EqualFold(rule.ActionType, "transfer") {
 			s.updateFeedReason(feed.ID, domain.PostingStateReview, "outbound transfer policy -> review + keep as transfer")
@@ -1498,9 +1671,9 @@ func (s *WealthService) applyOutboundRule(feed domain.BankFeedTransaction, works
 	return feed, err
 }
 
-func (s *WealthService) applyInboundRule(feed domain.BankFeedTransaction, workspaceID domain.ID) (domain.BankFeedTransaction, error) {
+func (s *WealthService) applyInboundRule(feed domain.BankFeedTransaction, userID domain.ID) (domain.BankFeedTransaction, error) {
 	// 1) Match explicit VietQR / loan payment request code first.
-	if paymentReq := s.findMatchingPaymentRequest(workspaceID, feed); paymentReq != nil {
+	if paymentReq := s.findMatchingPaymentRequest(userID, feed); paymentReq != nil {
 		paymentAmount, _ := parseAmount(feed.Amount)
 		payment, err := s.CreateLoanPayment(string(paymentReq.LoanID), domain.LoanPayment{
 			Principal:  formatMoney(paymentAmount),
@@ -1530,7 +1703,7 @@ func (s *WealthService) applyInboundRule(feed domain.BankFeedTransaction, worksp
 	}
 
 	// 2) Apply user rules.
-	rule, confidence, reason := s.matchBestRule(workspaceID, bankDirectionIn, feed)
+	rule, confidence, reason := s.matchBestRule(userID, bankDirectionIn, feed)
 	if rule != nil {
 		ruleType := firstNonEmpty(rule.ActionType, rule.Type)
 		txType := domain.TransactionType(ruleType)
@@ -1568,7 +1741,7 @@ func (s *WealthService) applyInboundRule(feed domain.BankFeedTransaction, worksp
 
 		if confidence >= sepayAutoPostThreshold {
 			// inbound auto-post with confidence-based policy
-			accountID := s.resolveFeedAccount(feed, workspaceID, feed.AccountID)
+			accountID := s.resolveFeedAccount(feed, userID, feed.AccountID)
 			if accountID != "" {
 				_, err := s.postBankFeedTransaction(feed, accountID, txType, rule.CategoryID, confidence, reason, true)
 				if err == nil {
@@ -1602,7 +1775,7 @@ func (s *WealthService) applyInboundRule(feed domain.BankFeedTransaction, worksp
 		}
 		return feed, nil
 	case domain.TransactionTypeIncome:
-		accountID := s.resolveFeedAccount(feed, workspaceID, feed.AccountID)
+		accountID := s.resolveFeedAccount(feed, userID, feed.AccountID)
 		if accountID == "" {
 			s.updateFeedReason(feed.ID, domain.PostingStateReview, "no account found for inbound bank feed")
 			if updated, ok := s.store.GetBankFeed(feed.ID); ok {
@@ -1643,16 +1816,16 @@ func (s *WealthService) postBankFeedTransaction(feed domain.BankFeedTransaction,
 		return domain.Transaction{}, errors.New("posting account not found")
 	}
 	tx, err := s.store.CreateTransaction(domain.Transaction{
-		WorkspaceID: acc.WorkspaceID,
-		AccountID:   accountID,
-		CategoryID:  categoryID,
-		Type:        txType,
-		Amount:      feed.Amount,
-		Currency:    feed.Currency,
-		Note:        feed.Description,
-		OccurredAt:  feed.OccurredAt,
-		Status:      domain.TransactionStatusPosted,
-		Source:      "bank_feed",
+		UserID:     acc.UserID,
+		AccountID:  accountID,
+		CategoryID: categoryID,
+		Type:       txType,
+		Amount:     feed.Amount,
+		Currency:   feed.Currency,
+		Note:       feed.Description,
+		OccurredAt: feed.OccurredAt,
+		Status:     domain.TransactionStatusPosted,
+		Source:     "bank_feed",
 	})
 	if err != nil {
 		return domain.Transaction{}, err
@@ -1670,8 +1843,8 @@ func (s *WealthService) postBankFeedTransaction(feed domain.BankFeedTransaction,
 	return tx, nil
 }
 
-func (s *WealthService) matchBestRule(workspaceID domain.ID, direction string, feed domain.BankFeedTransaction) (*domain.AutomationRule, float64, string) {
-	rules := s.store.GetWorkspaceRules(workspaceID, feed.AccountID, direction)
+func (s *WealthService) matchBestRule(userID domain.ID, direction string, feed domain.BankFeedTransaction) (*domain.AutomationRule, float64, string) {
+	rules := s.store.GetUserRules(userID, feed.AccountID, direction)
 	for _, r := range rules {
 		if !r.Enabled {
 			continue
@@ -1719,7 +1892,7 @@ func (s *WealthService) matchBestRule(workspaceID domain.ID, direction string, f
 	return nil, 0, ""
 }
 
-func (s *WealthService) resolveWorkspaceForFeed(connectionID string) (domain.ID, error) {
+func (s *WealthService) resolveUserForFeed(connectionID string) (domain.ID, error) {
 	if connectionID == "" {
 		return "", errors.New("connectionId is required")
 	}
@@ -1727,17 +1900,17 @@ func (s *WealthService) resolveWorkspaceForFeed(connectionID string) (domain.ID,
 	if !ok {
 		return "", errors.New("connection not found")
 	}
-	return conn.WorkspaceID, nil
+	return conn.UserID, nil
 }
 
-func (s *WealthService) resolveFeedAccount(feed domain.BankFeedTransaction, workspaceID domain.ID, fallback domain.ID) domain.ID {
+func (s *WealthService) resolveFeedAccount(feed domain.BankFeedTransaction, userID domain.ID, fallback domain.ID) domain.ID {
 	if fallback != "" {
 		acc, ok := s.store.GetAccount(fallback)
-		if ok && acc.WorkspaceID == workspaceID {
+		if ok && acc.UserID == userID {
 			return acc.ID
 		}
 	}
-	return s.findFirstAccountID(workspaceID, feed.Currency)
+	return s.findFirstAccountID(userID, feed.Currency)
 }
 
 func (s *WealthService) classifyInboundHeuristic(feed domain.BankFeedTransaction) bankFeedClassification {
@@ -1803,7 +1976,7 @@ func (s *WealthService) updateFeedReason(feedID domain.ID, state domain.Transact
 	})
 }
 
-func (s *WealthService) findMatchingPaymentRequest(workspaceID domain.ID, feed domain.BankFeedTransaction) *domain.BankPaymentRequest {
+func (s *WealthService) findMatchingPaymentRequest(userID domain.ID, feed domain.BankFeedTransaction) *domain.BankPaymentRequest {
 	text := strings.ToLower(feed.Description + " " + feed.Reference)
 	pattern := regexp.MustCompile(`(?i)WOS-[A-Za-z0-9-]+`)
 	matches := pattern.FindAllString(text, -1)
@@ -1811,7 +1984,7 @@ func (s *WealthService) findMatchingPaymentRequest(workspaceID domain.ID, feed d
 		return nil
 	}
 	for _, code := range matches {
-		if req, ok := s.store.GetBankPaymentRequestByCode(workspaceID, code); ok {
+		if req, ok := s.store.GetBankPaymentRequestByCode(userID, code); ok {
 			if req.Status != "open" {
 				continue
 			}
@@ -1824,7 +1997,7 @@ func (s *WealthService) findMatchingPaymentRequest(workspaceID domain.ID, feed d
 	return nil
 }
 
-func (s *WealthService) RulePreview(workspaceID domain.ID, sample []domain.BankFeedTransaction) map[string]any {
+func (s *WealthService) RulePreview(userID domain.ID, sample []domain.BankFeedTransaction) map[string]any {
 	estimated := map[string]int{
 		"matched":      0,
 		"auto_posted":  0,
@@ -1846,7 +2019,7 @@ func (s *WealthService) RulePreview(workspaceID domain.ID, sample []domain.BankF
 			samples = append(samples, item)
 			continue
 		}
-		rule, _, _ := s.matchBestRule(workspaceID, item.Direction, item)
+		rule, _, _ := s.matchBestRule(userID, item.Direction, item)
 		if rule != nil {
 			estimated["matched"]++
 			samples = append(samples, item)
@@ -1870,7 +2043,7 @@ func (s *WealthService) ApproveBankFeed(id domain.ID, feed domain.BankFeedTransa
 
 	accountID := feed.AccountID
 	if accountID == "" {
-		accountID = s.resolveFeedAccount(feed, feed.WorkspaceID, "")
+		accountID = s.resolveFeedAccount(feed, feed.UserID, "")
 	}
 	if accountID == "" {
 		return domain.Transaction{}, errors.New("missing account for posting bank feed")
@@ -1918,7 +2091,7 @@ func (s *WealthService) ReclassifyBankFeed(id domain.ID, accountID domain.ID, tx
 		return domain.Transaction{}, errors.New("invalid transaction type")
 	}
 	if accountID == "" {
-		accountID = s.resolveFeedAccount(*feed, feed.WorkspaceID, feed.AccountID)
+		accountID = s.resolveFeedAccount(*feed, feed.UserID, feed.AccountID)
 	}
 	if accountID == "" {
 		return domain.Transaction{}, errors.New("missing account for posting")
@@ -1941,19 +2114,19 @@ func (s *WealthService) ReclassifyBankFeed(id domain.ID, accountID domain.ID, tx
 	return tx, nil
 }
 
-func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID) {
-	ws, ok := s.store.GetWorkspace(workspaceID)
+func (s *WealthService) SeedDemoData(seedUserID domain.ID, userID domain.ID) {
+	ws, ok := s.store.GetUser(userID)
 	if !ok || ws == nil {
 		return
 	}
 
-	p, ok := s.store.FirstPortfolio(workspaceID)
+	p, ok := s.store.FirstPortfolio(userID)
 	if !ok {
 		return
 	}
 
 	now := nowUTC()
-	accounts := s.store.ListAccounts(workspaceID)
+	accounts := s.store.ListAccounts(userID)
 
 	mainAccountID := domain.ID("")
 	savingsAccountID := domain.ID("")
@@ -1968,7 +2141,7 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 
 	if mainAccountID == "" {
 		acc, err := s.store.CreateAccount(domain.Account{
-			WorkspaceID: workspaceID,
+			UserID:      userID,
 			PortfolioID: p.ID,
 			Name:        "Ví tiền",
 			Type:        "cash",
@@ -1980,7 +2153,7 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 	}
 	if savingsAccountID == "" {
 		acc, err := s.store.CreateAccount(domain.Account{
-			WorkspaceID: workspaceID,
+			UserID:      userID,
 			PortfolioID: p.ID,
 			Name:        "Tài khoản tiết kiệm",
 			Type:        "savings",
@@ -1994,9 +2167,9 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 		return
 	}
 
-	if len(s.store.ListTransactions(workspaceID, "")) == 0 {
+	if len(s.store.ListTransactions(userID, "")) == 0 {
 		_, _ = s.CreateTransaction(domain.Transaction{
-			WorkspaceID: workspaceID,
+			UserID:      userID,
 			AccountID:   mainAccountID,
 			PortfolioID: p.ID,
 			Type:        domain.TransactionTypeIncome,
@@ -2007,7 +2180,7 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 			OccurredAt:  now.AddDate(0, 0, -18),
 		})
 		_, _ = s.CreateTransaction(domain.Transaction{
-			WorkspaceID: workspaceID,
+			UserID:      userID,
 			AccountID:   mainAccountID,
 			PortfolioID: p.ID,
 			Type:        domain.TransactionTypeExpense,
@@ -2018,7 +2191,7 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 			OccurredAt:  now.AddDate(0, 0, -15),
 		})
 		_, _ = s.CreateTransaction(domain.Transaction{
-			WorkspaceID: workspaceID,
+			UserID:      userID,
 			AccountID:   mainAccountID,
 			PortfolioID: p.ID,
 			Type:        domain.TransactionTypeExpense,
@@ -2030,11 +2203,11 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 		})
 	}
 
-	if len(s.store.ListTransactions(workspaceID, "")) > 0 && savingsAccountID != "" {
+	if len(s.store.ListTransactions(userID, "")) > 0 && savingsAccountID != "" {
 		_ = mainAccountID
 		// Keep transfer explicit to show double-entry transfer behavior on dashboard.
 		_, _ = s.CreateTransfer(domain.Transfer{
-			WorkspaceID:   workspaceID,
+			UserID:        userID,
 			FromAccountID: mainAccountID,
 			ToAccountID:   savingsAccountID,
 			Amount:        "2500000",
@@ -2044,9 +2217,9 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 		})
 	}
 
-	if len(s.store.ListProperties(workspaceID)) == 0 {
+	if len(s.store.ListProperties(userID)) == 0 {
 		prop, err := s.store.CreateProperty(domain.Property{
-			WorkspaceID: workspaceID,
+			UserID:      userID,
 			PortfolioID: p.ID,
 			Name:        "Căn hộ FPT",
 			Address:     "TP.HCM",
@@ -2064,9 +2237,9 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 		}
 	}
 
-	if len(s.store.ListAssets(workspaceID)) == 0 {
+	if len(s.store.ListAssets(userID)) == 0 {
 		asset, err := s.store.CreateAsset(domain.Asset{
-			WorkspaceID: workspaceID,
+			UserID:      userID,
 			PortfolioID: p.ID,
 			Name:        "Quỹ ETF Nhiều tài sản",
 			Type:        "investment_fund",
@@ -2082,9 +2255,9 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 		}
 	}
 
-	if len(s.store.ListLoans(workspaceID)) == 0 {
+	if len(s.store.ListLoans(userID)) == 0 {
 		payable, err := s.store.CreateLoan(domain.Loan{
-			WorkspaceID:      workspaceID,
+			UserID:           userID,
 			PortfolioID:      p.ID,
 			Counterparty:     "Ngân hàng ABC",
 			Direction:        domain.LoanDirectionPayable,
@@ -2108,7 +2281,7 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 		}
 
 		_, _ = s.store.CreateLoan(domain.Loan{
-			WorkspaceID:      workspaceID,
+			UserID:           userID,
 			PortfolioID:      p.ID,
 			Counterparty:     "Anh Minh",
 			Direction:        domain.LoanDirectionReceivable,
@@ -2127,24 +2300,24 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 	if period == "" {
 		period = now.Format("2006-01")
 	}
-	_, _ = s.UpsertBudget(workspaceID, period, "uncategorized", "4000000")
+	_, _ = s.UpsertBudget(userID, period, "uncategorized", "4000000")
 
-	if len(s.store.ListForecastScenarios(workspaceID)) == 0 {
+	if len(s.store.ListForecastScenarios(userID)) == 0 {
 		_, _ = s.store.CreateForecastScenario(domain.ForecastScenario{
-			WorkspaceID: workspaceID,
+			UserID:      userID,
 			Name:        "Kịch bản tiết kiệm 12 tháng",
 			Assumptions: "{\"inflation\": 0.05, \"targetGrowth\": 0.08, \"timeHorizonMonths\": 12}",
 			Status:      "draft",
 		})
 	}
 
-	if len(s.store.ListBankConnections(workspaceID)) == 0 {
+	if len(s.store.ListBankConnections(userID)) == 0 {
 		conn, err := s.store.CreateBankConnection(domain.BankConnection{
-			WorkspaceID: workspaceID,
-			Provider:    "sepay",
-			Status:      "connected",
-			Scope:       "read",
-			BankCode:    "VCB",
+			UserID:   userID,
+			Provider: "sepay",
+			Status:   "connected",
+			Scope:    "read",
+			BankCode: "VCB",
 		})
 		if err == nil {
 			_, _ = s.ProcessSePayIncoming(SePayWebhookEvent{
@@ -2170,34 +2343,33 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, workspaceID domain.ID
 		}
 	}
 
-	if len(s.store.ListWorkspaceRules(workspaceID)) == 0 {
+	if len(s.store.ListUserRules(userID)) == 0 {
 		_, _ = s.store.CreateAutomationRule(domain.AutomationRule{
-			WorkspaceID: workspaceID,
-			AccountID:   mainAccountID,
-			Name:        "Auto-tag Lương",
-			Priority:    10,
-			Predicate:   "contains(description,luong)",
-			Direction:   "in",
-			ActionType:  "classify",
-			Type:        "income",
-			CategoryID:  "income",
-			Enabled:     true,
+			UserID:     userID,
+			AccountID:  mainAccountID,
+			Name:       "Auto-tag Lương",
+			Priority:   10,
+			Predicate:  "contains(description,luong)",
+			Direction:  "in",
+			ActionType: "classify",
+			Type:       "income",
+			CategoryID: "income",
+			Enabled:    true,
 		})
 	}
 
-	if len(s.store.ListAssistantCommands(workspaceID)) == 0 {
+	if len(s.store.ListAssistantCommands(userID)) == 0 {
 		_, _ = s.store.CreateAssistantCommand(domain.AssistantCommand{
-			WorkspaceID: workspaceID,
-			UserID:      seedUserID,
-			Command:     "Khởi tạo mục tiêu tài chính: tiết kiệm cho quỹ dự phòng",
-			Status:      "ready",
-			Plan:        "Kiểm tra lại danh mục đầu tư, điều chỉnh kế hoạch chi tiêu theo tháng.",
+			UserID:  userID,
+			Command: "Khởi tạo mục tiêu tài chính: tiết kiệm cho quỹ dự phòng",
+			Status:  "ready",
+			Plan:    "Kiểm tra lại danh mục đầu tư, điều chỉnh kế hoạch chi tiêu theo tháng.",
 		})
 	}
 }
 
-func (s *WealthService) DashboardKpis(workspaceID domain.ID, top int) ([]domain.Transaction, error) {
-	txs := s.store.ListTransactions(workspaceID, "")
+func (s *WealthService) DashboardKpis(userID domain.ID, top int) ([]domain.Transaction, error) {
+	txs := s.store.ListTransactions(userID, "")
 	sort.Slice(txs, func(i, j int) bool { return txs[i].OccurredAt.After(txs[j].OccurredAt) })
 	if top <= 0 || len(txs) <= top {
 		return txs, nil
@@ -2224,8 +2396,8 @@ func (s *WealthService) validateTransactionStatus(status domain.TransactionStatu
 	}
 }
 
-func (s *WealthService) findFirstAccountID(workspaceID domain.ID, currency string) domain.ID {
-	accounts := s.store.ListAccounts(workspaceID)
+func (s *WealthService) findFirstAccountID(userID domain.ID, currency string) domain.ID {
+	accounts := s.store.ListAccounts(userID)
 	for _, acc := range accounts {
 		if currency == "" || acc.Currency == currency {
 			return acc.ID

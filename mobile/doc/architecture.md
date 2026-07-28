@@ -56,7 +56,7 @@ features/auth/
 Khi người dùng bấm đăng nhập, `LoginPage` chỉ gọi
 `LoginViewModel.authenticate()`. ViewModel gọi interface `AuthRepository`; bản
 triển khai gọi `AuthRemoteService`; service gọi `ApiClient`. Repository kiểm
-tra response, tạo `AuthSession` và cập nhật token/workspace cho networking.
+tra response, tạo `AuthSession` và cập nhật token/user cho networking.
 Điều này làm test ViewModel không cần Flutter widget hay backend thật.
 
 ## Lộ trình tách feature hiện hữu

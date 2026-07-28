@@ -29,7 +29,7 @@ src/app/
 | `/assets` | Property và tài sản thủ công | Thêm tài sản / valuation |
 | `/forecast` | Kịch bản, cash floor, goals | Tạo kịch bản |
 | `/inbox` | Việc đến hạn, bank review, stale valuation | Xử lý item |
-| `/settings` | Workspace, consent, integration, audit/export | Quản lý kết nối |
+| `/settings` | User, consent, integration, audit/export | Quản lý kết nối |
 
 Desktop dùng sidebar có label; mobile dùng bottom navigation: Tổng quan, Dòng tiền, Inbox, Thêm, Khác. `Thêm` mở action sheet gồm thu, chi, chuyển tiền, valuation, loan payment; không nhét tất cả form vào FAB trực tiếp.
 
@@ -49,11 +49,11 @@ Màu xanh/đỏ biểu thị hướng tăng/giảm nhưng không mặc định �
 
 ## Màn hình chi tiết và logic interaction
 
-### 1. Onboarding và workspace rỗng
+### 1. Onboarding và user rỗng
 
 **Mục tiêu:** đưa user đến dashboard hữu ích trong dưới 3 phút mà không ép tạo loan/property.
 
-1. Chọn base currency → tạo workspace/portfolio mặc định.
+1. Chọn base currency → tạo user/portfolio mặc định.
 2. Chọn “Thêm số dư đầu kỳ”, “Nhập CSV” hoặc “Kết nối ngân hàng”; cho phép bỏ qua.
 3. Nếu thêm account: name, type, currency, opening balance/effective date; preview “net worth sẽ tăng … vì cash”.
 4. Dashboard rỗng hiển thị checklist có thể dismiss, không chặn thao tác.
@@ -108,7 +108,7 @@ Result có chart + table + assumption/evidence drawer. Goal progress phải nói
 
 **Auto out:** row “Đã tự ghi chi” kèm category; `Sửa` mở reclassify form. **Auto in:** chỉ row confidence ≥ threshold mới là “Đã ghi thu”; row khác ở Cần xem với action Income/Transfer/Loan payment/Asset sale/Ignore/Split.
 
-**Rule builder:** điều kiện dễ hiểu (account, tiền vào/ra, chứa nội dung, amount range, lịch lặp), preview 10 giao dịch gần nhất trước khi enable, priority, scope account/workspace. Không có toggle “Mọi tiền vào là thu nhập”.
+**Rule builder:** điều kiện dễ hiểu (account, tiền vào/ra, chứa nội dung, amount range, lịch lặp), preview 10 giao dịch gần nhất trước khi enable, priority, scope account/user. Không có toggle “Mọi tiền vào là thu nhập”.
 
 ## State, request và lỗi
 

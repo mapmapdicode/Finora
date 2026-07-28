@@ -6,73 +6,73 @@ import (
 	"wealthos-backend/internal/domain"
 )
 
-func TestInMemoryGetWorkspaceRulesPrioritizesAccountScopedRule(t *testing.T) {
+func TestInMemoryGetUserRulesPrioritizesAccountScopedRule(t *testing.T) {
 	store := NewInMemoryStore()
 
 	ws := domain.ID("ws-1")
 	acc := domain.ID("acc-1")
 
-	workspaceRule, err := store.CreateAutomationRule(domain.AutomationRule{
-		WorkspaceID: ws,
-		Name:        "workspace-any",
-		Priority:    1,
-		Direction:   "out",
-		Enabled:     true,
+	userRule, err := store.CreateAutomationRule(domain.AutomationRule{
+		UserID:    ws,
+		Name:      "user-any",
+		Priority:  1,
+		Direction: "out",
+		Enabled:   true,
 	})
 	if err != nil {
-		t.Fatalf("create workspace rule: %v", err)
+		t.Fatalf("create user rule: %v", err)
 	}
 
 	accountRule, err := store.CreateAutomationRule(domain.AutomationRule{
-		WorkspaceID: ws,
-		AccountID:   acc,
-		Name:        "account-specific",
-		Priority:    10,
-		Direction:   "out",
-		Enabled:     true,
+		UserID:    ws,
+		AccountID: acc,
+		Name:      "account-specific",
+		Priority:  10,
+		Direction: "out",
+		Enabled:   true,
 	})
 	if err != nil {
 		t.Fatalf("create account rule: %v", err)
 	}
 
-	rules := store.GetWorkspaceRules(ws, acc, "out")
+	rules := store.GetUserRules(ws, acc, "out")
 	if len(rules) != 2 {
 		t.Fatalf("expected 2 rules, got %d", len(rules))
 	}
 	if rules[0].ID != accountRule.ID {
 		t.Fatalf("expected account-scoped rule first, got %s then %s", rules[0].Name, rules[1].Name)
 	}
-	if rules[1].ID != workspaceRule.ID {
-		t.Fatalf("expected workspace rule second, got %s", rules[1].Name)
+	if rules[1].ID != userRule.ID {
+		t.Fatalf("expected user rule second, got %s", rules[1].Name)
 	}
 }
 
-func TestInMemoryGetWorkspaceRulesFiltersByDirection(t *testing.T) {
+func TestInMemoryGetUserRulesFiltersByDirection(t *testing.T) {
 	store := NewInMemoryStore()
 	ws := domain.ID("ws-2")
 
 	_, err := store.CreateAutomationRule(domain.AutomationRule{
-		WorkspaceID: ws,
-		Name:        "in-only",
-		Priority:    1,
-		Direction:   "in",
-		Enabled:     true,
+		UserID:    ws,
+		Name:      "in-only",
+		Priority:  1,
+		Direction: "in",
+		Enabled:   true,
 	})
 	if err != nil {
 		t.Fatalf("create in rule: %v", err)
 	}
 	_, err = store.CreateAutomationRule(domain.AutomationRule{
-		WorkspaceID: ws,
-		Name:        "out-only",
-		Priority:    1,
-		Direction:   "out",
-		Enabled:     true,
+		UserID:    ws,
+		Name:      "out-only",
+		Priority:  1,
+		Direction: "out",
+		Enabled:   true,
 	})
 	if err != nil {
 		t.Fatalf("create out rule: %v", err)
 	}
 
-	inRules := store.GetWorkspaceRules(ws, "", "in")
+	inRules := store.GetUserRules(ws, "", "in")
 	if len(inRules) != 1 {
 		t.Fatalf("expected 1 in rule, got %d", len(inRules))
 	}
@@ -80,4 +80,3 @@ func TestInMemoryGetWorkspaceRulesFiltersByDirection(t *testing.T) {
 		t.Fatalf("expected in-direction rule, got %q", inRules[0].Direction)
 	}
 }
-

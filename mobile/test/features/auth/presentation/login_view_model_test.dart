@@ -33,7 +33,6 @@ void main() {
       email: 'demo@finora.vn',
       password: 'secret',
       name: 'Demo',
-      workspaceName: 'Finora',
     );
 
     expect(result, isFalse);
@@ -61,6 +60,6 @@ class _FakeAuthRepository implements AuthRepository {
     if (shouldFail) {
       throw const ApiException('Không thể kết nối');
     }
-    return Future.value(const AuthSession(token: 'token', workspaceId: 'ws-1'));
+    return Future.value(const AuthSession(token: 'token'));
   }
 }

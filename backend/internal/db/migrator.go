@@ -77,7 +77,9 @@ func (r *MigrationRunner) Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", f.Name(), err)
 		}
-		stmt := strings.TrimSpace(string(raw))
+		// SQL editors on Windows commonly prepend a UTF-8 BOM. PostgreSQL does
+		// not treat it as whitespace, so remove it before executing migrations.
+		stmt := strings.TrimSpace(strings.TrimPrefix(string(raw), "\uFEFF"))
 		if stmt == "" {
 			continue
 		}

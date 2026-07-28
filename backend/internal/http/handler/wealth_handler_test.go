@@ -1,10 +1,14 @@
 package handler
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,17 +17,109 @@ import (
 
 	"wealthos-backend/internal/config"
 	"wealthos-backend/internal/domain"
+	"wealthos-backend/internal/integration/sepay"
 	"wealthos-backend/internal/service"
 	"wealthos-backend/internal/storage"
 )
+
+type fakeBankHub struct {
+	accounts []sepay.BankHubAccount
+	company  string
+	query    string
+}
+
+func TestParseStandardSePayWebhookPayload(t *testing.T) {
+	event, err := parseSePayWebhookPayload([]byte(`{"id":92704,"gateway":"Vietcombank","transactionDate":"2026-07-27 11:08:33","accountNumber":"1017588888","content":"chuyen tien","transferType":"in","description":"NGUYEN VAN A","transferAmount":5000000,"referenceCode":"FT24012345678"}`))
+	if err != nil {
+		t.Fatalf("parse standard payload: %v", err)
+	}
+	if event.AccountID != "1017588888" || event.Direction != "in" || event.Amount != "5000000" || event.ExternalID != "92704" || event.Reference != "FT24012345678" || event.OccurredAt != "2026-07-27 11:08:33" {
+		t.Fatalf("unexpected standard event: %+v", event)
+	}
+}
+
+func TestVerifySePayWebhookAcceptsDocumentedSHA256Prefix(t *testing.T) {
+	body := []byte(`{"id":1}`)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	h := &WealthHandler{secret: "test-hmac-secret"}
+	req := httptest.NewRequest(http.MethodPost, "/hooks/sepay-webhook", strings.NewReader(string(body)))
+	req.Header.Set("X-SePay-Timestamp", timestamp)
+	req.Header.Set("X-SePay-Signature", "sha256="+hex.EncodeToString(signSePayPayload(h.secret, timestamp, body)))
+	if err := h.verifySePayWebhook(body, req); err != nil {
+		t.Fatalf("verify documented signature: %v", err)
+	}
+}
+
+func TestBotPublicAPIRequiresAccountSecretAndScopesHistory(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("bot-api@example.test", "Bot API", "hash")
+	ws, err := store.EnsureUserPortfolio("Bot API", "VND", userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portfolio, err := store.CreatePortfolio(domain.Portfolio{UserID: ws.ID, Name: "Main", BaseCurrency: "VND"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := store.CreateAccount(domain.Account{UserID: ws.ID, PortfolioID: portfolio.ID, Name: "Bot cash", Type: "cash", Currency: "VND"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := "finora_bot_test_secret"
+	digest := sha256.Sum256([]byte(secret))
+	if _, err := store.UpsertBotAccountKey(domain.BotAccountKey{AccountID: account.ID, SecretHash: hex.EncodeToString(digest[:]), Prefix: "finora_bot_test"}); err != nil {
+		t.Fatal(err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/public/v1/accounts/"+string(account.ID)+"/transactions", strings.NewReader(`{"type":"expense","amount":"123000","name":"Ăn trưa","occurredAt":"2026-07-20"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("X-Finora-Account-Key", secret)
+	c.Params = gin.Params{{Key: "id", Value: string(account.ID)}}
+	h.BotCreateTransaction(c)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	historyW := httptest.NewRecorder()
+	historyC, _ := gin.CreateTestContext(historyW)
+	historyC.Request = httptest.NewRequest(http.MethodGet, "/public/v1/accounts/"+string(account.ID)+"/transactions/history?from=2026-07-01&to=2026-07-31", nil)
+	historyC.Request.Header.Set("X-Finora-Account-Key", secret)
+	historyC.Params = gin.Params{{Key: "id", Value: string(account.ID)}}
+	h.BotListTransactions(historyC)
+	if historyW.Code != http.StatusOK || !strings.Contains(historyW.Body.String(), "Ăn trưa") {
+		t.Fatalf("history status=%d body=%s", historyW.Code, historyW.Body.String())
+	}
+
+	deniedW := httptest.NewRecorder()
+	deniedC, _ := gin.CreateTestContext(deniedW)
+	deniedC.Request = httptest.NewRequest(http.MethodGet, "/public/v1/accounts/"+string(account.ID)+"/transactions/history?from=2026-07-01&to=2026-07-31", nil)
+	deniedC.Request.Header.Set("X-Finora-Account-Key", "wrong")
+	deniedC.Params = gin.Params{{Key: "id", Value: string(account.ID)}}
+	h.BotListTransactions(deniedC)
+	if deniedW.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong secret status=%d", deniedW.Code)
+	}
+}
+
+func (f *fakeBankHub) Configured() bool { return true }
+func (f *fakeBankHub) CreateLink(context.Context, string, string) (sepay.LinkSession, error) {
+	return sepay.LinkSession{}, nil
+}
+func (f *fakeBankHub) ListBankAccounts(_ context.Context, company, query string) ([]sepay.BankHubAccount, error) {
+	f.company, f.query = company, query
+	return f.accounts, nil
+}
 
 func TestRequireEditorRoleBlocksViewer(t *testing.T) {
 	h := &WealthHandler{}
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	c.Set("workspace_id", "ws-1")
-	c.Set("workspace_role", "viewer")
+	c.Set("user_id", "ws-1")
+	c.Set("user_role", "viewer")
 
 	if h.requireEditorRole(c) {
 		t.Fatalf("expected viewer role to be rejected")
@@ -39,8 +135,8 @@ func TestRequireEditorRoleAllowsEditorAndOwner(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-		c.Set("workspace_id", "ws-1")
-		c.Set("workspace_role", "editor")
+		c.Set("user_id", "ws-1")
+		c.Set("user_role", "editor")
 		if !h.requireEditorRole(c) {
 			t.Fatalf("expected editor role to be allowed")
 		}
@@ -51,12 +147,42 @@ func TestRequireEditorRoleAllowsEditorAndOwner(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-		c.Set("workspace_id", "ws-1")
-		c.Set("workspace_role", "owner")
+		c.Set("user_id", "ws-1")
+		c.Set("user_role", "owner")
 		if !h.requireEditorRole(c) {
 			t.Fatalf("expected owner role to be allowed")
 		}
 	})
+}
+
+func TestSyncMySePayBankAccountsFetchesProviderDataAndScopesItToCurrentUser(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := domain.ID("sepay-sync-user")
+	if _, err := store.UpsertSePayUserProfile(domain.SePayUserProfile{UserID: userID, CompanyXID: "company-user-1", Status: "link_pending"}); err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeBankHub{accounts: []sepay.BankHubAccount{
+		{XID: "provider-account-1", BankCode: "MBB", BrandName: "MBBank", AccountNumber: "001 234 567", BankAPIConnected: true, Active: true},
+		{XID: "provider-account-other", BankCode: "MBB", BrandName: "MBBank", AccountNumber: "999999", BankAPIConnected: true, Active: true},
+	}}
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
+	h.bankHub, h.pilotBanks = fake, map[string]struct{}{"MBB": {}}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/me/sepay/bank-accounts/sync", strings.NewReader(`{"accountNumber":"001234567"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set("user_id", string(userID))
+	h.SyncMySePayBankAccounts(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if fake.company != "company-user-1" || fake.query != "001234567" {
+		t.Fatalf("provider lookup = %q / %q", fake.company, fake.query)
+	}
+	accounts := store.ListSePayBankAccounts(userID)
+	if len(accounts) != 1 || accounts[0].BankAccountXID != "provider-account-1" || !accounts[0].SupportsIn || !accounts[0].SupportsOut {
+		t.Fatalf("unexpected persisted accounts: %+v", accounts)
+	}
 }
 
 func TestRequireEditorRoleRejectsMissingRole(t *testing.T) {
@@ -64,7 +190,7 @@ func TestRequireEditorRoleRejectsMissingRole(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	c.Set("workspace_id", "ws-1")
+	c.Set("user_id", "ws-1")
 
 	if h.requireEditorRole(c) {
 		t.Fatalf("expected missing role to be rejected")
@@ -80,8 +206,8 @@ func TestRequireOwnerRoleOnlyAllowsOwner(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-		c.Set("workspace_id", "ws-1")
-		c.Set("workspace_role", "owner")
+		c.Set("user_id", "ws-1")
+		c.Set("user_role", "owner")
 		if !h.requireOwnerRole(c) {
 			t.Fatalf("expected owner role to be allowed")
 		}
@@ -92,8 +218,8 @@ func TestRequireOwnerRoleOnlyAllowsOwner(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-		c.Set("workspace_id", "ws-1")
-		c.Set("workspace_role", "editor")
+		c.Set("user_id", "ws-1")
+		c.Set("user_role", "editor")
 		if h.requireOwnerRole(c) {
 			t.Fatalf("expected editor role to be rejected")
 		}
@@ -107,8 +233,8 @@ func TestRequireOwnerRoleOnlyAllowsOwner(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-		c.Set("workspace_id", "ws-1")
-		c.Set("workspace_role", "viewer")
+		c.Set("user_id", "ws-1")
+		c.Set("user_role", "viewer")
 		if h.requireOwnerRole(c) {
 			t.Fatalf("expected viewer role to be rejected")
 		}
@@ -121,9 +247,9 @@ func TestRequireOwnerRoleOnlyAllowsOwner(t *testing.T) {
 func TestListPortfolioSnapshotsRejectsInvalidLimit(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	p, ok := store.FirstPortfolio(ws.ID)
 	if !ok {
@@ -135,7 +261,7 @@ func TestListPortfolioSnapshotsRejectsInvalidLimit(t *testing.T) {
 	r.GET("/portfolios/:id/snapshots", h.ListPortfolioSnapshots)
 
 	req := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/snapshots?limit=bad", nil)
-	req.Header.Set("x-workspace-id", string(ws.ID))
+	req.Header.Set("x-user-id", string(ws.ID))
 	resp := httptest.NewRecorder()
 	r.ServeHTTP(resp, req)
 
@@ -147,16 +273,16 @@ func TestListPortfolioSnapshotsRejectsInvalidLimit(t *testing.T) {
 func TestListPortfolioSnapshotsSupportsPagination(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	p, ok := store.FirstPortfolio(ws.ID)
 	if !ok {
 		t.Fatalf("missing portfolio")
 	}
 	acc, err := store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p.ID,
 		Name:        "Main",
 		Type:        "cash",
@@ -169,13 +295,13 @@ func TestListPortfolioSnapshotsSupportsPagination(t *testing.T) {
 	svc := service.NewWealthService(store, nil)
 	for i := 0; i < 4; i++ {
 		_, err := store.CreateTransaction(domain.Transaction{
-			WorkspaceID: ws.ID,
-			AccountID:   acc.ID,
-			Type:        domain.TransactionTypeIncome,
-			Amount:      "10.00",
-			Currency:    "VND",
-			OccurredAt:  time.Now().UTC(),
-			Status:      domain.TransactionStatusPosted,
+			UserID:     ws.ID,
+			AccountID:  acc.ID,
+			Type:       domain.TransactionTypeIncome,
+			Amount:     "10.00",
+			Currency:   "VND",
+			OccurredAt: time.Now().UTC(),
+			Status:     domain.TransactionStatusPosted,
 		})
 		if err != nil {
 			t.Fatalf("create tx %d: %v", i, err)
@@ -191,7 +317,7 @@ func TestListPortfolioSnapshotsSupportsPagination(t *testing.T) {
 	r.GET("/portfolios/:id/snapshots", h.ListPortfolioSnapshots)
 
 	req1 := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/snapshots?limit=3", nil)
-	req1.Header.Set("x-workspace-id", string(ws.ID))
+	req1.Header.Set("x-user-id", string(ws.ID))
 	resp1 := httptest.NewRecorder()
 	r.ServeHTTP(resp1, req1)
 
@@ -213,7 +339,7 @@ func TestListPortfolioSnapshotsSupportsPagination(t *testing.T) {
 	}
 
 	req2 := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/snapshots?limit=3&cursor="+url.QueryEscape(page1.NextCursor), nil)
-	req2.Header.Set("x-workspace-id", string(ws.ID))
+	req2.Header.Set("x-user-id", string(ws.ID))
 	resp2 := httptest.NewRecorder()
 	r.ServeHTTP(resp2, req2)
 
@@ -238,16 +364,16 @@ func TestListPortfolioSnapshotsSupportsPagination(t *testing.T) {
 func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	p, ok := store.FirstPortfolio(ws.ID)
 	if !ok {
 		t.Fatalf("missing portfolio")
 	}
 	acc, err := store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p.ID,
 		Name:        "Main",
 		Type:        "cash",
@@ -259,43 +385,43 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 
 	now := time.Now().UTC()
 	_, err = store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
-		AccountID:   acc.ID,
-		CategoryID:  "salary",
-		Type:        domain.TransactionTypeExpense,
-		Amount:      "10.00",
-		Currency:    "VND",
-		OccurredAt:  now.Add(-3 * time.Hour),
-		Status:      domain.TransactionStatusPosted,
-		Note:        "coffee",
+		UserID:     ws.ID,
+		AccountID:  acc.ID,
+		CategoryID: "salary",
+		Type:       domain.TransactionTypeExpense,
+		Amount:     "10.00",
+		Currency:   "VND",
+		OccurredAt: now.Add(-3 * time.Hour),
+		Status:     domain.TransactionStatusPosted,
+		Note:       "coffee",
 	})
 	if err != nil {
 		t.Fatalf("create tx1: %v", err)
 	}
 	_, err = store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
-		AccountID:   acc.ID,
-		CategoryID:  "bonus",
-		Type:        domain.TransactionTypeIncome,
-		Amount:      "20.00",
-		Currency:    "VND",
-		OccurredAt:  now.Add(-2 * time.Hour),
-		Status:      domain.TransactionStatusPosted,
-		Note:        "monthly salary",
+		UserID:     ws.ID,
+		AccountID:  acc.ID,
+		CategoryID: "bonus",
+		Type:       domain.TransactionTypeIncome,
+		Amount:     "20.00",
+		Currency:   "VND",
+		OccurredAt: now.Add(-2 * time.Hour),
+		Status:     domain.TransactionStatusPosted,
+		Note:       "monthly salary",
 	})
 	if err != nil {
 		t.Fatalf("create tx2: %v", err)
 	}
 	_, err = store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
-		AccountID:   acc.ID,
-		CategoryID:  "salary",
-		Type:        domain.TransactionTypeExpense,
-		Amount:      "30.00",
-		Currency:    "VND",
-		OccurredAt:  now.Add(-1 * time.Hour),
-		Status:      domain.TransactionStatusPending,
-		Note:        "bonus",
+		UserID:     ws.ID,
+		AccountID:  acc.ID,
+		CategoryID: "salary",
+		Type:       domain.TransactionTypeExpense,
+		Amount:     "30.00",
+		Currency:   "VND",
+		OccurredAt: now.Add(-1 * time.Hour),
+		Status:     domain.TransactionStatusPending,
+		Note:       "bonus",
 	})
 	if err != nil {
 		t.Fatalf("create tx3: %v", err)
@@ -311,7 +437,7 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 	}
 
 	req1 := httptest.NewRequest(http.MethodGet, "/transactions?limit=2&accountId="+string(acc.ID), nil)
-	req1.Header.Set("x-workspace-id", string(ws.ID))
+	req1.Header.Set("x-user-id", string(ws.ID))
 	resp1 := httptest.NewRecorder()
 	r.ServeHTTP(resp1, req1)
 	if got, want := resp1.Result().StatusCode, http.StatusOK; got != want {
@@ -329,7 +455,7 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 	}
 
 	req2 := httptest.NewRequest(http.MethodGet, "/transactions?limit=2&accountId="+string(acc.ID)+"&cursor="+url.QueryEscape(p1.NextCursor), nil)
-	req2.Header.Set("x-workspace-id", string(ws.ID))
+	req2.Header.Set("x-user-id", string(ws.ID))
 	resp2 := httptest.NewRecorder()
 	r.ServeHTTP(resp2, req2)
 	if got, want := resp2.Result().StatusCode, http.StatusOK; got != want {
@@ -347,7 +473,7 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 	}
 
 	req3 := httptest.NewRequest(http.MethodGet, "/transactions?type=income&accountId="+string(acc.ID)+"&limit=10", nil)
-	req3.Header.Set("x-workspace-id", string(ws.ID))
+	req3.Header.Set("x-user-id", string(ws.ID))
 	resp3 := httptest.NewRecorder()
 	r.ServeHTTP(resp3, req3)
 	var p3 pageResp
@@ -365,7 +491,7 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 	}
 
 	req4 := httptest.NewRequest(http.MethodGet, "/transactions?search=salary&accountId="+string(acc.ID)+"&limit=10", nil)
-	req4.Header.Set("x-workspace-id", string(ws.ID))
+	req4.Header.Set("x-user-id", string(ws.ID))
 	resp4 := httptest.NewRecorder()
 	r.ServeHTTP(resp4, req4)
 	var p4 pageResp
@@ -383,16 +509,16 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 func TestListTransactionsRejectsInvalidCursor(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	r := gin.New()
 	r.GET("/transactions", h.ListTransactions)
 
 	req := httptest.NewRequest(http.MethodGet, "/transactions?cursor=bad-cursor", nil)
-	req.Header.Set("x-workspace-id", string(ws.ID))
+	req.Header.Set("x-user-id", string(ws.ID))
 	resp := httptest.NewRecorder()
 	r.ServeHTTP(resp, req)
 
@@ -404,16 +530,16 @@ func TestListTransactionsRejectsInvalidCursor(t *testing.T) {
 func TestGetPortfolioNetWorthSupportsAsOfQuery(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	p, ok := store.FirstPortfolio(ws.ID)
 	if !ok {
 		t.Fatalf("missing default portfolio")
 	}
 	acc, err := store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p.ID,
 		Name:        "Main",
 		Type:        "cash",
@@ -424,7 +550,7 @@ func TestGetPortfolioNetWorthSupportsAsOfQuery(t *testing.T) {
 	}
 
 	prop, err := store.CreateProperty(domain.Property{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p.ID,
 		Name:        "Villa",
 		Address:     "HCM",
@@ -455,7 +581,7 @@ func TestGetPortfolioNetWorthSupportsAsOfQuery(t *testing.T) {
 	}
 
 	_, err = store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		AccountID:   acc.ID,
 		PortfolioID: p.ID,
 		Type:        domain.TransactionTypeIncome,
@@ -468,7 +594,7 @@ func TestGetPortfolioNetWorthSupportsAsOfQuery(t *testing.T) {
 		t.Fatalf("create first income tx: %v", err)
 	}
 	_, err = store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		AccountID:   acc.ID,
 		PortfolioID: p.ID,
 		Type:        domain.TransactionTypeIncome,
@@ -487,7 +613,7 @@ func TestGetPortfolioNetWorthSupportsAsOfQuery(t *testing.T) {
 	r.GET("/portfolios/:id/net-worth", h.GetPortfolioNetWorth)
 
 	req := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/net-worth?asOf="+base.AddDate(0, 0, 3).Format(time.RFC3339), nil)
-	req.Header.Set("x-workspace-id", string(ws.ID))
+	req.Header.Set("x-user-id", string(ws.ID))
 	resp := httptest.NewRecorder()
 	r.ServeHTTP(resp, req)
 
@@ -503,7 +629,7 @@ func TestGetPortfolioNetWorthSupportsAsOfQuery(t *testing.T) {
 	}
 
 	reqInvalid := httptest.NewRequest(http.MethodGet, "/portfolios/"+string(p.ID)+"/net-worth?asOf=not-a-date", nil)
-	reqInvalid.Header.Set("x-workspace-id", string(ws.ID))
+	reqInvalid.Header.Set("x-user-id", string(ws.ID))
 	respInvalid := httptest.NewRecorder()
 	r.ServeHTTP(respInvalid, reqInvalid)
 	if got, want := respInvalid.Result().StatusCode, http.StatusBadRequest; got != want {
@@ -577,31 +703,29 @@ func TestParseDateFilterRejectsInvalidInput(t *testing.T) {
 	})
 }
 
-func TestListAssistantCommandsFiltersByWorkspace(t *testing.T) {
+func TestListAssistantCommandsFiltersByUser(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws1, err := store.CreateWorkspace("Workspace 1", "VND", userID)
+	ws1, err := store.EnsureUserPortfolio("", "VND", userID)
 	if err != nil {
-		t.Fatalf("create workspace 1: %v", err)
+		t.Fatalf("create user 1: %v", err)
 	}
-	ws2, err := store.CreateWorkspace("Workspace 2", "VND", userID)
+	otherID := store.SeedDemoUser("other@x.com", "Another", "pass")
+	ws2, err := store.EnsureUserPortfolio("", "VND", otherID)
 	if err != nil {
-		t.Fatalf("create workspace 2: %v", err)
+		t.Fatalf("create user 2: %v", err)
 	}
-	store.SeedDemoUser("other@x.com", "Another", "pass")
 
 	_, err = store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws1.ID,
-		UserID:      userID,
-		Command:     "cmd ws1",
+		UserID:  ws1.ID,
+		Command: "cmd ws1",
 	})
 	if err != nil {
 		t.Fatalf("create ws1 command: %v", err)
 	}
 	_, err = store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws2.ID,
-		UserID:      userID,
-		Command:     "cmd ws2",
+		UserID:  ws2.ID,
+		Command: "cmd ws2",
 	})
 	if err != nil {
 		t.Fatalf("create ws2 command: %v", err)
@@ -612,7 +736,7 @@ func TestListAssistantCommandsFiltersByWorkspace(t *testing.T) {
 	r.GET("/assistant/commands", h.ListAssistantCommands)
 
 	req := httptest.NewRequest(http.MethodGet, "/assistant/commands", nil)
-	req.Header.Set("x-workspace-id", string(ws1.ID))
+	req.Header.Set("x-user-id", string(ws1.ID))
 	resp := httptest.NewRecorder()
 	r.ServeHTTP(resp, req)
 
@@ -624,10 +748,10 @@ func TestListAssistantCommandsFiltersByWorkspace(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(commands) != 1 {
-		t.Fatalf("expected only commands for selected workspace, got %d", len(commands))
+		t.Fatalf("expected only commands for selected user, got %d", len(commands))
 	}
-	if string(commands[0].WorkspaceID) != string(ws1.ID) {
-		t.Fatalf("expected workspace %s, got %s", ws1.ID, commands[0].WorkspaceID)
+	if string(commands[0].UserID) != string(ws1.ID) {
+		t.Fatalf("expected user %s, got %s", ws1.ID, commands[0].UserID)
 	}
 }
 
@@ -650,12 +774,12 @@ func TestTelegramWebhookRejectsInvalidSecret(t *testing.T) {
 	}
 }
 
-func TestTelegramWebhookCreatesAssistantCommandForLinkedWorkspace(t *testing.T) {
+func TestTelegramWebhookCreatesAssistantCommandForLinkedUser(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 
 	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{
@@ -664,7 +788,7 @@ func TestTelegramWebhookCreatesAssistantCommandForLinkedWorkspace(t *testing.T) 
 	r := gin.New()
 	r.POST("/assistant/telegram/webhook", h.TelegramWebhook)
 
-	body := `{"message":{"text":"tÃ£o mÃ´i lÃ©nh"},"workspaceId":"` + string(ws.ID) + `","update_id":1}`
+	body := `{"message":{"text":"tÃ£o mÃ´i lÃ©nh"},"userId":"` + string(ws.ID) + `","update_id":1}`
 	req := httptest.NewRequest(http.MethodPost, "/assistant/telegram/webhook", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "top-secret")
@@ -676,9 +800,9 @@ func TestTelegramWebhookCreatesAssistantCommandForLinkedWorkspace(t *testing.T) 
 	}
 
 	var out struct {
-		Status      string `json:"status"`
-		CommandID   string `json:"commandId"`
-		WorkspaceID string `json:"workspaceId"`
+		Status    string `json:"status"`
+		CommandID string `json:"commandId"`
+		UserID    string `json:"userId"`
 	}
 	if err := json.NewDecoder(resp.Result().Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -686,8 +810,8 @@ func TestTelegramWebhookCreatesAssistantCommandForLinkedWorkspace(t *testing.T) 
 	if out.Status != "received" {
 		t.Fatalf("expected received status, got %q", out.Status)
 	}
-	if out.WorkspaceID != string(ws.ID) {
-		t.Fatalf("expected workspace %s, got %s", ws.ID, out.WorkspaceID)
+	if out.UserID != string(ws.ID) {
+		t.Fatalf("expected user %s, got %s", ws.ID, out.UserID)
 	}
 	if out.CommandID == "" {
 		t.Fatalf("expected command id")
@@ -699,7 +823,7 @@ func TestTelegramWebhookCreatesAssistantCommandForLinkedWorkspace(t *testing.T) 
 	}
 }
 
-func TestTelegramWebhookRequiresWorkspaceLink(t *testing.T) {
+func TestTelegramWebhookRequiresUserLink(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{
 		TelegramWebhookSecret: "top-secret",
@@ -723,9 +847,9 @@ func TestCreateAssistantCommandSetsIntentAndStatus(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
 	ownerID := domain.ID(userID)
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 
 	cases := []struct {
@@ -750,8 +874,8 @@ func TestCreateAssistantCommandSetsIntentAndStatus(t *testing.T) {
 			resp := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(resp)
 			c.Request = req
-			c.Set("workspace_id", string(ws.ID))
-			c.Set("workspace_role", "owner")
+			c.Set("user_id", string(ws.ID))
+			c.Set("user_role", "owner")
 			c.Set("user_id", string(ownerID))
 			h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 			h.CreateAssistantCommand(c)
@@ -777,17 +901,16 @@ func TestApproveCommandTransitions(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
 	ownerID := domain.ID(userID)
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws.ID,
-		UserID:      ownerID,
-		Command:     "open chrome",
-		Status:      assistantStatusAwaitingApproval,
-		Plan:        assistantIntentExternalAction,
-		ApprovalID:  "manual-appr-id",
+		UserID:     ws.ID,
+		Command:    "open chrome",
+		Status:     assistantStatusAwaitingApproval,
+		Plan:       assistantIntentExternalAction,
+		ApprovalID: "manual-appr-id",
 	})
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
@@ -799,8 +922,8 @@ func TestApproveCommandTransitions(t *testing.T) {
 	c, _ := gin.CreateTestContext(resp)
 	c.Request = req
 	c.Params = gin.Params{{Key: "id", Value: string(cmd.ID)}}
-	c.Set("workspace_id", string(ws.ID))
-	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ws.ID))
+	c.Set("user_role", "owner")
 	c.Set("user_id", string(ownerID))
 	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	h.ApproveCommand(c)
@@ -825,16 +948,15 @@ func TestApproveCommandRejectsInvalidTransition(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
 	ownerID := domain.ID(userID)
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws.ID,
-		UserID:      ownerID,
-		Command:     "list recent expenses",
-		Status:      assistantStatusPlanned,
-		Plan:        assistantIntentRead,
+		UserID:  ws.ID,
+		Command: "list recent expenses",
+		Status:  assistantStatusPlanned,
+		Plan:    assistantIntentRead,
 	})
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
@@ -845,8 +967,8 @@ func TestApproveCommandRejectsInvalidTransition(t *testing.T) {
 	c, _ := gin.CreateTestContext(resp)
 	c.Request = req
 	c.Params = gin.Params{{Key: "id", Value: string(cmd.ID)}}
-	c.Set("workspace_id", string(ws.ID))
-	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ws.ID))
+	c.Set("user_role", "owner")
 	c.Set("user_id", string(ownerID))
 	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 	h.ApproveCommand(c)
@@ -860,27 +982,25 @@ func TestCancelCommandTransitionsAndTerminalRules(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
 	ownerID := domain.ID(userID)
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 
 	allow, err := store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws.ID,
-		UserID:      ownerID,
-		Command:     "list recent expenses",
-		Status:      assistantStatusPlanned,
-		Plan:        assistantIntentRead,
+		UserID:  ws.ID,
+		Command: "list recent expenses",
+		Status:  assistantStatusPlanned,
+		Plan:    assistantIntentRead,
 	})
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
 	}
 	completed, err := store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws.ID,
-		UserID:      ownerID,
-		Command:     "list recent expenses",
-		Status:      assistantStatusCompleted,
-		Plan:        assistantIntentRead,
+		UserID:  ws.ID,
+		Command: "list recent expenses",
+		Status:  assistantStatusCompleted,
+		Plan:    assistantIntentRead,
 	})
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
@@ -892,8 +1012,8 @@ func TestCancelCommandTransitionsAndTerminalRules(t *testing.T) {
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
 		c.Params = gin.Params{{Key: "id", Value: string(allow.ID)}}
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "owner")
 		c.Set("user_id", string(ownerID))
 		h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 		h.CancelCommand(c)
@@ -916,8 +1036,8 @@ func TestCancelCommandTransitionsAndTerminalRules(t *testing.T) {
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
 		c.Params = gin.Params{{Key: "id", Value: string(completed.ID)}}
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "owner")
 		c.Set("user_id", string(ownerID))
 		h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 		h.CancelCommand(c)
@@ -932,16 +1052,15 @@ func TestApproveCommandRejectsReplayToken(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
 	ownerID := domain.ID(userID)
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws.ID,
-		UserID:      ownerID,
-		Command:     "open chrome",
-		Status:      assistantStatusAwaitingApproval,
-		Plan:        assistantIntentExternalAction,
+		UserID:  ws.ID,
+		Command: "open chrome",
+		Status:  assistantStatusAwaitingApproval,
+		Plan:    assistantIntentExternalAction,
 	})
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
@@ -955,8 +1074,8 @@ func TestApproveCommandRejectsReplayToken(t *testing.T) {
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
 		c.Params = gin.Params{{Key: "id", Value: string(cmd.ID)}}
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "owner")
 		c.Set("user_id", string(ownerID))
 		h.ApproveCommand(c)
 		return resp
@@ -976,16 +1095,15 @@ func TestApproveCommandRejectsReplayToken(t *testing.T) {
 func TestTelegramApprovalCallbackSingleUse(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws.ID,
-		UserID:      domain.ID("9999999"),
-		Command:     "open chrome",
-		Status:      assistantStatusAwaitingApproval,
-		Plan:        assistantIntentExternalAction,
+		UserID:  ws.ID,
+		Command: "open chrome",
+		Status:  assistantStatusAwaitingApproval,
+		Plan:    assistantIntentExternalAction,
 	})
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
@@ -996,7 +1114,7 @@ func TestTelegramApprovalCallbackSingleUse(t *testing.T) {
 	r := gin.New()
 	r.POST("/assistant/telegram/webhook", h.TelegramWebhook)
 
-	payload := `{"callback_query":{"data":"approve:` + string(cmd.ID) + `:` + cmd.ApprovalID + `","from":{"id":9999999},"message":{"chat":{"id":11},"from":{"id":9999999}},"id":"cb-1"},"workspaceId":"` + string(ws.ID) + `"}`
+	payload := `{"callback_query":{"data":"approve:` + string(cmd.ID) + `:` + cmd.ApprovalID + `","from":{"id":9999999},"message":{"chat":{"id":11},"from":{"id":9999999}},"id":"cb-1"},"userId":"` + string(ws.ID) + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/assistant/telegram/webhook", strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "top-secret")
@@ -1019,26 +1137,24 @@ func TestTelegramApprovalCallbackSingleUse(t *testing.T) {
 func TestExecutorEventsChecksSecretAndTransitionMapping(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", userID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", userID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	cmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws.ID,
-		UserID:      userID,
-		Command:     "open chrome",
-		Status:      assistantStatusPlanned,
-		Plan:        assistantIntentExternalAction,
+		UserID:  ws.ID,
+		Command: "open chrome",
+		Status:  assistantStatusPlanned,
+		Plan:    assistantIntentExternalAction,
 	})
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
 	}
 	completedCmd, err := store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: ws.ID,
-		UserID:      userID,
-		Command:     "open chrome",
-		Status:      assistantStatusCompleted,
-		Plan:        assistantIntentExternalAction,
+		UserID:  ws.ID,
+		Command: "open chrome",
+		Status:  assistantStatusCompleted,
+		Plan:    assistantIntentExternalAction,
 	})
 	if err != nil {
 		t.Fatalf("create assistant command: %v", err)
@@ -1099,9 +1215,9 @@ func TestExecutorEventsChecksSecretAndTransitionMapping(t *testing.T) {
 func TestCreateSePayConnectionReturnsConnectUrlAndPersistedState(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
@@ -1111,8 +1227,8 @@ func TestCreateSePayConnectionReturnsConnectUrlAndPersistedState(t *testing.T) {
 	resp := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(resp)
 	c.Request = req
-	c.Set("workspace_id", string(ws.ID))
-	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ws.ID))
+	c.Set("user_role", "owner")
 
 	h.CreateSePayConnection(c)
 
@@ -1173,15 +1289,62 @@ func TestCreateSePayConnectionReturnsConnectUrlAndPersistedState(t *testing.T) {
 	}
 }
 
+func TestBankHubEventLinksAccountAndIPNQueuesIt(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("bankhub@wealthos.vn", "Bank Hub", "pass")
+	ws, err := store.EnsureUserPortfolio("Bank Hub", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if _, err := store.CreateAccount(domain.Account{UserID: ws.ID, Name: "Bank", Type: "bank", Currency: "VND"}); err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	conn, err := store.CreateBankConnection(domain.BankConnection{
+		UserID:     ws.ID,
+		Provider:   "sepay",
+		ExternalID: "link-token-xid",
+	})
+	if err != nil {
+		t.Fatalf("create connection: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{SePayBankHubAPIKey: "ipn-secret"})
+
+	eventResp := httptest.NewRecorder()
+	eventCtx, _ := gin.CreateTestContext(eventResp)
+	eventCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/sepay/bankhub/events", strings.NewReader(`{"event":"BANK_ACCOUNT_LINKED","metadata":{"link_token_xid":"link-token-xid","bank_account_xid":"bank-account-xid","brand_name":"MBBank"}}`))
+	eventCtx.Request.Header.Set("Authorization", "Apikey ipn-secret")
+	h.BankHubEvent(eventCtx)
+	if eventResp.Code != http.StatusOK {
+		t.Fatalf("expected linked event 200, got %d: %s", eventResp.Code, eventResp.Body.String())
+	}
+	linked, ok := store.GetBankConnection(conn.ID)
+	if !ok || linked.ExternalID != "bank-account-xid" || linked.BankCode != "MBBank" {
+		t.Fatalf("expected Bank Hub account mapping, got %+v", linked)
+	}
+
+	ipnResp := httptest.NewRecorder()
+	ipnCtx, _ := gin.CreateTestContext(ipnResp)
+	ipnCtx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/sepay/bankhub/ipn", strings.NewReader(`{"transaction_date":"2026-07-27 10:00:00","bank_account_xid":"bank-account-xid","transfer_type":"debit","amount":125000,"content":"Cafe","reference_code":"FT1","transaction_id":"tx-1"}`))
+	ipnCtx.Request.Header.Set("Authorization", "Apikey ipn-secret")
+	h.BankHubIPN(ipnCtx)
+	if ipnResp.Code != http.StatusOK {
+		t.Fatalf("expected IPN 200, got %d: %s", ipnResp.Code, ipnResp.Body.String())
+	}
+	events := store.ListBankFeedEvents(ws.ID, domain.BankFeedEventStateQueued)
+	if len(events) != 1 || events[0].ExternalID != "tx-1" {
+		t.Fatalf("expected one queued IPN event, got %+v", events)
+	}
+}
+
 func TestSePayCallbackStrictStateValidation(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID:   ws.ID,
+		UserID:        ws.ID,
 		Provider:      sepayDefaultProvider,
 		Scope:         sepayDefaultReadScope,
 		ExternalID:    "ext",
@@ -1243,16 +1406,16 @@ func TestSePayCallbackStrictStateValidation(t *testing.T) {
 func TestSyncBankConnectionRateLimitsAndCooldown(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID: ws.ID,
-		Provider:    sepayDefaultProvider,
-		Scope:       sepayDefaultReadScope,
-		ExternalID:  "ext",
-		SyncStatus:  "idle",
+		UserID:     ws.ID,
+		Provider:   sepayDefaultProvider,
+		Scope:      sepayDefaultReadScope,
+		ExternalID: "ext",
+		SyncStatus: "idle",
 	})
 	if err != nil {
 		t.Fatalf("create bank connection: %v", err)
@@ -1264,8 +1427,8 @@ func TestSyncBankConnectionRateLimitsAndCooldown(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "owner")
 		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
 		h.SyncBankConnection(c)
 		return resp.Result().StatusCode
@@ -1298,9 +1461,9 @@ func TestSyncBankConnectionRateLimitsAndCooldown(t *testing.T) {
 func TestCreateSePayConnectionRequiresOwnerRole(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
 
@@ -1310,8 +1473,8 @@ func TestCreateSePayConnectionRequiresOwnerRole(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "viewer")
 		c.Set("user_id", string(ownerID))
 		h.CreateSePayConnection(c)
 		if resp.Result().StatusCode != http.StatusForbidden {
@@ -1325,8 +1488,8 @@ func TestCreateSePayConnectionRequiresOwnerRole(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "editor")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "editor")
 		c.Set("user_id", string(ownerID))
 		h.CreateSePayConnection(c)
 		if resp.Result().StatusCode != http.StatusForbidden {
@@ -1340,8 +1503,8 @@ func TestCreateSePayConnectionRequiresOwnerRole(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "owner")
 		c.Set("user_id", string(ownerID))
 		h.CreateSePayConnection(c)
 		if resp.Result().StatusCode != http.StatusCreated {
@@ -1353,16 +1516,16 @@ func TestCreateSePayConnectionRequiresOwnerRole(t *testing.T) {
 func TestRevokeBankConnectionRequiresOwnerRole(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID: ws.ID,
-		Provider:    sepayDefaultProvider,
-		Scope:       sepayDefaultReadScope,
-		ExternalID:  "ext",
-		SyncStatus:  "idle",
+		UserID:     ws.ID,
+		Provider:   sepayDefaultProvider,
+		Scope:      sepayDefaultReadScope,
+		ExternalID: "ext",
+		SyncStatus: "idle",
 	})
 	if err != nil {
 		t.Fatalf("create bank connection: %v", err)
@@ -1375,8 +1538,8 @@ func TestRevokeBankConnectionRequiresOwnerRole(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "viewer")
 		c.Set("user_id", string(ownerID))
 		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
 		h.RevokeBankConnection(c)
@@ -1390,8 +1553,8 @@ func TestRevokeBankConnectionRequiresOwnerRole(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "editor")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "editor")
 		c.Set("user_id", string(ownerID))
 		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
 		h.RevokeBankConnection(c)
@@ -1405,8 +1568,8 @@ func TestRevokeBankConnectionRequiresOwnerRole(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "owner")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "owner")
 		c.Set("user_id", string(ownerID))
 		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
 		h.RevokeBankConnection(c)
@@ -1419,16 +1582,16 @@ func TestRevokeBankConnectionRequiresOwnerRole(t *testing.T) {
 func TestSyncBankConnectionRejectsViewerRole(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID: ws.ID,
-		Provider:    sepayDefaultProvider,
-		Scope:       sepayDefaultReadScope,
-		ExternalID:  "ext",
-		SyncStatus:  "idle",
+		UserID:     ws.ID,
+		Provider:   sepayDefaultProvider,
+		Scope:      sepayDefaultReadScope,
+		ExternalID: "ext",
+		SyncStatus: "idle",
 	})
 	if err != nil {
 		t.Fatalf("create bank connection: %v", err)
@@ -1440,8 +1603,8 @@ func TestSyncBankConnectionRejectsViewerRole(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "viewer")
 		c.Set("user_id", string(ownerID))
 		c.Params = gin.Params{{Key: "id", Value: string(conn.ID)}}
 		h.SyncBankConnection(c)
@@ -1454,13 +1617,13 @@ func TestSyncBankConnectionRejectsViewerRole(t *testing.T) {
 func TestRunForecastScenarioTransitionsToRunning(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ownerID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", ownerID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", ownerID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 
 	scenario, err := store.CreateForecastScenario(domain.ForecastScenario{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		Name:        "Scenario test",
 		Assumptions: `{"growthRate":0.1}`,
 	})
@@ -1475,8 +1638,8 @@ func TestRunForecastScenarioTransitionsToRunning(t *testing.T) {
 	resp := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(resp)
 	c.Request = req
-	c.Set("workspace_id", string(ws.ID))
-	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ws.ID))
+	c.Set("user_role", "owner")
 	c.Set("user_id", string(ownerID))
 	c.Params = gin.Params{{Key: "id", Value: string(scenario.ID)}}
 
@@ -1518,12 +1681,12 @@ func TestRunForecastScenarioTransitionsToRunning(t *testing.T) {
 func TestBankAutomationRulesRequireEditorRole(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	userID := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", userID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", userID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	acc, err := store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: "",
 		Name:        "Main",
 		Type:        "cash",
@@ -1541,8 +1704,8 @@ func TestBankAutomationRulesRequireEditorRole(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "viewer")
 		c.Set("user_id", string(userID))
 		h.CreateAutomationRule(c)
 		if resp.Result().StatusCode != http.StatusForbidden {
@@ -1552,11 +1715,11 @@ func TestBankAutomationRulesRequireEditorRole(t *testing.T) {
 
 	t.Run("modify_blocked_for_viewer", func(t *testing.T) {
 		rule, err := store.CreateAutomationRule(domain.AutomationRule{
-			WorkspaceID: ws.ID,
-			AccountID:   acc.ID,
-			Name:        "Existing",
-			Priority:    1,
-			Enabled:     true,
+			UserID:    ws.ID,
+			AccountID: acc.ID,
+			Name:      "Existing",
+			Priority:  1,
+			Enabled:   true,
 		})
 		if err != nil {
 			t.Fatalf("create rule: %v", err)
@@ -1566,8 +1729,8 @@ func TestBankAutomationRulesRequireEditorRole(t *testing.T) {
 		resp := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(resp)
 		c.Request = req
-		c.Set("workspace_id", string(ws.ID))
-		c.Set("workspace_role", "viewer")
+		c.Set("user_id", string(ws.ID))
+		c.Set("user_role", "viewer")
 		c.Set("user_id", string(userID))
 		c.Params = gin.Params{{Key: "id", Value: string(rule.ID)}}
 		h.ModifyAutomationRule(c)
@@ -1580,8 +1743,8 @@ func TestBankAutomationRulesRequireEditorRole(t *testing.T) {
 		respDelete := httptest.NewRecorder()
 		c2, _ := gin.CreateTestContext(respDelete)
 		c2.Request = reqDelete
-		c2.Set("workspace_id", string(ws.ID))
-		c2.Set("workspace_role", "viewer")
+		c2.Set("user_id", string(ws.ID))
+		c2.Set("user_role", "viewer")
 		c2.Set("user_id", string(userID))
 		c2.Params = gin.Params{{Key: "id", Value: string(rule.ID)}}
 		h.ModifyAutomationRule(c2)
@@ -1594,12 +1757,12 @@ func TestBankAutomationRulesRequireEditorRole(t *testing.T) {
 func TestModifyAutomationRulePatchOnlyNameKeepsEnabled(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	userID := store.SeedDemoUser("owner@wealthos.vn", "Owner", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", userID)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", userID)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	acc, err := store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: "",
 		Name:        "Main",
 		Type:        "cash",
@@ -1609,11 +1772,11 @@ func TestModifyAutomationRulePatchOnlyNameKeepsEnabled(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	rule, err := store.CreateAutomationRule(domain.AutomationRule{
-		WorkspaceID: ws.ID,
-		AccountID:   acc.ID,
-		Name:        "Initial",
-		Priority:    10,
-		Enabled:     true,
+		UserID:    ws.ID,
+		AccountID: acc.ID,
+		Name:      "Initial",
+		Priority:  10,
+		Enabled:   true,
 	})
 	if err != nil {
 		t.Fatalf("create rule: %v", err)
@@ -1625,8 +1788,8 @@ func TestModifyAutomationRulePatchOnlyNameKeepsEnabled(t *testing.T) {
 	resp := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(resp)
 	c.Request = req
-	c.Set("workspace_id", string(ws.ID))
-	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ws.ID))
+	c.Set("user_role", "owner")
 	c.Set("user_id", string(userID))
 	c.Params = gin.Params{{Key: "id", Value: string(rule.ID)}}
 	h.ModifyAutomationRule(c)
@@ -1649,9 +1812,9 @@ func TestModifyAutomationRulePatchOnlyNameKeepsEnabled(t *testing.T) {
 func TestCreateAccountRecordsAuditLog(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	p, ok := store.FirstPortfolio(ws.ID)
 	if !ok {
@@ -1666,8 +1829,8 @@ func TestCreateAccountRecordsAuditLog(t *testing.T) {
 	resp := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(resp)
 	c.Request = req
-	c.Set("workspace_id", string(ws.ID))
-	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ws.ID))
+	c.Set("user_role", "owner")
 	c.Set("user_id", string(uid))
 
 	h.CreateAccount(c)
@@ -1699,16 +1862,16 @@ func TestCreateAccountRecordsAuditLog(t *testing.T) {
 	}
 }
 
-func TestListAuditLogsRequiresWorkspace(t *testing.T) {
+func TestListAuditLogsRequiresUser(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws1, err := store.CreateWorkspace("Workspace 1", "VND", uid)
+	ws1, err := store.EnsureUserPortfolio("User 1", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
-	_, err = store.CreateWorkspace("Workspace 2", "VND", uid)
+	_, err = store.EnsureUserPortfolio("User 2", "VND", uid)
 	if err != nil {
-		t.Fatalf("create second workspace: %v", err)
+		t.Fatalf("create second user: %v", err)
 	}
 	p, ok := store.FirstPortfolio(ws1.ID)
 	if !ok {
@@ -1721,8 +1884,8 @@ func TestListAuditLogsRequiresWorkspace(t *testing.T) {
 	resp := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(resp)
 	c.Request = req
-	c.Set("workspace_id", string(ws1.ID))
-	c.Set("workspace_role", "owner")
+	c.Set("user_id", string(ws1.ID))
+	c.Set("user_role", "owner")
 	c.Set("user_id", string(uid))
 	h.CreateAccount(c)
 	if resp.Result().StatusCode != http.StatusCreated {
@@ -1733,8 +1896,8 @@ func TestListAuditLogsRequiresWorkspace(t *testing.T) {
 	respList := httptest.NewRecorder()
 	cList, _ := gin.CreateTestContext(respList)
 	cList.Request = reqList
-	cList.Set("workspace_id", string(ws1.ID))
-	cList.Set("workspace_role", "owner")
+	cList.Set("user_id", string(ws1.ID))
+	cList.Set("user_role", "owner")
 	cList.Set("user_id", string(uid))
 	h.ListAuditLogs(cList)
 
@@ -1746,6 +1909,113 @@ func TestListAuditLogsRequiresWorkspace(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(logs) != 1 {
-		t.Fatalf("expected 1 log for workspace 1, got %d", len(logs))
+		t.Fatalf("expected 1 log for user 1, got %d", len(logs))
+	}
+}
+
+func TestMapMySePayBankAccountEnforcesUserOwnershipAndUserRole(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ownerID := store.SeedDemoUser("owner-map@example.test", "Owner", "pass")
+	otherID := store.SeedDemoUser("other-map@example.test", "Other", "pass")
+	ws, err := store.EnsureUserPortfolio("Map user", "VND", ownerID)
+	if err != nil {
+		t.Fatalf("user: %v", err)
+	}
+	portfolio, ok := store.FirstPortfolio(ws.ID)
+	if !ok {
+		t.Fatal("portfolio")
+	}
+	account, err := store.CreateAccount(domain.Account{UserID: ws.ID, PortfolioID: portfolio.ID, Name: "Bank", Type: "bank", Currency: "VND"})
+	if err != nil {
+		t.Fatalf("account: %v", err)
+	}
+	bankAccount, err := store.UpsertSePayBankAccount(domain.SePayBankAccount{UserID: ownerID, BankAccountXID: "provider-map-1", BankCode: "MBB", BankName: "MBBank", AccountNumberMasked: "•••• 1234", SupportsIn: true, SupportsOut: true, Status: "linked"})
+	if err != nil {
+		t.Fatalf("sepay account: %v", err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{})
+
+	resp := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(resp)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/me/sepay/bank-accounts/"+string(bankAccount.ID)+"/map", strings.NewReader(`{"accountId":"`+string(account.ID)+`"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "id", Value: string(bankAccount.ID)}}
+	c.Set("user_id", string(ownerID))
+	h.MapMySePayBankAccount(c)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("map expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	mapping, ok := store.GetBankAccountMapping(bankAccount.ID)
+	if !ok || mapping.AccountID != account.ID {
+		t.Fatalf("mapping missing: %+v", mapping)
+	}
+
+	denied := httptest.NewRecorder()
+	cDenied, _ := gin.CreateTestContext(denied)
+	cDenied.Request = httptest.NewRequest(http.MethodPost, "/api/v1/me/sepay/bank-accounts/"+string(bankAccount.ID)+"/map", strings.NewReader(`{"accountId":"`+string(account.ID)+`"}`))
+	cDenied.Request.Header.Set("Content-Type", "application/json")
+	cDenied.Params = gin.Params{{Key: "id", Value: string(bankAccount.ID)}}
+	cDenied.Set("user_id", string(otherID))
+	h.MapMySePayBankAccount(cDenied)
+	if denied.Code != http.StatusNotFound {
+		t.Fatalf("foreign account must be hidden, got %d", denied.Code)
+	}
+}
+
+func TestBankHubIPNReplayReturnsSuccessAndQueuesOneEvent(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("ipn-replay@example.test", "IPN", "pass")
+	ws, err := store.EnsureUserPortfolio("IPN", "VND", userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateAccount(domain.Account{UserID: ws.ID, Name: "Bank", Type: "bank", Currency: "VND"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateBankConnection(domain.BankConnection{UserID: ws.ID, Provider: "sepay", ExternalID: "provider-ipn-1"}); err != nil {
+		t.Fatal(err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{SePayBankHubAPIKey: "key"})
+	payload := `{"transaction_date":"2026-07-27 10:00:00","bank_account_xid":"provider-ipn-1","transfer_type":"debit","amount":120000,"content":"coffee","transaction_id":"provider-tx-1"}`
+	for i := 0; i < 2; i++ {
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/sepay/bankhub/ipn", strings.NewReader(payload))
+		c.Request.Header.Set("Authorization", "Apikey key")
+		h.BankHubIPN(c)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("replay %d got %d: %s", i, resp.Code, resp.Body.String())
+		}
+	}
+	events := store.ListBankFeedEvents(ws.ID, domain.BankFeedEventStateQueued)
+	if len(events) != 1 {
+		t.Fatalf("expected one queued source event, got %d", len(events))
+	}
+}
+
+func TestBankHubIPNUnknownAccountIsDurablyQuarantinedAndAcknowledged(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{SePayBankHubAPIKey: "key"})
+	payload := `{"transaction_date":"2026-07-27 10:00:00","bank_account_xid":"not-linked","transfer_type":"credit","amount":20000,"content":"salary","transaction_id":"unknown-tx"}`
+	for range 2 {
+		resp := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(resp)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/sepay/bankhub/ipn", strings.NewReader(payload))
+		c.Request.Header.Set("Authorization", "Apikey key")
+		h.BankHubIPN(c)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected durable quarantine ACK, got %d: %s", resp.Code, resp.Body.String())
+		}
+	}
+	first, err := store.QuarantineSePayEvent(domain.SePayUnmappedEvent{Provider: "sepay", BankAccountXID: "not-linked", TransactionID: "unknown-tx", Payload: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.QuarantineSePayEvent(domain.SePayUnmappedEvent{Provider: "sepay", BankAccountXID: "not-linked", TransactionID: "unknown-tx", Payload: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("quarantine retry was not idempotent: %s != %s", first.ID, second.ID)
 	}
 }

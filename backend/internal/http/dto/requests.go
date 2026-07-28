@@ -15,13 +15,13 @@ type LoginRequest struct {
 }
 
 type RegisterRequest struct {
-	Email         string `json:"email"`
-	Password      string `json:"password"`
-	Name          string `json:"name"`
-	WorkspaceName string `json:"workspaceName,omitempty"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
+	UserName string `json:"userName,omitempty"`
 }
 
-type WorkspaceCreateRequest struct {
+type UserCreateRequest struct {
 	Name         string `json:"name"`
 	BaseCurrency string `json:"baseCurrency"`
 }
@@ -62,6 +62,15 @@ type AccountCreateRequest struct {
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 	Currency    string `json:"currency"`
+}
+
+type BotTransactionCreateRequest struct {
+	Type       string `json:"type"`
+	Amount     string `json:"amount"`
+	Name       string `json:"name"`
+	CategoryID string `json:"categoryId"`
+	Note       string `json:"note"`
+	OccurredAt string `json:"occurredAt"`
 }
 
 type FlexibleTime struct {
@@ -129,7 +138,6 @@ type TransactionListResponse struct {
 	NextCursor        string               `json:"nextCursor"`
 	AmountDisplayMode string               `json:"amountDisplayMode"`
 }
-
 
 type PaginatedCursor struct {
 	OccurredAt time.Time
@@ -245,6 +253,25 @@ type BankFeedActionRequest struct {
 	AccountID  string `json:"accountId"`
 	CategoryID string `json:"categoryId"`
 	Type       string `json:"type"`
+}
+
+type SePayBankAccountMapRequest struct {
+	AccountID string `json:"accountId"`
+}
+
+type SePayBankAccountSyncRequest struct {
+	// AccountNumber is only a Hosted Link completion hint. The backend obtains
+	// all persisted account metadata from Bank Hub itself.
+	AccountNumber string `json:"accountNumber"`
+}
+
+type BankFeedCorrectRequest struct {
+	AccountID      string `json:"accountId"`
+	CategoryID     string `json:"categoryId"`
+	Type           string `json:"type"`
+	Name           string `json:"name"`
+	Note           string `json:"note"`
+	RememberChoice bool   `json:"rememberChoice"`
 }
 
 type AutomationRuleRequest struct {

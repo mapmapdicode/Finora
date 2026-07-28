@@ -9,109 +9,128 @@ import (
 type Store interface {
 	SeedDemoUser(email, name, password string) domain.ID
 	CreateAuditLog(input domain.AuditLog) (domain.AuditLog, error)
-	ListAuditLogs(workspaceID domain.ID) []domain.AuditLog
+	ListAuditLogs(userID domain.ID) []domain.AuditLog
 	GetUser(id domain.ID) (*domain.User, bool)
 	GetUserByID(id domain.ID) (*domain.User, bool)
 	GetUserByEmail(email string) (*domain.User, bool)
 	GetUserSettings(userID domain.ID) (*domain.UserSettings, error)
 	UpsertUserSettings(settings domain.UserSettings) (*domain.UserSettings, error)
-
-
-	GetWorkspace(id domain.ID) (*domain.Workspace, bool)
-	CreateWorkspace(name, baseCurrency string, ownerID domain.ID) (*domain.Workspace, error)
-	ListWorkspaces(userID domain.ID) []domain.Workspace
-	GetWorkspaceMemberRole(userID, workspaceID domain.ID) (domain.Role, bool)
+	EnsureUserPortfolio(name, baseCurrency string, userID domain.ID) (*domain.User, error)
 
 	GetPortfolio(id domain.ID) (*domain.Portfolio, bool)
 	CreatePortfolio(input domain.Portfolio) (domain.Portfolio, error)
-	ListPortfolios(workspaceID domain.ID) []domain.Portfolio
-	FirstPortfolio(workspaceID domain.ID) (domain.Portfolio, bool)
+	ListPortfolios(userID domain.ID) []domain.Portfolio
+	FirstPortfolio(userID domain.ID) (domain.Portfolio, bool)
 
 	GetAccount(id domain.ID) (*domain.Account, bool)
+	UpsertBotAccountKey(input domain.BotAccountKey) (domain.BotAccountKey, error)
+	GetActiveBotAccountKey(accountID domain.ID) (*domain.BotAccountKey, bool)
 	CreateAccount(input domain.Account) (domain.Account, error)
-	ListAccounts(workspaceID domain.ID) []domain.Account
-	DeleteAccount(workspaceID domain.ID, id domain.ID) error
-	DeletePortfolio(workspaceID domain.ID, id domain.ID) error
-	DeleteLoan(workspaceID domain.ID, id domain.ID) error
-	DeleteProperty(workspaceID domain.ID, id domain.ID) error
-	DeleteAsset(workspaceID domain.ID, id domain.ID) error
+	ListAccounts(userID domain.ID) []domain.Account
+	DeleteAccount(userID domain.ID, id domain.ID) error
+	DeletePortfolio(userID domain.ID, id domain.ID) error
+	DeleteLoan(userID domain.ID, id domain.ID) error
+	DeleteProperty(userID domain.ID, id domain.ID) error
+	DeleteAsset(userID domain.ID, id domain.ID) error
 
 	CreateTransactionStrict(input domain.Transaction) (domain.Transaction, error)
 	CreateTransaction(input domain.Transaction) (domain.Transaction, error)
 	GetTransaction(id domain.ID) (*domain.Transaction, bool)
-	ListTransactions(workspaceID domain.ID, accountID domain.ID) []domain.Transaction
+	ListTransactions(userID domain.ID, accountID domain.ID) []domain.Transaction
 
 	CreateTransfer(input domain.Transfer) (domain.Transfer, error)
 
 	GetLoan(id domain.ID) (*domain.Loan, bool)
 	UpdateLoan(id domain.ID, mutate func(*domain.Loan)) bool
 	CreateLoan(input domain.Loan) (domain.Loan, error)
-	ListLoans(workspaceID domain.ID) []domain.Loan
-	ListLoanPayments(workspaceID domain.ID, loanID domain.ID) []domain.LoanPayment
+	ListLoans(userID domain.ID) []domain.Loan
+	ListLoanPayments(userID domain.ID, loanID domain.ID) []domain.LoanPayment
 
 	CreateLoanPayment(input domain.LoanPayment) (domain.LoanPayment, error)
 
 	GetProperty(id domain.ID) (*domain.Property, bool)
 	CreateProperty(input domain.Property) (domain.Property, error)
-	ListProperties(workspaceID domain.ID) []domain.Property
+	ListProperties(userID domain.ID) []domain.Property
 	AddPropertyValuation(v domain.PropertyValuation) (domain.PropertyValuation, error)
-	ListPropertyValues(workspaceID domain.ID) []domain.PropertyValuation
+	ListPropertyValues(userID domain.ID) []domain.PropertyValuation
 
 	GetAsset(id domain.ID) (*domain.Asset, bool)
 	CreateAsset(input domain.Asset) (domain.Asset, error)
-	ListAssets(workspaceID domain.ID) []domain.Asset
+	ListAssets(userID domain.ID) []domain.Asset
 	AddAssetValuation(v domain.AssetValuation) (domain.AssetValuation, error)
-	ListAssetValues(workspaceID domain.ID) []domain.AssetValuation
+	ListAssetValues(userID domain.ID) []domain.AssetValuation
 
 	CreateBudget(input domain.Budget) (domain.Budget, error)
 	UpsertBudget(input domain.Budget) (domain.Budget, error)
-	ListBudgets(workspaceID domain.ID, period string) []domain.Budget
+	ListBudgets(userID domain.ID, period string) []domain.Budget
 	UpsertBudgetAllocs(input domain.BudgetAllocation) (domain.BudgetAllocation, error)
 
 	CreateForecastScenario(input domain.ForecastScenario) (domain.ForecastScenario, error)
-	ListForecastScenarios(workspaceID domain.ID) []domain.ForecastScenario
+	ListForecastScenarios(userID domain.ID) []domain.ForecastScenario
 	ListForecastScenariosByStatus(status string) []domain.ForecastScenario
 	RunForecastScenario(id domain.ID, assumptions string) (domain.ForecastScenario, error)
 	FinalizeForecastScenario(id domain.ID, status string, result string) (domain.ForecastScenario, error)
 
 	CreateBankConnection(input domain.BankConnection) (domain.BankConnection, error)
-	ListBankConnections(workspaceID domain.ID) []domain.BankConnection
+	ListBankConnections(userID domain.ID) []domain.BankConnection
 	ListAllBankConnections() []domain.BankConnection
 	GetBankConnection(id domain.ID) (*domain.BankConnection, bool)
 	GetBankConnectionByCallbackState(callbackState string) (*domain.BankConnection, bool)
 	UpdateBankConnection(id domain.ID, mutate func(*domain.BankConnection)) bool
 	RevokeBankConnection(id domain.ID) (*domain.BankConnection, bool)
 
+	UpsertSePayUserProfile(input domain.SePayUserProfile) (domain.SePayUserProfile, error)
+	GetSePayUserProfile(userID domain.ID) (*domain.SePayUserProfile, bool)
+	UpsertSePayBankAccount(input domain.SePayBankAccount) (domain.SePayBankAccount, error)
+	ListSePayBankAccounts(userID domain.ID) []domain.SePayBankAccount
+	GetSePayBankAccount(id domain.ID) (*domain.SePayBankAccount, bool)
+	GetSePayBankAccountByXID(xid string) (*domain.SePayBankAccount, bool)
+	SetSePayBankAccountStatus(id domain.ID, status string) bool
+	UpsertBankAccountMapping(input domain.BankAccountMapping) (domain.BankAccountMapping, error)
+	GetBankAccountMapping(sepayBankAccountID domain.ID) (*domain.BankAccountMapping, bool)
+	DeactivateBankAccountMapping(sepayBankAccountID domain.ID) bool
+	CreateSePayLinkSession(xid string, userID domain.ID, expiresAt time.Time) error
+	GetSePayLinkSessionUser(xid string) (domain.ID, bool)
+	CompleteSePayLinkSession(xid string) bool
+	QuarantineSePayEvent(input domain.SePayUnmappedEvent) (domain.SePayUnmappedEvent, error)
+	CreateTransactionSuggestion(input domain.TransactionSuggestion) (domain.TransactionSuggestion, error)
+	ListTransactionSuggestions(feedID domain.ID) []domain.TransactionSuggestion
+	CreateClassificationFeedback(input domain.ClassificationFeedback) (domain.ClassificationFeedback, error)
+	ListClassificationFeedback(userID domain.ID) []domain.ClassificationFeedback
+
 	CreateBankReconciliation(input domain.BankReconciliation) (domain.BankReconciliation, error)
-	ListBankReconciliations(workspaceID domain.ID, connectionID domain.ID) []domain.BankReconciliation
+	ListBankReconciliations(userID domain.ID, connectionID domain.ID) []domain.BankReconciliation
 
 	EnqueueBankFeedEvent(input domain.BankFeedEvent) (domain.BankFeedEvent, error)
-	ListBankFeedEvents(workspaceID domain.ID, state string) []domain.BankFeedEvent
+	ListBankFeedEvents(userID domain.ID, state string) []domain.BankFeedEvent
 	GetBankFeedEvent(id domain.ID) (*domain.BankFeedEvent, bool)
+	// ClaimBankFeedEvent atomically transitions a queued event to running. It
+	// returns false when another worker already owns (or completed) the event.
+	ClaimBankFeedEvent(id domain.ID) (*domain.BankFeedEvent, bool)
 	UpdateBankFeedEvent(id domain.ID, mutate func(*domain.BankFeedEvent)) bool
 
 	IngestBankFeed(input domain.BankFeedTransaction) (domain.BankFeedTransaction, error)
-	ListBankFeed(workspaceID domain.ID) []domain.BankFeedTransaction
-	ListBankFeedByState(workspaceID domain.ID, state domain.TransactionPostingState) []domain.BankFeedTransaction
+	ListBankFeed(userID domain.ID) []domain.BankFeedTransaction
+	ListBankFeedByState(userID domain.ID, state domain.TransactionPostingState) []domain.BankFeedTransaction
 	GetBankFeed(id domain.ID) (*domain.BankFeedTransaction, bool)
 	UpdateFeedState(id domain.ID, state domain.TransactionPostingState, reason string) error
 	UpdateFeed(id domain.ID, mutate func(*domain.BankFeedTransaction)) bool
 	LinkBankFeedPosting(feedID domain.ID, txnID domain.ID) bool
-	GetWorkspaceRules(workspaceID domain.ID, accountID domain.ID, direction string) []domain.AutomationRule
-	ListWorkspaceRules(workspaceID domain.ID) []domain.AutomationRule
+	GetUserRules(userID domain.ID, accountID domain.ID, direction string) []domain.AutomationRule
+	ListUserRules(userID domain.ID) []domain.AutomationRule
 	CreateAutomationRule(input domain.AutomationRule) (domain.AutomationRule, error)
 	GetAutomationRule(id domain.ID) (*domain.AutomationRule, bool)
 	UpdateAutomationRule(id domain.ID, mutate func(*domain.AutomationRule)) bool
 	DeleteAutomationRule(id domain.ID) bool
-	ListAutomationRules(workspaceID domain.ID) []domain.AutomationRule
+	ListAutomationRules(userID domain.ID) []domain.AutomationRule
 
 	CreateBankPaymentRequest(input domain.BankPaymentRequest) (domain.BankPaymentRequest, error)
-	GetBankPaymentRequestByCode(workspaceID domain.ID, code string) (*domain.BankPaymentRequest, bool)
-	ListBankPaymentRequests(workspaceID domain.ID) []domain.BankPaymentRequest
+	GetBankPaymentRequestByCode(userID domain.ID, code string) (*domain.BankPaymentRequest, bool)
+	ListBankPaymentRequests(userID domain.ID) []domain.BankPaymentRequest
 
 	CreateAssistantCommand(input domain.AssistantCommand) (domain.AssistantCommand, error)
 	GetAssistantCommand(id domain.ID) (*domain.AssistantCommand, bool)
-	ListAssistantCommands(workspaceID domain.ID) []domain.AssistantCommand
+	ListAssistantCommands(userID domain.ID) []domain.AssistantCommand
 	UpdateAssistantCommand(id domain.ID, mutate func(*domain.AssistantCommand)) (*domain.AssistantCommand, error)
 
 	RecordIdempotency(key string) bool

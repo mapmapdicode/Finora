@@ -8,7 +8,7 @@ Xây dựng một ứng dụng Angular + Go API mà người dùng có thể b�
 
 | Có trong release | Chưa có |
 |---|---|
-| Workspace cá nhân, account, transaction, net-worth snapshot | Household sharing UI, bank sync diện rộng |
+| User cá nhân, account, transaction, net-worth snapshot | Household sharing UI, bank sync diện rộng |
 | Loan receivable/payable, accrual, payment split | Tư vấn đầu tư/credit score |
 | Asset/property valuation append-only | Giá thị trường tự động không có nguồn xác thực |
 | SePay connect, webhook, review/auto-post có guardrail | Lệnh chuyển tiền ngân hàng |
@@ -20,19 +20,19 @@ Xây dựng một ứng dụng Angular + Go API mà người dùng có thể b�
 
 **Frontend**
 
-- Angular workspace, strict TypeScript, ESLint/Prettier, route shell, design tokens, i18n `vi-VN` và currency formatter.
+- Angular user, strict TypeScript, ESLint/Prettier, route shell, design tokens, i18n `vi-VN` và currency formatter.
 - Auth guard, HTTP interceptor gắn correlation ID, error boundary/toast, loading/skeleton và empty state chuẩn.
 - App layout desktop/mobile, navigation skeleton và trang 403/404/maintenance.
 
 **Backend**
 
 - Go API/worker, PostgreSQL migration, config/secrets, health/readiness, OpenAPI generation.
-- User/workspace/member/RBAC, JWT/session, audit middleware, request ID và rate limit login.
+- User/user/member/RBAC, JWT/session, audit middleware, request ID và rate limit login.
 - `Idempotency-Key` store cho mọi POST mutation; standard error envelope; seed fixtures giả.
 
 **Done khi**
 
-- User đăng nhập, vào đúng workspace, viewer không thể gọi mutation qua API dù tự sửa UI.
+- User đăng nhập, vào đúng user, viewer không thể gọi mutation qua API dù tự sửa UI.
 - Migration chạy từ DB trống; smoke test `/healthz`, `/readyz`, auth và audit qua CI.
 - UI đạt keyboard navigation cơ bản và có layout mobile 360 px.
 
@@ -79,7 +79,7 @@ Xây dựng một ứng dụng Angular + Go API mà người dùng có thể b�
 ### M6 — Hardening và private beta
 
 - Load/failure/restore drill; accessibility review; privacy review; monitoring SLO; data export; support runbook.
-- Mời 5–10 workspace test, sau đó 25 và 100 users theo cohort; không mở bank auto-post đại trà trước khi reclassify rate chấp nhận được.
+- Mời 5–10 user test, sau đó 25 và 100 users theo cohort; không mở bank auto-post đại trà trước khi reclassify rate chấp nhận được.
 
 ## Dependency và ownership
 

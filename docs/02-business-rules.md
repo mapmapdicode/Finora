@@ -32,12 +32,12 @@
 
 1. Budget áp dụng cho expense theo danh mục/kỳ; không áp dụng cho định giá, chuyển tiền hoặc thu gốc.
 2. Vượt ngân sách tạo cảnh báo, không chặn giao dịch hợp lệ.
-3. Dữ liệu bị cô lập theo workspace; `owner`, `editor`, `viewer` có quyền rõ ràng. Owner chịu trách nhiệm xóa workspace, xuất dữ liệu và phê duyệt điều chỉnh nhạy cảm.
+3. Dữ liệu bị cô lập theo user; `owner`, `editor`, `viewer` có quyền rõ ràng. Owner chịu trách nhiệm xóa user, xuất dữ liệu và phê duyệt điều chỉnh nhạy cảm.
 4. Thao tác thay đổi giá trị tài sản, điều khoản loan, định giá hoặc lịch sử hạch toán phải có audit log trước/sau.
 
 ## Trợ lý Telegram và Hermes Agent
 
-1. Telegram là kênh nhận lệnh, không phải nguồn xác thực duy nhất. Mỗi `telegram_chat_id` phải được liên kết và xác nhận với một User/Workspace trước khi thực thi.
+1. Telegram là kênh nhận lệnh, không phải nguồn xác thực duy nhất. Mỗi `telegram_chat_id` phải được liên kết và xác nhận với một User/User trước khi thực thi.
 2. Lệnh từ chat được phân loại `read`, `draft`, `write`, `external_action`. `read` chỉ đọc; `draft` tạo bản nháp; `write` thay đổi dữ liệu WealthOS; `external_action` điều khiển phần mềm trên Mac Mini hoặc dịch vụ bên ngoài.
 3. `write` và `external_action` cần confirmation một lần bằng inline button có `approval_id` do server tạo, hết hạn nhanh và chỉ dùng một lần. Không chấp nhận “OK” dạng văn bản như bằng chứng phê duyệt.
 4. Lệnh không được chuyển nguyên văn từ Telegram sang Hermes. Gateway chuyển thành action có schema, policy và quyền hạn đã kiểm tra.

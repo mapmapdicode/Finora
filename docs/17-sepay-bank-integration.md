@@ -56,7 +56,7 @@ SePay khuyến nghị dùng webhook cho giao dịch mới và API cho tra cứu/
 ## Luồng đồng bộ giao dịch
 
 1. Owner chọn **Kết nối ngân hàng**, đọc phạm vi dữ liệu, thời gian backfill và xác nhận consent.
-2. WealthOS mở Hosted Link hoặc bắt đầu OAuth authorization; callback được ràng buộc state/PKCE và workspace hiện tại.
+2. WealthOS mở Hosted Link hoặc bắt đầu OAuth authorization; callback được ràng buộc state/PKCE và user hiện tại.
 3. Server lưu connection/tokens đã mã hóa, tạo `account` WealthOS có `provider = sepay` và mapping external account. Không lưu mật khẩu ngân hàng.
 4. SePay gửi webhook về endpoint riêng. Ingress xác thực, lưu raw event và trả phản hồi thành công nhanh; xử lý sau đó chạy trong durable queue.
 5. Normalizer tạo `bank_feed_transactions` bất biến. Matcher tìm transfer nội bộ, payment code loan và rule người dùng trước khi chạy income/expense classifier.
@@ -72,7 +72,7 @@ Với webhook SePay thông thường, event có `id` ổn định khi retry/repl
 
 | Bảng | Vai trò | Ràng buộc chính |
 |---|---|---|
-| `bank_connections` | Consent, provider, external connection/account, trạng thái và thời điểm sync | `workspace_id`, token mã hóa; chỉ owner quản lý/revoke |
+| `bank_connections` | Consent, provider, external connection/account, trạng thái và thời điểm sync | `user_id`, token mã hóa; chỉ owner quản lý/revoke |
 | `bank_feed_events` | Raw event đã nhận, chữ ký/trạng thái xử lý và payload đã redacted | unique `(provider, external_event_id)` |
 | `bank_feed_transactions` | Bản chuẩn hóa bất biến của giao dịch ngân hàng | unique `(connection_id, provider_transaction_id)`; lưu classification, confidence, evidence, posting state và ledger link |
 | `bank_automation_rules` | Rule do người dùng xác nhận để phân loại bank feed | priority, scope, điều kiện, action, version và trạng thái enabled |
@@ -90,7 +90,7 @@ Raw payload cần retention hữu hạn và redact `accountNumber`, `content`, `
 Classifier không được kết luận `income`/`expense` từ chiều tiền một cách mù quáng. Mỗi bank event đi qua thứ tự sau; một bước match thì các bước dưới không chạy:
 
 1. Xác thực, chống trùng và kiểm tra reversal/correction.
-2. Match transfer nội bộ giữa các account cùng workspace.
+2. Match transfer nội bộ giữa các account cùng user.
 3. Match payment code loan/VietQR; tạo `payment_candidate`, không tự chia gốc–lãi.
 4. Match rule nghiệp vụ rõ ràng: `loan_disbursement` hoặc `investment_funding`.
 5. Với `out`: tự ghi `expense`/`posted`.
@@ -98,13 +98,13 @@ Classifier không được kết luận `income`/`expense` từ chiều tiền m
 
 ### Tiền chuyển đi
 
-Người dùng bật tính năng này theo account hoặc workspace. Mọi event `out` hợp lệ sẽ tạo chi tiêu tự động, có category từ rule ưu tiên cao nhất hoặc `Uncategorized` nếu chưa có rule. Mục tiêu là ghi nhận chi ngay, không chờ người dùng mở app.
+Người dùng bật tính năng này theo account hoặc user. Mọi event `out` hợp lệ sẽ tạo chi tiêu tự động, có category từ rule ưu tiên cao nhất hoặc `Uncategorized` nếu chưa có rule. Mục tiêu là ghi nhận chi ngay, không chờ người dùng mở app.
 
 Ngoại lệ ở bước 2–4 vẫn bắt buộc: chuyển giữa tài khoản của chính người dùng là `transfer`, giải ngân khoản vay là `loan_disbursement`, và nộp vốn đầu tư là `investment_funding`. Ghi chúng thành chi tiêu sẽ làm sai budget, income/expense report và attribution net worth. Nếu hệ thống không có bằng chứng cho ngoại lệ, nó làm đúng yêu cầu mặc định: auto-post `expense`, kèm nhãn `auto_classified` để người dùng sửa lại sau.
 
 ### Tiền chuyển vào
 
-`in` không đồng nghĩa thu nhập: có thể là chuyển nội bộ, thu gốc khoản vay, hoàn tiền, vay mới hoặc bán tài sản. WealthOS chỉ auto-post `income` khi có ít nhất một evidence mạnh, hoặc tổng điểm đạt ngưỡng workspace cấu hình.
+`in` không đồng nghĩa thu nhập: có thể là chuyển nội bộ, thu gốc khoản vay, hoàn tiền, vay mới hoặc bán tài sản. WealthOS chỉ auto-post `income` khi có ít nhất một evidence mạnh, hoặc tổng điểm đạt ngưỡng user cấu hình.
 
 | Evidence | Ví dụ | Điểm gợi ý |
 |---|---|---:|
@@ -112,7 +112,7 @@ Ngoại lệ ở bước 2–4 vẫn bắt buộc: chuyển giữa tài khoản 
 | Mẫu lặp đã được người dùng xác nhận | Cùng đối tác, khoảng ngày và amount gần các tháng trước | 70 |
 | Từ khóa/nhãn user-defined | `luong`, `thu nhap`, `hoa hong`, `freelance` | 45 |
 | Có payment code loan/VietQR | Kỳ thu loan xác định | Chặn income; tạo payment candidate |
-| Có cặp transfer nội bộ | Tiền về account khác trong workspace | Chặn income; tạo transfer |
+| Có cặp transfer nội bộ | Tiền về account khác trong user | Chặn income; tạo transfer |
 | Không có bằng chứng đủ mạnh | Nội dung tự do, người gửi lạ | 0; giữ review |
 
 Ngưỡng mặc định là 70. AI/NLP, nếu được bật sau này, chỉ được thêm evidence đề xuất và không được tự nâng một giao dịch lên `income` nếu không có rule/mẫu người dùng đã xác nhận. Mọi evidence, version classifier và confidence phải hiển thị ở giao dịch để người dùng hiểu vì sao hệ thống đã ghi thu.
@@ -131,7 +131,7 @@ Ngưỡng mặc định là 70. AI/NLP, nếu được bật sau này, chỉ đ�
 
 ### Rule và chỉnh sửa
 
-`bank_automation_rules` được đánh giá theo priority và scope account trước scope workspace. Rule có điều kiện bằng provider, direction, account, amount range, content/reference pattern, counterparty label hoặc lịch lặp; action là category/type cụ thể. Không dùng rule toàn cục “mọi tiền vào là income”.
+`bank_automation_rules` được đánh giá theo priority và scope account trước scope user. Rule có điều kiện bằng provider, direction, account, amount range, content/reference pattern, counterparty label hoặc lịch lặp; action là category/type cụ thể. Không dùng rule toàn cục “mọi tiền vào là income”.
 
 User có thể reclassify giao dịch tự ghi. Hệ thống giữ raw import, tạo adjustment/audit và có thể hỏi người dùng “áp dụng cho các lần sau?” để tạo rule mới. Sửa một giao dịch không tự động sửa lịch sử hoặc các giao dịch khác.
 
@@ -160,7 +160,7 @@ SePay hỗ trợ tạo QR VietQR động với account, amount và nội dung ch
 | `PATCH, DELETE` | `/bank-automation-rules/{id}` | Bật/tắt/sửa rule; không sửa giao dịch lịch sử |
 | `POST` | `/loans/{id}/payment-requests` | Tạo VietQR payment request cho một kỳ thu |
 
-Endpoint callback/webhook không được suy workspace từ URL do client gửi. Server phải đối chiếu state/connection/provider identity với owner và workspace đã lưu.
+Endpoint callback/webhook không được suy user từ URL do client gửi. Server phải đối chiếu state/connection/provider identity với owner và user đã lưu.
 
 ## Bảo mật và vận hành
 

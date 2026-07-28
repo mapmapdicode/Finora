@@ -2,11 +2,11 @@
 
 ## Aggregate ưu tiên
 
-`Portfolio` là aggregate trung tâm của WealthOS: một tập tài sản, nghĩa vụ nợ và định giá thuộc một workspace. `Transaction` là sổ cái dòng tiền hỗ trợ portfolio; `Budget` là module tùy chọn, không phải trung tâm mô hình.
+`Portfolio` là aggregate trung tâm của WealthOS: một tập tài sản, nghĩa vụ nợ và định giá thuộc một user. `Transaction` là sổ cái dòng tiền hỗ trợ portfolio; `Budget` là module tùy chọn, không phải trung tâm mô hình.
 
 | Thực thể | Trách nhiệm | Quan hệ quan trọng |
 |---|---|---|
-| Workspace | Biên cách ly dữ liệu cá nhân/gia đình | Có nhiều Portfolio, Member |
+| User | Biên cách ly dữ liệu cá nhân/gia đình | Có nhiều Portfolio, Member |
 | Portfolio | Danh mục theo chủ sở hữu/mục tiêu | Có nhiều Asset, Liability, Loan |
 | Account | Tiền mặt, ngân hàng, thẻ | Có nhiều Transaction; là CashAsset |
 | Loan | Khoản phải thu hoặc phải trả có điều khoản | Có LoanSchedule, LoanAccrual, LoanPayment |
@@ -29,8 +29,8 @@
 
 ```mermaid
 erDiagram
-    WORKSPACE ||--o{ PORTFOLIO : owns
-    WORKSPACE ||--o{ ACCOUNT : owns
+    USER ||--o{ PORTFOLIO : owns
+    USER ||--o{ ACCOUNT : owns
     PORTFOLIO ||--o{ LOAN : contains
     PORTFOLIO ||--o{ PROPERTY : contains
     PORTFOLIO ||--o{ ASSET : contains

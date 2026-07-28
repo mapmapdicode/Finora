@@ -81,7 +81,7 @@ lựa chọn đúng: một deployable unit, transaction và quan sát vận hàn
 | Tách deployable | `backend/`, `frontend/`, `mobile/` độc lập | Tốt; mỗi app có manifest và README riêng. |
 | Tài liệu domain | Có vision, business rule, API, database, roadmap | Tốt; tài liệu là lợi thế lớn nếu được giữ khớp mã nguồn. |
 | Local runtime | Docker Compose có PostgreSQL + backend + frontend | Tốt cho onboarding. Mobile chạy native nên không nằm trong Compose là hợp lý. |
-| Workspace/tooling chung | Chưa có task runner, CI workflow, contract generation hay root quality command | Thiếu; đây là điểm cần đầu tư sớm. |
+| User/tooling chung | Chưa có task runner, CI workflow, contract generation hay root quality command | Thiếu; đây là điểm cần đầu tư sớm. |
 | Version-control hygiene | `mobile/` hiện đang là thư mục untracked trong worktree tại thời điểm rà soát | Cần xác nhận trước khi merge: mọi mã mobile phải được add/commit có chủ đích. |
 
 ### Khuyến nghị ở root
@@ -106,7 +106,7 @@ lựa chọn đúng: một deployable unit, transaction và quan sát vận hàn
   direction dễ hiểu.
 - Có `internal/` nên module nội bộ không vô tình thành public API Go.
 - Router có version `/api/v1`, health/readiness endpoints, middleware cho CORS,
-  request ID, error envelope, auth, workspace membership, rate limit và
+  request ID, error envelope, auth, user membership, rate limit và
   idempotency. Với domain tài chính, đây là nền tảng đáng giá.
 - Domain model tách khỏi handler và storage; Store có in-memory implementation
   cho test/bootstrap và PostgreSQL implementation cho production.
@@ -169,7 +169,7 @@ nhau tùy tiện.
 | P1 | `shared/models.ts` 313 dòng là tập trung mọi API model | Chuyển model/DTO vào feature hoặc generated `api-client`; chỉ giữ primitive UI chung ở `shared/`. |
 | P1 | `ApiService` 354 dòng | Chia theo feature client: `accounts-api`, `transactions-api`, `banking-api`; mỗi feature tự sở hữu data-access layer. |
 | P1 | Component feature có thể vừa quản lý form, request, mapping và presentation | Tạo `features/<name>/data-access/`, `ui/`, `pages/`; container page giữ orchestration, UI component chỉ nhận input/output. |
-| P2 | Chỉ thấy 1 frontend spec | Tăng unit test cho service/interceptor/guard và component critical; E2E cho login, workspace selection, create transaction. |
+| P2 | Chỉ thấy 1 frontend spec | Tăng unit test cho service/interceptor/guard và component critical; E2E cho login, user selection, create transaction. |
 
 ### Cấu trúc frontend đích đề xuất
 
@@ -206,7 +206,7 @@ template/page.
 | --- | --- | --- |
 | P1 | `features/finora/presentation/finora_pages.dart` 3.284 dòng, bao login, dashboard, navigation, resource page và widget dùng chung | Tách theo feature, trước hết di chuyển `LoginPage` cùng widget con vào `features/auth/presentation/screens/`; sau đó dashboard và transactions. |
 | P1 | Home/resource pages còn nhận `ApiClient` trực tiếp | Lặp lại mẫu auth: mỗi feature có repository/service và ViewModel. View không gọi `ApiClient`. |
-| P1 | `ApiClient` có token/workspace mutable | Tách `SessionStore`/`AuthSession` khỏi HTTP client. Điều này giúp logout, refresh token và test độc lập rõ ràng hơn. |
+| P1 | `ApiClient` có token/user mutable | Tách `SessionStore`/`AuthSession` khỏi HTTP client. Điều này giúp logout, refresh token và test độc lập rõ ràng hơn. |
 | P2 | Manual DI là hợp lý hiện tại nhưng composition sẽ lớn khi feature tăng | Chuyển sang Riverpod/provider khi có nhiều shared state, caching hoặc lifecycle phức tạp; không cần làm trước khi cần. |
 | P2 | 2 test Flutter hiện hữu | Thêm test ViewModel cho account/transaction, widget test form states, và `integration_test` cho login → create transaction. |
 
@@ -244,7 +244,7 @@ Nếu thay đổi field, enum, pagination hoặc error envelope mà chỉ sửa 
 client còn lại có thể compile nhưng lỗi runtime. Đề xuất:
 
 1. Viết OpenAPI 3.1 cho `/api/v1`, bao gồm auth, error envelope, headers
-   `X-Workspace-ID` và `Idempotency-Key`.
+   `X-User-ID` và `Idempotency-Key`.
 2. CI validate endpoint/response với contract.
 3. Generate TypeScript và Dart API DTO/client; mapper DTO → UI/domain model vẫn
    sống trong từng feature.
@@ -261,7 +261,7 @@ client còn lại có thể compile nhưng lỗi runtime. Đề xuất:
 
 ### Sprint 2 — contract và transaction slice
 
-- Công bố OpenAPI cho auth/workspace/transactions.
+- Công bố OpenAPI cho auth/user/transactions.
 - Tách backend `identity` và `ledger` trước.
 - Chia Angular/Flutter transaction thành data-access/repository + presentation.
 - Thêm contract test và E2E create/list transaction.
@@ -272,13 +272,13 @@ client còn lại có thể compile nhưng lỗi runtime. Đề xuất:
   at-least-once delivery.
 - Structured logging với request/correlation ID, metrics, tracing và audit
   retention policy.
-- Persist net-worth snapshot/caching theo workspace thay cho state package-level.
+- Persist net-worth snapshot/caching theo user thay cho state package-level.
 
 ## 8. Definition of Done cho feature mới
 
 Một feature chỉ nên được coi là hoàn tất khi có:
 
-- API contract, auth/workspace/idempotency/error behavior được nêu rõ.
+- API contract, auth/user/idempotency/error behavior được nêu rõ.
 - Backend handler mỏng, application logic test được, repository port nhỏ.
 - Angular data-access tách khỏi UI và test tình huống lỗi.
 - Flutter service/repository/ViewModel theo feature, không gọi HTTP trong View.

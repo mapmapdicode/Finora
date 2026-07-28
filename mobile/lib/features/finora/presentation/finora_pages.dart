@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/theme/finora_colors.dart';
 import 'package:mobile/features/auth/presentation/view_models/login_view_model.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
+part 'screens/scenario_pages.dart';
+part 'screens/resource_support_pages.dart';
+part 'models/presentation_models.dart';
 
 abstract final class _I18n {
   static const Map<String, Map<String, String>> _strings = {
@@ -767,7 +772,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 400),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         child: Column(
                           children: [
                             FadeTransition(
@@ -834,7 +842,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             ),
                             child: Center(
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
                                 child: FadeTransition(
                                   opacity: _formFade,
                                   child: SlideTransition(
@@ -957,10 +967,7 @@ class _LoginHeader extends StatelessWidget {
               onTap: onSelectLang,
               borderRadius: BorderRadius.circular(16),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(16),
@@ -1163,7 +1170,10 @@ class _LoginForm extends StatelessWidget {
                   ),
                 ),
                 child: IconButton(
-                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                  constraints: const BoxConstraints(
+                    minWidth: 34,
+                    minHeight: 34,
+                  ),
                   padding: EdgeInsets.zero,
                   onPressed: onSwitch,
                   tooltip: registering ? 'Quay lại đăng nhập' : 'Đổi tài khoản',
@@ -1273,7 +1283,10 @@ class _LoginForm extends StatelessWidget {
             alignment: Alignment.center,
             child: TextButton(
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -1383,15 +1396,24 @@ class _CustomGlassTextField extends StatelessWidget {
             suffixIcon: suffixIcon,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xffcbd5e1), width: 1.2),
+              borderSide: const BorderSide(
+                color: Color(0xffcbd5e1),
+                width: 1.2,
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xffcbd5e1), width: 1.2),
+              borderSide: const BorderSide(
+                color: Color(0xffcbd5e1),
+                width: 1.2,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xfffbbf24), width: 1.8),
+              borderSide: const BorderSide(
+                color: Color(0xfffbbf24),
+                width: 1.8,
+              ),
             ),
           ),
         ),
@@ -1851,7 +1873,7 @@ class _HomePageState extends State<HomePage> {
     NavItem('Bất động sản', Icons.home_work_rounded),
     NavItem('Ngân sách', Icons.pie_chart_rounded),
     NavItem('Dự báo', Icons.auto_graph_rounded),
-    NavItem('Danh mục', Icons.workspaces_rounded),
+    NavItem('Danh mục', Icons.category_rounded),
     NavItem('Ngân hàng', Icons.account_balance_wallet_rounded),
     NavItem('Tự động hóa', Icons.bolt_rounded),
     NavItem('Trợ lý AI', Icons.smart_toy_rounded),
@@ -2143,10 +2165,13 @@ class _HomePageState extends State<HomePage> {
                   Text(
                     title,
                     style: TextStyle(
-                      color: isSelected ? const Color(0xfffbbf24) : Colors.white,
+                      color: isSelected
+                          ? const Color(0xfffbbf24)
+                          : Colors.white,
                       fontSize: 15,
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.w600,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -2211,7 +2236,7 @@ class _HomePageState extends State<HomePage> {
         child: Row(
           children: [
             Icon(
-              Icons.workspace_premium_rounded,
+              Icons.account_circle_rounded,
               color: Color(0xfffbbf24),
               size: 18,
             ),
@@ -2429,7 +2454,6 @@ class _HomePageState extends State<HomePage> {
         return ProfilePage(
           api: widget.api,
           onOpenSettings: _showSettingsModal,
-          onSelectWorkspace: _selectWorkspace,
           onLogout: _logout,
         );
       default:
@@ -2441,65 +2465,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _selectWorkspace() async {
-    final data = await widget.api.request('GET', '/workspaces') as List;
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xff200733),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (_) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'CHỌN WORKSPACE',
-              style: TextStyle(
-                color: Color(0xfff7d070),
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 14),
-            ...data.map(
-              (x) => ListTile(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                tileColor: Colors.white.withValues(alpha: 0.08),
-                title: Text(
-                  x['name']?.toString() ?? '-',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                subtitle: Text(
-                  x['baseCurrency']?.toString() ?? '',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-                ),
-                trailing: const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Color(0xfff7d070),
-                  size: 16,
-                ),
-                onTap: () {
-                  widget.api.workspaceId = x['id'].toString();
-                  Navigator.pop(context);
-                  setState(() {});
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _logout() {
     widget.api.token = null;
     Navigator.of(context).pushAndRemoveUntil(
@@ -2507,17 +2472,6 @@ class _HomePageState extends State<HomePage> {
       (_) => false,
     );
   }
-}
-
-class NavItem {
-  const NavItem(this.title, this.icon);
-  final String title;
-  final IconData icon;
-}
-
-class FieldSpec {
-  const FieldSpec(this.key, this.label, {this.initial = ''});
-  final String key, label, initial;
 }
 
 class PageFrame extends StatelessWidget {
@@ -2837,7 +2791,7 @@ class _DashboardPageState extends State<DashboardPage> {
             right: -20,
             bottom: -20,
             child: Icon(
-              Icons.workspace_premium_rounded,
+              Icons.account_circle_rounded,
               size: 130,
               color: Colors.white.withValues(alpha: 0.12),
             ),
@@ -3086,8 +3040,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     title: (x['name']?.toString().trim().isNotEmpty == true)
                         ? x['name'].toString().trim()
                         : (x['note']?.toString().isNotEmpty == true
-                            ? x['note'].toString()
-                            : (x['type'] == 'income' ? 'Thu nhập' : 'Chi tiêu')),
+                              ? x['note'].toString()
+                              : (x['type'] == 'income'
+                                    ? 'Thu nhập'
+                                    : 'Chi tiêu')),
                     subtitle: x['occurredAt']?.toString() ?? '',
                     amount:
                         "${x['type'] == 'income' ? '+' : '-'}${_formatMoney(x['amount'])} ${x['currency'] ?? 'VND'}",
@@ -3171,7 +3127,7 @@ class _BalanceHeroState extends State<_BalanceHero> {
           right: -25,
           bottom: -25,
           child: Icon(
-            Icons.workspace_premium_rounded,
+            Icons.account_circle_rounded,
             size: 150,
             color: Colors.white.withValues(alpha: 0.12),
           ),
@@ -3480,7 +3436,7 @@ class _ResourcePageState extends State<ResourcePage> {
       context: context,
       builder: (_) => FinoraSheet(
         title: 'Thêm ${widget.title}',
-        subtitle: 'Thông tin sẽ được lưu vào workspace hiện tại.',
+        subtitle: 'Thông tin sẽ được lưu vào user hiện tại.',
         child: Column(
           children: [
             ...widget.fields.map(
@@ -3745,9 +3701,8 @@ class _ResourcePageState extends State<ResourcePage> {
 
     const noisyKeys = {
       'id',
-      'workspaceId',
-      'portfolioId',
       'userId',
+      'portfolioId',
       'createdAt',
       'updatedAt',
       'occurredAt',
@@ -3884,10 +3839,20 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                   });
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Đã cập nhật thông tin cá nhân thành công!')),
+                    const SnackBar(
+                      content: Text(
+                        'Đã cập nhật thông tin cá nhân thành công!',
+                      ),
+                    ),
                   );
                 },
-                child: const Text('Lưu thay đổi', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Lưu thay đổi',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ],
@@ -3947,10 +3912,20 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                 onPressed: () {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yêu cầu điều chỉnh hạn mức đã được tiếp nhận và xử lý!')),
+                    const SnackBar(
+                      content: Text(
+                        'Yêu cầu điều chỉnh hạn mức đã được tiếp nhận và xử lý!',
+                      ),
+                    ),
                   );
                 },
-                child: const Text('Xác nhận qua Smart OTP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Xác nhận qua Smart OTP',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ],
@@ -4016,7 +3991,10 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xffdcfce7),
                     borderRadius: BorderRadius.circular(12),
@@ -4066,7 +4044,10 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3.5,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xffdcfce7),
                         borderRadius: BorderRadius.circular(12),
@@ -4099,7 +4080,9 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                     value: progress,
                     minHeight: 5,
                     backgroundColor: const Color(0xfff1f5f9),
-                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xff8b5cf6)),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xff8b5cf6),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -4111,7 +4094,10 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                       children: [
                         Text(
                           'Đã giao dịch trong ngày',
-                          style: TextStyle(fontSize: 11, color: Color(0xff64748b)),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xff64748b),
+                          ),
                         ),
                         SizedBox(height: 2),
                         Text(
@@ -4129,7 +4115,10 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                       children: [
                         Text(
                           'Hạn mức còn lại',
-                          style: TextStyle(fontSize: 11, color: Color(0xff64748b)),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xff64748b),
+                          ),
                         ),
                         SizedBox(height: 2),
                         Text(
@@ -4170,7 +4159,11 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                 onTap: _showEditBasicInfoModal,
                 child: const Row(
                   children: [
-                    Icon(Icons.edit_outlined, size: 14, color: Color(0xffd97706)),
+                    Icon(
+                      Icons.edit_outlined,
+                      size: 14,
+                      color: Color(0xffd97706),
+                    ),
                     SizedBox(width: 4),
                     Text(
                       'Chỉnh sửa',
@@ -4203,11 +4196,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
               children: [
                 _buildInfoRow('Tên đăng nhập', '0857869399'),
                 const Divider(height: 1, indent: 0, endIndent: 0),
-                _buildInfoRow(
-                  'Mã KH (CIF)',
-                  '03769945',
-                  showInfoIcon: true,
-                ),
+                _buildInfoRow('Mã KH (CIF)', '03769945', showInfoIcon: true),
                 const Divider(height: 1, indent: 0, endIndent: 0),
                 _buildInfoRow('Số điện thoại', _phone),
                 const Divider(height: 1, indent: 0, endIndent: 0),
@@ -4249,7 +4238,11 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                 const Divider(height: 1, indent: 0, endIndent: 0),
                 _buildInfoRow('Ngày cấp', '15/05/2021'),
                 const Divider(height: 1, indent: 0, endIndent: 0),
-                _buildInfoRow('Nơi cấp', 'Cục Cảnh sát QLHC về TTXH', isMultiLine: true),
+                _buildInfoRow(
+                  'Nơi cấp',
+                  'Cục Cảnh sát QLHC về TTXH',
+                  isMultiLine: true,
+                ),
               ],
             ),
           ),
@@ -4279,7 +4272,9 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 11),
       child: Row(
-        crossAxisAlignment: isMultiLine ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        crossAxisAlignment: isMultiLine
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
         children: [
           Expanded(
             flex: 4,
@@ -4330,13 +4325,11 @@ class ProfilePage extends StatefulWidget {
     super.key,
     required this.api,
     required this.onOpenSettings,
-    this.onSelectWorkspace,
     required this.onLogout,
   });
 
   final ApiClient api;
   final VoidCallback onOpenSettings;
-  final VoidCallback? onSelectWorkspace;
   final VoidCallback onLogout;
 
   @override
@@ -4345,6 +4338,49 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   int _satisfactionRating = 0;
+  String _sepaySubtitle = 'Kết nối ngân hàng qua SePay';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSePaySummary();
+  }
+
+  Future<void> _loadSePaySummary() async {
+    try {
+      final data = await widget.api.request('GET', '/me/sepay') as Map;
+      final accounts = (data['bankAccounts'] as List?) ?? const [];
+      if (!mounted) return;
+      if (accounts.isEmpty) {
+        setState(() => _sepaySubtitle = 'Kết nối ngân hàng qua SePay');
+        return;
+      }
+      final profile = data['profile'] as Map?;
+      final synced = profile?['lastSyncedAt']?.toString();
+      setState(
+        () => _sepaySubtitle =
+            '${accounts.length} tài khoản đã liên kết · ${_relativeSync(synced)}',
+      );
+    } catch (_) {
+      // This menu remains usable while the profile endpoint is temporarily unavailable.
+    }
+  }
+
+  String _relativeSync(String? raw) {
+    final value = raw == null ? null : DateTime.tryParse(raw);
+    if (value == null || value.year == 1970) return 'Chưa đồng bộ';
+    final minutes = DateTime.now().difference(value.toLocal()).inMinutes;
+    if (minutes < 1) return 'Đồng bộ vừa xong';
+    if (minutes < 60) return 'Đồng bộ $minutes phút trước';
+    return 'Đồng bộ ${minutes ~/ 60} giờ trước';
+  }
+
+  Future<void> _openSePay() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SePayConnectionPage(api: widget.api)),
+    );
+    await _loadSePaySummary();
+  }
 
   void _openPersonalInfo() {
     Navigator.of(context).push(
@@ -4359,12 +4395,24 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: Text(detail, style: const TextStyle(fontSize: 13.5, color: Color(0xff334155))),
+        title: Text(
+          title,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          detail,
+          style: const TextStyle(fontSize: 13.5, color: Color(0xff334155)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Đóng', style: TextStyle(color: Color(0xff6b21a8), fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Đóng',
+              style: TextStyle(
+                color: Color(0xff6b21a8),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -4406,7 +4454,11 @@ class _ProfilePageState extends State<ProfilePage> {
                         decoration: const BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(
-                            colors: [Color(0xffd97706), Color(0xfffbbf24), Color(0xfff59e0b)],
+                            colors: [
+                              Color(0xffd97706),
+                              Color(0xfffbbf24),
+                              Color(0xfff59e0b),
+                            ],
                           ),
                         ),
                       ),
@@ -4422,11 +4474,12 @@ class _ProfilePageState extends State<ProfilePage> {
                           child: Image.network(
                             'https://api.dicebear.com/7.x/bottts/png?seed=Hoang',
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const Icon(
-                              Icons.person_rounded,
-                              size: 40,
-                              color: Color(0xff6b21a8),
-                            ),
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(
+                                  Icons.person_rounded,
+                                  size: 40,
+                                  color: Color(0xff6b21a8),
+                                ),
                           ),
                         ),
                       ),
@@ -4464,7 +4517,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 3.5,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xffdcfce7),
                       borderRadius: BorderRadius.circular(12),
@@ -4515,42 +4571,60 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: Icons.chat_rounded,
                   title: 'Chat ngay trên App TPBank',
                   iconColor: const Color(0xffd97706),
-                  onTap: () => _showSupportModal('Chat ngay trên App', 'Kết nối trợ lý hỗ trợ trực tiếp 24/7.'),
+                  onTap: () => _showSupportModal(
+                    'Chat ngay trên App',
+                    'Kết nối trợ lý hỗ trợ trực tiếp 24/7.',
+                  ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
                 _buildMenuItemTile(
                   icon: Icons.forum_rounded,
                   title: 'Chat qua Messenger',
                   iconColor: const Color(0xff2563eb),
-                  onTap: () => _showSupportModal('Messenger', 'Đang chuyển hướng tới Messenger hỗ trợ...'),
+                  onTap: () => _showSupportModal(
+                    'Messenger',
+                    'Đang chuyển hướng tới Messenger hỗ trợ...',
+                  ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
                 _buildMenuItemTile(
                   icon: Icons.mark_chat_read_rounded,
                   title: 'Chat/Gọi qua Zalo',
                   iconColor: const Color(0xff0284c7),
-                  onTap: () => _showSupportModal('Zalo Official', 'Đang mở trang Zalo CSKH chính thức...'),
+                  onTap: () => _showSupportModal(
+                    'Zalo Official',
+                    'Đang mở trang Zalo CSKH chính thức...',
+                  ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
                 _buildMenuItemTile(
                   icon: Icons.email_rounded,
                   title: 'Gửi Email',
                   iconColor: const Color(0xff06b6d4),
-                  onTap: () => _showSupportModal('Gửi Email', 'Vui lòng gửi ý kiến về hotro@tpbank.com.vn'),
+                  onTap: () => _showSupportModal(
+                    'Gửi Email',
+                    'Vui lòng gửi ý kiến về hotro@tpbank.com.vn',
+                  ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
                 _buildMenuItemTile(
                   icon: Icons.phone_rounded,
                   title: 'Gọi Hotline',
                   iconColor: const Color(0xff16a34a),
-                  onTap: () => _showSupportModal('Gọi Hotline', 'Đang gọi 1900 58 58 85...'),
+                  onTap: () => _showSupportModal(
+                    'Gọi Hotline',
+                    'Đang gọi 1900 58 58 85...',
+                  ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
                 _buildMenuItemTile(
                   icon: Icons.warning_amber_rounded,
                   title: 'Yêu cầu trợ giúp/Báo lỗi',
                   iconColor: const Color(0xffef4444),
-                  onTap: () => _showSupportModal('Báo lỗi & Trợ giúp', 'Gửi yêu cầu hỗ trợ sự cố giao dịch.'),
+                  onTap: () => _showSupportModal(
+                    'Báo lỗi & Trợ giúp',
+                    'Gửi yêu cầu hỗ trợ sự cố giao dịch.',
+                  ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
                 _buildMenuItemTile(
@@ -4560,16 +4634,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   iconColor: const Color(0xff7c3aed),
                   onTap: widget.onOpenSettings,
                 ),
-                if (widget.onSelectWorkspace != null) ...[
-                  const Divider(height: 1, indent: 52, endIndent: 16),
-                  _buildMenuItemTile(
-                    icon: Icons.grid_view_rounded,
-                    title: 'Chuyển Workspace',
-                    subtitle: 'Quản lý không gian tài sản',
-                    iconColor: const Color(0xff0284c7),
-                    onTap: widget.onSelectWorkspace!,
-                  ),
-                ],
+                const Divider(height: 1, indent: 52, endIndent: 16),
+                _buildMenuItemTile(
+                  icon: Icons.account_balance,
+                  title: 'Liên kết ngân hàng qua SePay',
+                  subtitle: _sepaySubtitle,
+                  iconColor: const Color(0xff2563eb),
+                  onTap: _openSePay,
+                ),
               ],
             ),
           ),
@@ -4612,7 +4684,9 @@ class _ProfilePageState extends State<ProfilePage> {
                         });
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Cảm ơn bạn đã đánh giá $_satisfactionRating sao!'),
+                            content: Text(
+                              'Cảm ơn bạn đã đánh giá $_satisfactionRating sao!',
+                            ),
                             duration: const Duration(seconds: 2),
                           ),
                         );
@@ -4620,9 +4694,13 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                         child: Icon(
-                          isFilled ? Icons.star_rounded : Icons.star_outline_rounded,
+                          isFilled
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
                           size: 34,
-                          color: isFilled ? const Color(0xfff59e0b) : const Color(0xffcbd5e1),
+                          color: isFilled
+                              ? const Color(0xfff59e0b)
+                              : const Color(0xffcbd5e1),
                         ),
                       ),
                     );
@@ -4632,7 +4710,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1),
                 const SizedBox(height: 10),
                 GestureDetector(
-                  onTap: () => _showSupportModal('Lịch sử đánh giá', 'Bạn chưa có lịch sử đánh giá nào trước đó.'),
+                  onTap: () => _showSupportModal(
+                    'Lịch sử đánh giá',
+                    'Bạn chưa có lịch sử đánh giá nào trước đó.',
+                  ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -4815,14 +4896,12 @@ class _TransactionsPageState extends State<TransactionsPage> {
   }
 
   void form() => showModalBottomSheet(
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        context: context,
-        builder: (_) => _TransactionFormSheet(
-          api: widget.api,
-          onSuccess: () => load(),
-        ),
-      );
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    context: context,
+    builder: (_) =>
+        _TransactionFormSheet(api: widget.api, onSuccess: () => load()),
+  );
 
   double get _totalIncome {
     double sum = 0;
@@ -4896,130 +4975,134 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
   @override
   Widget build(BuildContext c) => PageFrame(
-        title: 'Lịch sử Giao dịch',
-        action: Row(
-          children: [
-            IconButton(
-              onPressed: load,
-              icon: const Icon(Icons.refresh_rounded, color: Color(0xfffbbf24)),
-            ),
-            const SizedBox(width: 4),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xfffbbf24),
-                foregroundColor: const Color(0xff1c1917),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              onPressed: form,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text(
-                'Thêm mới',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+    title: 'Lịch sử Giao dịch',
+    action: Row(
+      children: [
+        IconButton(
+          onPressed: load,
+          icon: const Icon(Icons.refresh_rounded, color: Color(0xfffbbf24)),
         ),
-        child: loading
-            ? const Center(
-                child: CircularProgressIndicator(color: Color(0xfffbbf24)),
-              )
-            : ListView(
-                physics: const BouncingScrollPhysics(),
+        const SizedBox(width: 4),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xfffbbf24),
+            foregroundColor: const Color(0xff1c1917),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          onPressed: form,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text(
+            'Thêm mới',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    ),
+    child: loading
+        ? const Center(
+            child: CircularProgressIndicator(color: Color(0xfffbbf24)),
+          )
+        : ListView(
+            physics: const BouncingScrollPhysics(),
+            children: [
+              // KPI Analytics Cards Header
+              Row(
                 children: [
-                  // KPI Analytics Cards Header
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildMetricCard(
-                          title: 'Tổng Thu',
-                          amount: _totalIncome,
-                          isIncome: true,
-                          icon: Icons.south_west_rounded,
-                          accentColor: const Color(0xff4ade80),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildMetricCard(
-                          title: 'Tổng Chi',
-                          amount: _totalExpense,
-                          isIncome: false,
-                          icon: Icons.north_east_rounded,
-                          accentColor: const Color(0xfffb7185),
-                        ),
-                      ),
-                    ],
+                  Expanded(
+                    child: _buildMetricCard(
+                      title: 'Tổng Thu',
+                      amount: _totalIncome,
+                      isIncome: true,
+                      icon: Icons.south_west_rounded,
+                      accentColor: const Color(0xff4ade80),
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  _buildNetFlowCard(),
-                  const SizedBox(height: 16),
-
-                  // Search Bar & Filter Pills
-                  _buildSearchAndFilterSection(),
-                  const SizedBox(height: 16),
-
-                  if (error != null) ErrorBox(error!),
-
-                  // Grouped List Items
-                  if (_groupedItems.isEmpty)
-                    const EmptyState('Không tìm thấy giao dịch nào')
-                  else
-                    ..._groupedItems.entries.map((entry) {
-                      final dateLabel = entry.key;
-                      final list = entry.value;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 8),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.calendar_today_rounded,
-                                  size: 14,
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  dateLabel,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const Spacer(),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    '${list.length} giao dịch',
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          ...list.map((x) => _buildTransactionCard(x)),
-                          const SizedBox(height: 8),
-                        ],
-                      );
-                    }),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildMetricCard(
+                      title: 'Tổng Chi',
+                      amount: _totalExpense,
+                      isIncome: false,
+                      icon: Icons.north_east_rounded,
+                      accentColor: const Color(0xfffb7185),
+                    ),
+                  ),
                 ],
               ),
-      );
+              const SizedBox(height: 10),
+              _buildNetFlowCard(),
+              const SizedBox(height: 16),
+
+              // Search Bar & Filter Pills
+              _buildSearchAndFilterSection(),
+              const SizedBox(height: 16),
+
+              if (error != null) ErrorBox(error!),
+
+              // Grouped List Items
+              if (_groupedItems.isEmpty)
+                const EmptyState('Không tìm thấy giao dịch nào')
+              else
+                ..._groupedItems.entries.map((entry) {
+                  final dateLabel = entry.key;
+                  final list = entry.value;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today_rounded,
+                              size: 14,
+                              color: Colors.white.withValues(alpha: 0.6),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              dateLabel,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${list.length} giao dịch',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ...list.map((x) => _buildTransactionCard(x)),
+                      const SizedBox(height: 8),
+                    ],
+                  );
+                }),
+            ],
+          ),
+  );
 
   Widget _buildMetricCard({
     required String title,
@@ -5090,7 +5173,9 @@ class _TransactionsPageState extends State<TransactionsPage> {
   Widget _buildNetFlowCard() {
     final net = _netCashFlow;
     final isPositive = net >= 0;
-    final accentColor = isPositive ? const Color(0xff10b981) : const Color(0xfff43f5e);
+    final accentColor = isPositive
+        ? const Color(0xff10b981)
+        : const Color(0xfff43f5e);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -5188,8 +5273,11 @@ class _TransactionsPageState extends State<TransactionsPage> {
               ),
               suffixIcon: searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear_rounded,
-                          color: Color(0xff64748b), size: 16),
+                      icon: const Icon(
+                        Icons.clear_rounded,
+                        color: Color(0xff64748b),
+                        size: 16,
+                      ),
                       onPressed: () {
                         searchController.clear();
                         setState(() {});
@@ -5210,14 +5298,15 @@ class _TransactionsPageState extends State<TransactionsPage> {
             children: [
               _buildFilterPill('all', 'Tất cả', Icons.apps_rounded),
               const SizedBox(width: 6),
-              _buildFilterPill(
-                  'income', 'Thu nhập', Icons.south_west_rounded),
+              _buildFilterPill('income', 'Thu nhập', Icons.south_west_rounded),
+              const SizedBox(width: 6),
+              _buildFilterPill('expense', 'Chi tiêu', Icons.north_east_rounded),
               const SizedBox(width: 6),
               _buildFilterPill(
-                  'expense', 'Chi tiêu', Icons.north_east_rounded),
-              const SizedBox(width: 6),
-              _buildFilterPill(
-                  'transfer', 'Chuyển tiền', Icons.swap_horiz_rounded),
+                'transfer',
+                'Chuyển tiền',
+                Icons.swap_horiz_rounded,
+              ),
             ],
           ),
         ),
@@ -5287,10 +5376,11 @@ class _TransactionsPageState extends State<TransactionsPage> {
     final title = (name != null && name.isNotEmpty)
         ? name
         : ((note != null && note.isNotEmpty)
-            ? note
-            : (isIncome ? 'Thu nhập' : (isTransfer ? 'Chuyển tiền' : 'Chi tiêu')));
-    final amountVal =
-        double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
+              ? note
+              : (isIncome
+                    ? 'Thu nhập'
+                    : (isTransfer ? 'Chuyển tiền' : 'Chi tiêu')));
+    final amountVal = double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
     final icon = isIncome
         ? Icons.south_west_rounded
         : (isTransfer ? Icons.swap_horiz_rounded : Icons.north_east_rounded);
@@ -5815,7 +5905,9 @@ double parseSmartAmount(String rawInput, {String currency = 'VND'}) {
 
   final val = double.tryParse(clean);
   if (val != null) {
-    if (isVnd && val > 0 && (appAmountDisplayMode == 'compact' || val < 10000)) {
+    if (isVnd &&
+        val > 0 &&
+        (appAmountDisplayMode == 'compact' || val < 10000)) {
       return val * 1000;
     }
     return val;
@@ -5831,103 +5923,6 @@ String formatCurrency(double amount, {String currency = 'VND'}) {
     (Match m) => '${m[1]}.',
   );
   return '$formattedStr $currency';
-}
-
-class ValuedResourcePage extends StatelessWidget {
-  const ValuedResourcePage({
-    super.key,
-    required this.api,
-    required this.title,
-    required this.path,
-    required this.fields,
-  });
-  final ApiClient api;
-  final String title, path;
-  final List<FieldSpec> fields;
-  @override
-  Widget build(BuildContext context) =>
-      ResourcePage(api: api, title: title, path: path, fields: fields);
-}
-
-class ReadonlyPage extends StatefulWidget {
-  const ReadonlyPage({
-    super.key,
-    required this.api,
-    required this.title,
-    required this.path,
-  });
-  final ApiClient api;
-  final String title, path;
-  @override
-  State<ReadonlyPage> createState() => _ReadonlyPageState();
-}
-
-class _ReadonlyPageState extends State<ReadonlyPage> {
-  List data = [];
-  String? err;
-  bool loading = true;
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
-
-  Future<void> load() async {
-    try {
-      final x = await widget.api.request('GET', widget.path);
-      data = x is List ? x : ((x as Map)['items'] as List? ?? []);
-    } catch (e) {
-      err = e.toString();
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext c) => PageFrame(
-    title: widget.title,
-    action: IconButton(
-      onPressed: load,
-      icon: const Icon(Icons.refresh_rounded, color: Color(0xfffbbf24)),
-    ),
-    child: loading
-        ? const Center(
-            child: CircularProgressIndicator(color: Color(0xfffbbf24)),
-          )
-        : ListView(
-            children: [
-              const _ScreenIntro(
-                'Dấu vết hoạt động được lưu để đảm bảo minh bạch.',
-              ),
-              if (err != null) ErrorBox(err!),
-              ...data.map((x) {
-                if (x is Map) {
-                  final action =
-                      x['action']?.toString() ??
-                      x['entityType']?.toString() ??
-                      'Hoạt động hệ thống';
-                  final date = _formatDate(x['createdAt']?.toString());
-                  final status = x['status']?.toString() ?? 'Thành công';
-                  return FinoraListTile(
-                    icon: Icons.history_toggle_off_rounded,
-                    title: action,
-                    subtitle: date.isNotEmpty
-                        ? 'Thời gian: $date'
-                        : 'Đã ghi nhận nhật ký',
-                    badge: status,
-                  );
-                }
-                return FinoraSurface(
-                  child: Text(
-                    x.toString(),
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                  ),
-                );
-              }),
-              if (data.isEmpty) const EmptyState('Chưa có dữ liệu'),
-            ],
-          ),
-  );
 }
 
 class BudgetPage extends StatefulWidget {
@@ -6077,66 +6072,363 @@ class _BudgetPageState extends State<BudgetPage> {
   );
 }
 
-class ForecastPage extends StatelessWidget {
-  const ForecastPage({super.key, required this.api});
+class SePayConnectionPage extends StatefulWidget {
+  const SePayConnectionPage({super.key, required this.api});
   final ApiClient api;
+
   @override
-  Widget build(BuildContext c) => ScenarioPage(
-    api: api,
-    title: 'Dự báo',
-    path: '/forecast-scenarios',
-    fields: const [
-      FieldSpec('name', 'Tên kịch bản'),
-      FieldSpec('assumptions', 'Giả định (JSON)'),
-    ],
+  State<SePayConnectionPage> createState() => _SePayConnectionPageState();
+}
+
+class _SePayConnectionPageState extends State<SePayConnectionPage> {
+  List<dynamic> _accounts = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final data = await widget.api.request('GET', '/me/sepay') as Map;
+      _accounts = (data['bankAccounts'] as List?) ?? const [];
+      _error = null;
+    } catch (error) {
+      _error = error.toString();
+    }
+    if (mounted) {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _link() async {
+    try {
+      final data =
+          await widget.api.request('POST', '/me/sepay/link-session') as Map;
+      final url = data['hosted_link_url']?.toString() ?? '';
+      if (url.isEmpty) {
+        throw Exception('SePay không trả về đường dẫn liên kết.');
+      }
+      if (!mounted) {
+        return;
+      }
+      final completion = await Navigator.of(context).push<Map<String, dynamic>>(
+        MaterialPageRoute(builder: (_) => _HostedLinkPage(url: url)),
+      );
+      final accountNumber =
+          completion?['account_number']?.toString() ??
+          completion?['accountNumber']?.toString() ??
+          '';
+      if (accountNumber.isNotEmpty) {
+        await widget.api.request('POST', '/me/sepay/bank-accounts/sync', {
+          'accountNumber': accountNumber,
+        });
+      }
+      await _load();
+    } catch (error) {
+      if (mounted) showError(context, error.toString());
+    }
+  }
+
+  Future<void> _mapAccount(Map account) async {
+    try {
+      final accounts = await widget.api.request('GET', '/accounts') as List;
+      if (!mounted) return;
+      final selected = await showModalBottomSheet<Map>(
+        context: context,
+        builder: (context) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(
+                title: Text(
+                  'Chọn tài khoản Finora',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Text(
+                  'Nếu user có nhiều thành viên, giao dịch ngân hàng sẽ được chia sẻ theo quyền của user đó.',
+                  style: TextStyle(color: Color(0xff64748b), fontSize: 12),
+                ),
+              ),
+              ...accounts.map(
+                (item) => ListTile(
+                  leading: const Icon(Icons.account_balance_wallet_outlined),
+                  title: Text(item['name']?.toString() ?? 'Tài khoản'),
+                  subtitle: Text(item['currency']?.toString() ?? 'VND'),
+                  onTap: () => Navigator.pop(
+                    context,
+                    Map<String, dynamic>.from(item as Map),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (selected == null) return;
+      await widget.api.request(
+        'POST',
+        '/me/sepay/bank-accounts/${account['id']}/map',
+        {'accountId': selected['id']},
+      );
+      await _load();
+    } catch (error) {
+      if (mounted) showError(context, error.toString());
+    }
+  }
+
+  Future<void> _unlink(Map account) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ngắt liên kết?'),
+        content: const Text(
+          'Giao dịch đã ghi nhận vẫn được giữ lại. Bạn có thể liên kết lại sau.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Ngắt liên kết'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true) return;
+    try {
+      await widget.api.request(
+        'POST',
+        '/me/sepay/bank-accounts/${account['id']}/unlink',
+      );
+      await _load();
+    } catch (error) {
+      if (mounted) showError(context, error.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Liên kết SePay')),
+    body: _loading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffeff6ff),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.shield_outlined, color: Color(0xff2563eb)),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Finora chỉ có quyền đọc giao dịch và số dư. Chúng tôi không lưu mật khẩu hoặc OTP của bạn.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _link,
+                  icon: const Icon(Icons.add_link),
+                  label: const Text('Liên kết tài khoản ngân hàng'),
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: ErrorBox(_error!),
+                  ),
+                const SizedBox(height: 20),
+                const Text(
+                  'TÀI KHOẢN ĐÃ LIÊN KẾT',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xff475569),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_accounts.isEmpty)
+                  const EmptyState(
+                    'Chưa có tài khoản ngân hàng nào được liên kết.',
+                  ),
+                ..._accounts.map((raw) {
+                  final account = Map<String, dynamic>.from(raw as Map);
+                  final mapping = account['mapping'];
+                  final canIn = account['supportsIn'] == true;
+                  final canOut = account['supportsOut'] == true;
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.account_balance,
+                                color: Color(0xff2563eb),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  account['bankName']?.toString().isNotEmpty ==
+                                          true
+                                      ? account['bankName'].toString()
+                                      : account['bankCode']?.toString() ??
+                                            'Ngân hàng',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              Text(account['status']?.toString() ?? ''),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            account['accountNumberMasked']?.toString() ??
+                                '••••',
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              Chip(
+                                label: Text(
+                                  canIn ? 'Tiền vào' : 'Không hỗ trợ tiền vào',
+                                ),
+                              ),
+                              Chip(
+                                label: Text(
+                                  canOut ? 'Tiền ra' : 'Không hỗ trợ tiền ra',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(),
+                          if (mapping == null)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () => _mapAccount(account),
+                                icon: const Icon(Icons.link),
+                                label: const Text('Map tài khoản Finora'),
+                              ),
+                            )
+                          else
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Đã map vào tài khoản Finora',
+                                    style: TextStyle(
+                                      color: Colors.green.shade700,
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => _unlink(account),
+                                  child: const Text('Ngắt liên kết'),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
   );
 }
 
-class AutomationPage extends StatelessWidget {
-  const AutomationPage({super.key, required this.api});
-  final ApiClient api;
+class _HostedLinkPage extends StatefulWidget {
+  const _HostedLinkPage({required this.url});
+  final String url;
   @override
-  Widget build(BuildContext c) => ScenarioPage(
-    api: api,
-    title: 'Quy tắc tự động',
-    path: '/bank-automation-rules',
-    fields: const [
-      FieldSpec('name', 'Tên quy tắc'),
-      FieldSpec('condition', 'Điều kiện'),
-      FieldSpec('action', 'Hành động'),
-    ],
-  );
+  State<_HostedLinkPage> createState() => _HostedLinkPageState();
 }
 
-class AssistantPage extends StatelessWidget {
-  const AssistantPage({super.key, required this.api});
-  final ApiClient api;
+class _HostedLinkPageState extends State<_HostedLinkPage> {
+  late final WebViewController _controller;
   @override
-  Widget build(BuildContext c) => ScenarioPage(
-    api: api,
-    title: 'Trợ lý AI',
-    path: '/assistant/commands',
-    fields: const [
-      FieldSpec('command', 'Yêu cầu'),
-      FieldSpec('plan', 'Kế hoạch (tuỳ chọn)'),
-    ],
-  );
-}
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel(
+        'BankHubEvents',
+        onMessageReceived: (message) {
+          try {
+            final event = jsonDecode(message.message) as Map;
+            final name = event['event']?.toString() ?? '';
+            final metadata = Map<String, dynamic>.from(
+              (event['metadata'] as Map?) ?? const {},
+            );
+            if (name == 'FINISHED_BANK_ACCOUNT_LINK') {
+              Navigator.of(context).pop(metadata);
+            } else if (name == 'BANKHUB_CLOSE_LINK' ||
+                name == 'FINISHED_BANK_ACCOUNT_UNLINK') {
+              Navigator.of(context).pop();
+            } else if (name == 'BANKHUB_TOKEN_EXPIRED' ||
+                name == 'BANKHUB_SESSION_EXPIRED') {
+              showError(context, 'Phiên liên kết SePay đã hết hạn.');
+              Navigator.of(context).pop();
+            }
+          } catch (_) {
+            // Ignore malformed cross-window messages; they are not provider data.
+          }
+        },
+      )
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) => _controller.runJavaScript('''
+            (function () {
+              if (window.__finoraBankHubListener) return;
+              window.__finoraBankHubListener = true;
+              window.addEventListener('message', function (event) {
+                var host = '';
+                try { host = new URL(event.origin).hostname; } catch (_) { return; }
+                if (host !== 'bankhub.sepay.vn' && !host.endsWith('.sepay.vn')) return;
+                var data = event.data;
+                if (typeof data === 'string') { try { data = JSON.parse(data); } catch (_) { return; } }
+                if (data && data.event) BankHubEvents.postMessage(JSON.stringify(data));
+              });
+            })();
+          '''),
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+  }
 
-class ScenarioPage extends StatelessWidget {
-  const ScenarioPage({
-    super.key,
-    required this.api,
-    required this.title,
-    required this.path,
-    required this.fields,
-  });
-  final ApiClient api;
-  final String title, path;
-  final List<FieldSpec> fields;
   @override
-  Widget build(BuildContext c) =>
-      ResourcePage(api: api, title: title, path: path, fields: fields);
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Kết nối ngân hàng')),
+    body: WebViewWidget(controller: _controller),
+  );
 }
 
 class BankPage extends StatefulWidget {
@@ -6147,9 +6439,10 @@ class BankPage extends StatefulWidget {
 }
 
 class _BankPageState extends State<BankPage> {
-  List con = [], feed = [];
+  List feed = [];
   String? err;
   bool loading = true;
+  String state = 'needs_review';
   @override
   void initState() {
     super.initState();
@@ -6158,8 +6451,9 @@ class _BankPageState extends State<BankPage> {
 
   Future<void> load() async {
     try {
-      con = await widget.api.request('GET', '/bank-connections') as List;
-      feed = await widget.api.request('GET', '/bank-feed-transactions') as List;
+      final data =
+          await widget.api.request('GET', '/me/bank-feed?state=$state') as Map;
+      feed = (data['items'] as List?) ?? const [];
       err = null;
     } catch (e) {
       err = e.toString();
@@ -6168,59 +6462,31 @@ class _BankPageState extends State<BankPage> {
     }
   }
 
-  Future<void> connect() async {
+  Future<void> _action(
+    String id,
+    String action, [
+    Map<String, dynamic>? payload,
+  ]) async {
     try {
-      final x = await widget.api.request(
-        'POST',
-        '/integrations/sepay/connect',
-        {'provider': 'sepay', 'scope': 'read_transactions'},
-      );
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            backgroundColor: const Color(0xff200733),
-            title: const Text(
-              'Kết nối SePay',
-              style: TextStyle(color: Colors.white),
-            ),
-            content: Text(
-              'Mở URL này trong trình duyệt để hoàn tất:\n${x['connectUrl'] ?? ''}',
-              style: const TextStyle(color: Colors.white70),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Đóng',
-                  style: TextStyle(color: Color(0xfff7d070)),
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-      load();
+      await widget.api.request('POST', '/bank-feed/$id/$action', payload);
+      await load();
     } catch (e) {
       if (mounted) showError(context, e.toString());
     }
   }
 
+  Future<void> _edit(Map item) async {
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _BankFeedEditSheet(api: widget.api, item: item),
+    );
+    if (result != null) await _action(item['id'].toString(), 'correct', result);
+  }
+
   @override
   Widget build(BuildContext c) => PageFrame(
-    title: 'Ngân hàng & SePay',
-    action: FilledButton.icon(
-      style: FilledButton.styleFrom(
-        backgroundColor: const Color(0xfff7d070),
-        foregroundColor: const Color(0xff200733),
-      ),
-      onPressed: connect,
-      icon: const Icon(Icons.add_link_rounded),
-      label: const Text(
-        'Kết nối',
-        style: TextStyle(fontWeight: FontWeight.bold),
-      ),
-    ),
+    title: 'Cần kiểm tra',
     child: loading
         ? const Center(
             child: CircularProgressIndicator(color: Color(0xfff7d070)),
@@ -6228,38 +6494,275 @@ class _BankPageState extends State<BankPage> {
         : ListView(
             children: [
               const _ScreenIntro(
-                'Liên kết nguồn tiền để theo dõi giao dịch liền mạch.',
+                'Rà soát giao dịch trước khi Finora ghi nhận vào sổ.',
               ),
               if (err != null) ErrorBox(err!),
-              const SectionTitle(
-                'Kết nối ngân hàng',
-                icon: Icons.account_balance_rounded,
-              ),
-              ...con.map(
-                (x) => FinoraListTile(
-                  icon: Icons.account_balance_rounded,
-                  title: x['provider']?.toString() ?? '',
-                  subtitle: 'Trạng thái kết nối',
-                  badge: x['status']?.toString() ?? '',
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final tab in const [
+                      ('needs_review', 'Cần kiểm tra'),
+                      ('ai_tagged', 'AI đã gắn'),
+                      ('confirmed', 'Đã xác nhận'),
+                      ('ignored', 'Bỏ qua'),
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(tab.$2),
+                          selected: state == tab.$1,
+                          onSelected: (_) {
+                            setState(() => state = tab.$1);
+                            load();
+                          },
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 18),
-              const SectionTitle(
-                'Giao dịch ngân hàng',
-                icon: Icons.swap_horiz_rounded,
-              ),
-              ...feed.map(
-                (x) => FinoraListTile(
-                  icon: Icons.receipt_long_rounded,
-                  title: x['description']?.toString() ?? '',
-                  subtitle: x['postingState']?.toString() ?? '',
-                  amount: x['amount']?.toString() ?? '',
-                ),
-              ),
-              if (con.isEmpty && feed.isEmpty)
-                const EmptyState('Chưa có kết nối ngân hàng'),
+              const SizedBox(height: 14),
+              ...feed.map((raw) {
+                final item = Map<String, dynamic>.from(raw as Map);
+                final inbound = item['direction'] == 'in';
+                final suggestions = (item['suggestions'] as List?) ?? const [];
+                final suggestion = suggestions.isEmpty
+                    ? null
+                    : Map<String, dynamic>.from(suggestions.first as Map);
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              inbound ? Icons.south_west : Icons.north_east,
+                              color: inbound ? Colors.green : Colors.red,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                inbound ? 'Thu' : 'Chi',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: inbound ? Colors.green : Colors.red,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${item['amount'] ?? ''} ${item['currency'] ?? 'VND'}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(_redactBankContent(item['description'])),
+                        Text(
+                          'Ngân hàng · ${item['occurredAt']?.toString().replaceFirst('T', ' ').split('.').first ?? ''}',
+                          style: const TextStyle(
+                            color: Color(0xff64748b),
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (suggestion != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Text(
+                              '${suggestion['suggestedName'] ?? 'Gợi ý AI'} · ${suggestion['reason'] ?? ''} · ${_confidenceLabel(suggestion['confidence'])}',
+                              style: const TextStyle(
+                                color: Color(0xff2563eb),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        if (suggestion == null)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 10),
+                            child: Text(
+                              'Chưa phân loại',
+                              style: TextStyle(
+                                color: Color(0xff64748b),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        if (state == 'needs_review' || state == 'ai_tagged')
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () =>
+                                    _action(item['id'].toString(), 'ignore'),
+                                child: const Text('Bỏ qua'),
+                              ),
+                              TextButton(
+                                onPressed: () => _edit(item),
+                                child: const Text('Sửa'),
+                              ),
+                              FilledButton(
+                                onPressed: () =>
+                                    _action(item['id'].toString(), 'confirm'),
+                                child: const Text('Xác nhận'),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              if (feed.isEmpty)
+                const EmptyState('Không có giao dịch trong mục này.'),
             ],
           ),
+  );
+}
+
+String _redactBankContent(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty) return 'Giao dịch ngân hàng';
+  final masked = text.replaceAll(RegExp(r'\b\d{6,}\b'), '••••');
+  final runes = masked.runes.toList();
+  return runes.length <= 90
+      ? masked
+      : '${String.fromCharCodes(runes.take(90))}…';
+}
+
+String _confidenceLabel(dynamic value) {
+  final confidence = value is num
+      ? value.toDouble()
+      : double.tryParse(value?.toString() ?? '') ?? 0;
+  if (confidence >= 90) return 'Khớp cao ${confidence.round()}%';
+  if (confidence > 0) return 'Cần xác nhận ${confidence.round()}%';
+  return 'Chưa phân loại';
+}
+
+class _BankFeedEditSheet extends StatefulWidget {
+  const _BankFeedEditSheet({required this.api, required this.item});
+  final ApiClient api;
+  final Map item;
+  @override
+  State<_BankFeedEditSheet> createState() => _BankFeedEditSheetState();
+}
+
+class _BankFeedEditSheetState extends State<_BankFeedEditSheet> {
+  late final TextEditingController _name = TextEditingController(
+    text: widget.item['description']?.toString() ?? '',
+  );
+  final _category = TextEditingController();
+  final _note = TextEditingController();
+  bool _remember = false;
+  List<dynamic> _accounts = const [];
+  String? _accountId;
+  late String _type = widget.item['direction'] == 'in' ? 'income' : 'expense';
+  @override
+  void initState() {
+    super.initState();
+    final mapping = widget.item['mapping'];
+    _accountId = mapping is Map ? mapping['accountId']?.toString() : null;
+    _loadAccounts();
+  }
+
+  Future<void> _loadAccounts() async {
+    try {
+      final data = await widget.api.request('GET', '/accounts');
+      if (mounted) setState(() => _accounts = (data as List?) ?? const []);
+    } catch (_) {
+      // The mapped account remains the server-side fallback if this optional
+      // picker cannot be loaded (for example, offline while editing).
+    }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _category.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FinoraSheet(
+    title: 'Sửa giao dịch',
+    subtitle: 'Dữ liệu gốc từ ngân hàng không thể thay đổi.',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: _type,
+          items: const [
+            DropdownMenuItem(value: 'income', child: Text('Thu')),
+            DropdownMenuItem(value: 'expense', child: Text('Chi')),
+          ],
+          onChanged: (value) => setState(() => _type = value!),
+          decoration: const InputDecoration(labelText: 'Loại'),
+        ),
+        TextField(
+          controller: _name,
+          decoration: const InputDecoration(labelText: 'Tên giao dịch'),
+        ),
+        TextField(
+          controller: _category,
+          decoration: const InputDecoration(
+            labelText: 'Danh mục (ID, tùy chọn)',
+          ),
+        ),
+        DropdownButtonFormField<String>(
+          initialValue:
+              _accounts.any((item) => item['id']?.toString() == _accountId)
+              ? _accountId
+              : null,
+          items: _accounts
+              .map(
+                (raw) => DropdownMenuItem<String>(
+                  value: raw['id']?.toString(),
+                  child: Text(raw['name']?.toString() ?? 'Tài khoản Finora'),
+                ),
+              )
+              .toList(),
+          onChanged: (value) => setState(() => _accountId = value),
+          decoration: const InputDecoration(labelText: 'Tài khoản Finora'),
+        ),
+        TextField(
+          controller: _note,
+          decoration: const InputDecoration(labelText: 'Ghi chú'),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _remember,
+          onChanged: (value) => setState(() => _remember = value),
+          title: const Text('Ghi nhớ lựa chọn này cho các lần sau'),
+        ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xfff8fafc),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            'Dữ liệu gốc từ ngân hàng\n${widget.item['description'] ?? ''}\n${widget.item['amount'] ?? ''} ${widget.item['currency'] ?? ''}',
+            style: const TextStyle(fontSize: 12, color: Color(0xff475569)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, {
+            'name': _name.text.trim(),
+            'categoryId': _category.text.trim(),
+            'accountId': _accountId ?? '',
+            'note': _note.text.trim(),
+            'type': _type,
+            'rememberChoice': _remember,
+          }),
+          child: const Text('Lưu và xác nhận'),
+        ),
+      ],
+    ),
   );
 }
 
@@ -6752,7 +7255,7 @@ IconData _iconForTitle(String title) => switch (title) {
   'Khoản vay' => Icons.request_quote_rounded,
   'Tài sản' => Icons.inventory_2_rounded,
   'Bất động sản' => Icons.home_work_rounded,
-  'Danh mục' => Icons.workspaces_rounded,
+  'Danh mục' => Icons.category_rounded,
   'Dự báo' => Icons.auto_graph_rounded,
   'Trợ lý AI' => Icons.smart_toy_rounded,
   _ => Icons.bolt_rounded,

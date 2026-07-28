@@ -63,7 +63,7 @@ type Timestamped struct {
 
 type AuditLog struct {
 	Timestamped
-	WorkspaceID    ID     `json:"workspaceId"`
+	UserID         ID     `json:"userId"`
 	ActorID        ID     `json:"actorId"`
 	ActorRole      string `json:"actorRole"`
 	Action         string `json:"action"`
@@ -82,9 +82,10 @@ type AuditLog struct {
 
 type User struct {
 	Timestamped
-	Email    string `json:"email"`
-	Name     string `json:"name"`
-	Password string `json:"-"`
+	Email        string `json:"email"`
+	Name         string `json:"name"`
+	Password     string `json:"-"`
+	BaseCurrency string `json:"baseCurrency,omitempty"`
 }
 
 type AmountDisplayMode string
@@ -100,47 +101,42 @@ type UserSettings struct {
 	UpdatedAt         time.Time         `json:"updatedAt"`
 }
 
-
-type Workspace struct {
-	Timestamped
-	Name          string `json:"name"`
-	BaseCurrency  string `json:"baseCurrency"`
-	FiscalYearEnd string `json:"fiscalYearEnd"`
-}
-
-type WorkspaceMember struct {
-	Timestamped
-	WorkspaceID ID   `json:"workspaceId"`
-	UserID      ID   `json:"userId"`
-	Role        Role `json:"role"`
-}
-
 type Portfolio struct {
 	Timestamped
-	WorkspaceID  ID     `json:"workspaceId"`
+	UserID       ID     `json:"userId"`
 	Name         string `json:"name"`
 	BaseCurrency string `json:"baseCurrency"`
 }
 
 type Account struct {
 	Timestamped
-	WorkspaceID ID     `json:"workspaceId"`
+	UserID      ID     `json:"userId"`
 	PortfolioID ID     `json:"portfolioId"`
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 	Currency    string `json:"currency"`
 }
 
+// BotAccountKey authorizes an external bot for exactly one Finora account.
+// SecretHash is the SHA-256 digest of the one-time secret, never the secret.
+type BotAccountKey struct {
+	Timestamped
+	AccountID  ID        `json:"accountId"`
+	SecretHash string    `json:"-"`
+	Prefix     string    `json:"prefix"`
+	RevokedAt  time.Time `json:"revokedAt,omitempty"`
+}
+
 type Category struct {
 	Timestamped
-	WorkspaceID ID     `json:"workspaceId"`
-	Name        string `json:"name"`
-	Kind        string `json:"kind"`
+	UserID ID     `json:"userId"`
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`
 }
 
 type Transaction struct {
 	Timestamped
-	WorkspaceID ID                `json:"workspaceId"`
+	UserID      ID                `json:"userId"`
 	AccountID   ID                `json:"accountId"`
 	CategoryID  ID                `json:"categoryId"`
 	PortfolioID ID                `json:"portfolioId"`
@@ -156,7 +152,7 @@ type Transaction struct {
 
 type Transfer struct {
 	Timestamped
-	WorkspaceID   ID        `json:"workspaceId"`
+	UserID        ID        `json:"userId"`
 	FromAccountID ID        `json:"fromAccountId"`
 	ToAccountID   ID        `json:"toAccountId"`
 	Amount        string    `json:"amount"`
@@ -167,7 +163,7 @@ type Transfer struct {
 
 type Loan struct {
 	Timestamped
-	WorkspaceID      ID            `json:"workspaceId"`
+	UserID           ID            `json:"userId"`
 	PortfolioID      ID            `json:"portfolioId"`
 	Counterparty     string        `json:"counterparty"`
 	Direction        LoanDirection `json:"direction"`
@@ -183,7 +179,7 @@ type Loan struct {
 
 type LoanPayment struct {
 	Timestamped
-	WorkspaceID   ID        `json:"workspaceId"`
+	UserID        ID        `json:"userId"`
 	LoanID        ID        `json:"loanId"`
 	AccountID     ID        `json:"accountId"`
 	TransactionID ID        `json:"transactionId"`
@@ -196,7 +192,7 @@ type LoanPayment struct {
 
 type Property struct {
 	Timestamped
-	WorkspaceID ID        `json:"workspaceId"`
+	UserID      ID        `json:"userId"`
 	PortfolioID ID        `json:"portfolioId"`
 	Name        string    `json:"name"`
 	Address     string    `json:"address"`
@@ -216,7 +212,7 @@ type PropertyValuation struct {
 
 type Asset struct {
 	Timestamped
-	WorkspaceID ID     `json:"workspaceId"`
+	UserID      ID     `json:"userId"`
 	PortfolioID ID     `json:"portfolioId"`
 	Name        string `json:"name"`
 	Type        string `json:"assetType"`
@@ -233,10 +229,10 @@ type AssetValuation struct {
 
 type Budget struct {
 	Timestamped
-	WorkspaceID ID     `json:"workspaceId"`
-	Period      string `json:"period"`
-	CategoryID  ID     `json:"categoryId"`
-	Limit       string `json:"limit"`
+	UserID     ID     `json:"userId"`
+	Period     string `json:"period"`
+	CategoryID ID     `json:"categoryId"`
+	Limit      string `json:"limit"`
 }
 
 type BudgetAllocation struct {
@@ -248,7 +244,7 @@ type BudgetAllocation struct {
 
 type ForecastScenario struct {
 	Timestamped
-	WorkspaceID ID     `json:"workspaceId"`
+	UserID      ID     `json:"userId"`
 	Name        string `json:"name"`
 	Status      string `json:"status"`
 	Assumptions string `json:"assumptions"`
@@ -257,7 +253,7 @@ type ForecastScenario struct {
 
 type BankConnection struct {
 	Timestamped
-	WorkspaceID         ID        `json:"workspaceId"`
+	UserID              ID        `json:"userId"`
 	Provider            string    `json:"provider"`
 	ExternalID          string    `json:"externalId"`
 	Status              string    `json:"status"`
@@ -269,9 +265,51 @@ type BankConnection struct {
 	LastSyncRequestedAt time.Time `json:"lastSyncRequestedAt"`
 }
 
+// SePayUserProfile and the related account/mapping records are intentionally
+// user-owned. A mapping may expose feeds in a shared user, but cannot
+// grant another member control over the user's provider connection.
+type SePayUserProfile struct {
+	UserID       ID        `json:"userId"`
+	CompanyXID   string    `json:"companyXid"`
+	Status       string    `json:"status"`
+	LinkedAt     time.Time `json:"linkedAt"`
+	LastSyncedAt time.Time `json:"lastSyncedAt"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type SePayBankAccount struct {
+	Timestamped
+	UserID              ID     `json:"userId"`
+	BankAccountXID      string `json:"bankAccountXid"`
+	BankCode            string `json:"bankCode"`
+	BankName            string `json:"bankName"`
+	AccountNumberMasked string `json:"accountNumberMasked"`
+	SupportsIn          bool   `json:"supportsIn"`
+	SupportsOut         bool   `json:"supportsOut"`
+	Status              string `json:"status"`
+}
+
+type SePayUnmappedEvent struct {
+	Timestamped
+	Provider       string `json:"provider"`
+	BankAccountXID string `json:"bankAccountXid"`
+	TransactionID  string `json:"transactionId"`
+	Payload        string `json:"payload"`
+	Status         string `json:"status"`
+}
+
+type BankAccountMapping struct {
+	Timestamped
+	SePayBankAccountID ID     `json:"sepayBankAccountId"`
+	UserID             ID     `json:"userId"`
+	AccountID          ID     `json:"accountId"`
+	Status             string `json:"status"`
+}
+
 type BankFeedEvent struct {
 	Timestamped
-	WorkspaceID  ID     `json:"workspaceId"`
+	UserID       ID     `json:"userId"`
 	ConnectionID ID     `json:"connectionId"`
 	Provider     string `json:"provider"`
 	EventKey     string `json:"eventKey"`
@@ -284,45 +322,72 @@ type BankFeedEvent struct {
 
 type BankFeedTransaction struct {
 	Timestamped
-	WorkspaceID    ID                      `json:"workspaceId"`
-	ConnectionID   ID                      `json:"connectionId"`
-	AccountID      ID                      `json:"accountId"`
-	Amount         string                  `json:"amount"`
-	Currency       string                  `json:"currency"`
-	Direction      string                  `json:"direction"`
-	CounterParty   string                  `json:"counterparty"`
-	Description    string                  `json:"description"`
-	OccurredAt     time.Time               `json:"occurredAt"`
-	ExternalID     string                  `json:"externalTransactionId"`
-	Reference      string                  `json:"reference"`
-	Confidence     float64                 `json:"classificationConfidence"`
-	Evidence       string                  `json:"classificationEvidence"`
-	PostingState   TransactionPostingState `json:"postingState"`
-	PostedTxnID    ID                      `json:"postedTransactionId"`
-	AutoClassified bool                    `json:"autoClassified"`
-	RuleID         ID                      `json:"ruleId"`
-	Source         string                  `json:"source"`
+	UserID               ID                      `json:"userId"`
+	ConnectionID         ID                      `json:"connectionId"`
+	AccountID            ID                      `json:"accountId"`
+	Amount               string                  `json:"amount"`
+	Currency             string                  `json:"currency"`
+	Direction            string                  `json:"direction"`
+	CounterParty         string                  `json:"counterparty"`
+	Description          string                  `json:"description"`
+	OccurredAt           time.Time               `json:"occurredAt"`
+	ExternalID           string                  `json:"externalTransactionId"`
+	Reference            string                  `json:"reference"`
+	Confidence           float64                 `json:"classificationConfidence"`
+	Evidence             string                  `json:"classificationEvidence"`
+	PostingState         TransactionPostingState `json:"postingState"`
+	PostedTxnID          ID                      `json:"postedTransactionId"`
+	AutoClassified       bool                    `json:"autoClassified"`
+	RuleID               ID                      `json:"ruleId"`
+	Source               string                  `json:"source"`
+	SePayBankAccountID   ID                      `json:"sepayBankAccountId"`
+	RawProviderData      string                  `json:"rawProviderData"`
+	ClassificationStatus string                  `json:"classificationStatus"`
+}
+
+type TransactionSuggestion struct {
+	Timestamped
+	BankFeedTransactionID ID      `json:"bankFeedTransactionId"`
+	SuggestedName         string  `json:"suggestedName"`
+	SuggestedCategoryID   ID      `json:"suggestedCategoryId"`
+	Source                string  `json:"source"`
+	Confidence            float64 `json:"confidence"`
+	Reason                string  `json:"reason"`
+	Version               string  `json:"version"`
+}
+
+type ClassificationFeedback struct {
+	Timestamped
+	BankFeedTransactionID ID     `json:"bankFeedTransactionId"`
+	UserID                ID     `json:"userId"`
+	Action                string `json:"action"`
+	Name                  string `json:"name"`
+	CategoryID            ID     `json:"categoryId"`
+	AccountID             ID     `json:"accountId"`
+	TransactionType       string `json:"transactionType"`
+	Note                  string `json:"note"`
+	RememberChoice        bool   `json:"rememberChoice"`
 }
 
 type BankReconciliation struct {
 	Timestamped
-	WorkspaceID   ID     `json:"workspaceId"`
-	ConnectionID  ID     `json:"connectionId"`
-	AsOfAt        string `json:"asOfAt"`
-	Status        string `json:"status"`
-	Policy        string `json:"policy"`
-	Source        string `json:"source"`
-	Difference    string `json:"difference"`
-	Notes         string `json:"notes"`
-	PendingCount  int    `json:"pendingCount"`
-	PostedCount   int    `json:"postedCount"`
-	IgnoredCount  int    `json:"ignoredCount"`
-	AutoReadyCount int   `json:"autoReadyCount"`
+	UserID         ID     `json:"userId"`
+	ConnectionID   ID     `json:"connectionId"`
+	AsOfAt         string `json:"asOfAt"`
+	Status         string `json:"status"`
+	Policy         string `json:"policy"`
+	Source         string `json:"source"`
+	Difference     string `json:"difference"`
+	Notes          string `json:"notes"`
+	PendingCount   int    `json:"pendingCount"`
+	PostedCount    int    `json:"postedCount"`
+	IgnoredCount   int    `json:"ignoredCount"`
+	AutoReadyCount int    `json:"autoReadyCount"`
 }
 
 type AutomationRule struct {
 	Timestamped
-	WorkspaceID      ID     `json:"workspaceId"`
+	UserID           ID     `json:"userId"`
 	AccountID        ID     `json:"accountId"`
 	Name             string `json:"name"`
 	Priority         int    `json:"priority"`
@@ -340,25 +405,24 @@ type AutomationRule struct {
 
 type BankPaymentRequest struct {
 	Timestamped
-	WorkspaceID ID        `json:"workspaceId"`
-	LoanID      ID        `json:"loanId"`
-	Code        string    `json:"paymentCode"`
-	Amount      string    `json:"amount"`
-	Currency    string    `json:"currency"`
-	ExpiresAt   time.Time `json:"expiresAt"`
-	Status      string    `json:"status"`
-	Note        string    `json:"note"`
-	Source      string    `json:"source"`
+	UserID    ID        `json:"userId"`
+	LoanID    ID        `json:"loanId"`
+	Code      string    `json:"paymentCode"`
+	Amount    string    `json:"amount"`
+	Currency  string    `json:"currency"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	Status    string    `json:"status"`
+	Note      string    `json:"note"`
+	Source    string    `json:"source"`
 }
 
 type AssistantCommand struct {
 	Timestamped
-	WorkspaceID ID     `json:"workspaceId"`
-	UserID      ID     `json:"userId"`
-	Command     string `json:"command"`
-	Status      string `json:"status"`
-	Plan        string `json:"plan"`
-	ApprovalID  string `json:"approvalId"`
+	UserID     ID     `json:"userId"`
+	Command    string `json:"command"`
+	Status     string `json:"status"`
+	Plan       string `json:"plan"`
+	ApprovalID string `json:"approvalId"`
 	// ApprovalExpiresAt is set for write/external_action commands.
 	ApprovalExpiresAt time.Time  `json:"approvalExpiresAt"`
 	ApprovalUsedAt    *time.Time `json:"approvalUsedAt,omitempty"`

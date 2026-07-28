@@ -25,12 +25,8 @@ class AuthRepositoryImpl implements AuthRepository {
     if (token == null || token.isEmpty) {
       throw const ApiException('Phản hồi đăng nhập không có token');
     }
-    final workspace = response['workspace'];
-    final workspaceId = workspace is Map ? workspace['id']?.toString() : null;
-    final session = AuthSession(token: token, workspaceId: workspaceId);
-    _apiClient
-      ..token = session.token
-      ..workspaceId = session.workspaceId;
+    final session = AuthSession(token: token);
+    _apiClient.token = session.token;
     return session;
   }
 }

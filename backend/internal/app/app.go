@@ -53,23 +53,13 @@ func Run(ctx context.Context) error {
 
 	seedUserID := store.SeedDemoUser("thanhoangz", "Than Hoang Z", "HoangThanZ6^")
 	_ = store.SeedDemoUser("demo@wealthos.vn", "Demo User", "demo-pass")
-	existingWorkspaces := store.ListWorkspaces(seedUserID)
-	var ws *domain.Workspace
-	if len(existingWorkspaces) > 0 {
-		ws = &existingWorkspaces[0]
-	} else {
-		created, err := store.CreateWorkspace("Workspace Demo", "VND", seedUserID)
-		if err != nil {
-			return err
-		}
-		ws = created
+	if _, err := store.EnsureUserPortfolio("", "VND", seedUserID); err != nil {
+		return err
 	}
 
 	appService := service.NewWealthService(store, redisCache)
 
-	if ws != nil {
-		appService.SeedDemoData(seedUserID, domain.ID(ws.ID))
-	}
+	appService.SeedDemoData(seedUserID, seedUserID)
 
 	// Auto-seed thanhoangz account with 180M Bank account
 	seedUserThanHoangZ(store, appService)
@@ -109,24 +99,16 @@ func seedUserThanHoangZ(store storage.Store, appService *service.WealthService) 
 		return
 	}
 
-	existingWorkspaces := store.ListWorkspaces(userID)
-	var ws *domain.Workspace
-	if len(existingWorkspaces) > 0 {
-		ws = &existingWorkspaces[0]
-	} else {
-		created, err := store.CreateWorkspace(username, "VND", userID)
-		if err != nil {
-			return
-		}
-		ws = created
+	if _, err := store.EnsureUserPortfolio("", "VND", userID); err != nil {
+		return
 	}
 
-	p, ok := store.FirstPortfolio(ws.ID)
+	p, ok := store.FirstPortfolio(userID)
 	if !ok {
 		return
 	}
 
-	accounts := store.ListAccounts(ws.ID)
+	accounts := store.ListAccounts(userID)
 	var bankAccID domain.ID
 	for _, acc := range accounts {
 		if strings.EqualFold(acc.Name, "Bank") {
@@ -137,7 +119,7 @@ func seedUserThanHoangZ(store storage.Store, appService *service.WealthService) 
 
 	if bankAccID == "" {
 		acc, err := store.CreateAccount(domain.Account{
-			WorkspaceID: ws.ID,
+			UserID:      userID,
 			PortfolioID: p.ID,
 			Name:        "Bank",
 			Type:        "bank",
@@ -152,7 +134,7 @@ func seedUserThanHoangZ(store storage.Store, appService *service.WealthService) 
 		return
 	}
 
-	txs := store.ListTransactions(ws.ID, bankAccID)
+	txs := store.ListTransactions(userID, bankAccID)
 	hasInitialTx := false
 	for _, tx := range txs {
 		if tx.Amount == "180000000" || tx.Amount == "180000000.0000" {
@@ -163,7 +145,7 @@ func seedUserThanHoangZ(store storage.Store, appService *service.WealthService) 
 
 	if !hasInitialTx {
 		_, _ = appService.CreateTransaction(domain.Transaction{
-			WorkspaceID: ws.ID,
+			UserID:      userID,
 			AccountID:   bankAccID,
 			PortfolioID: p.ID,
 			Type:        domain.TransactionTypeIncome,

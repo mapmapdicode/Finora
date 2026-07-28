@@ -16,7 +16,7 @@ Không suy diễn lãi/ngày từ fixture nếu thiếu lãi suất, cơ sở t�
 ## Nguyên tắc dữ liệu thật
 
 1. Thu thập tối thiểu; chỉ lấy trường cần cho tính năng mà người dùng bật.
-2. Có consent rõ ràng trước khi import, kết nối ngân hàng hoặc chia sẻ workspace; cho phép revoke và nêu tác động của revoke.
+2. Có consent rõ ràng trước khi import, kết nối ngân hàng hoặc chia sẻ user; cho phép revoke và nêu tác động của revoke.
 3. Mã hóa khi truyền/lưu; nguyên tắc least privilege cho người dùng lẫn nhân sự vận hành.
 4. Export có xác thực lại, URL hết hạn và audit log; việc xóa tuân theo chính sách được công bố nhưng không được làm sai audit/đối soát bắt buộc.
 5. Dùng bản sao ẩn danh/tổng hợp cho phân tích; không đưa số tài khoản, ghi chú, đối tác khoản vay hoặc token vào log.

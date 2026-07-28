@@ -35,7 +35,7 @@ Dashboard phải cho drill-down theo các thành phần trên. Ví dụ, thu g�
 
 ## Quy tắc thời gian, làm tròn và đối soát
 
-- Tính báo cáo theo timezone workspace; lưu thời điểm gốc UTC và `effective_at` cho valuation.
+- Tính báo cáo theo timezone user; lưu thời điểm gốc UTC và `effective_at` cho valuation.
 - Làm tròn ở biên hiển thị, không làm tròn sau từng phép cộng trung gian.
 - Khi điều chỉnh quá khứ, tính lại aggregate/forecast từ ngày hiệu lực.
 - Nếu số dư cache lệch sổ cái hoặc valuation đã quá hạn, dashboard phải gắn nhãn dữ liệu cần đối soát, không trình bày như số chính xác.

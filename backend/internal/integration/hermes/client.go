@@ -7,14 +7,14 @@ type ActionResult struct {
 }
 
 type Client interface {
-	SendAction(workspaceID, command string) (ActionResult, error)
+	SendAction(userID, command string) (ActionResult, error)
 }
 
 type MockClient struct{}
 
-func (m *MockClient) SendAction(workspaceID, command string) (ActionResult, error) {
+func (m *MockClient) SendAction(userID, command string) (ActionResult, error) {
 	return ActionResult{
-		CommandID: "mock-" + workspaceID,
+		CommandID: "mock-" + userID,
 		Status:    "accepted",
 		Message:   command,
 	}, nil

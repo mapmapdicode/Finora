@@ -67,7 +67,7 @@ Không cần Redis trong bản đầu. PostgreSQL đủ để làm transaction, 
 cmd/api       HTTP handlers, auth middleware, webhook ingress, readiness
 cmd/worker    job runner, scheduler, retry executor
 internal/
-  identity    users, workspace, RBAC, session
+  identity    users, user, RBAC, session
   ledger      accounts, transactions, transfers, idempotency
   portfolio   loans, assets, valuations, net worth, snapshots
   bankfeed    SePay adapters, raw events, classify, reconcile, automation rules
@@ -148,7 +148,7 @@ Số replica API giữ dịch vụ online khi deploy/1 process hỏng. Một wor
 
 Không tính net worth bằng cách quét toàn bộ ledger cho mọi request. API trả dashboard từ `portfolio_snapshots` theo `as_of`, rồi drill-down query có index. Khi transaction/valuation thay đổi, ghi job rebuild snapshot; UI có thể hiện `calculatedAt` nếu job chưa hoàn tất.
 
-Các index tối thiểu: `(workspace_id, occurred_at DESC)` trên transaction, `(account_id, occurred_at DESC)`, unique provider event/import, `(loan_id, due_at)`, `(portfolio_id, snapshot_date DESC)`. Query plan phải được kiểm tra bằng `EXPLAIN ANALYZE` trên fixture có ít nhất 10 lần dữ liệu dự kiến của 100 người dùng.
+Các index tối thiểu: `(user_id, occurred_at DESC)` trên transaction, `(account_id, occurred_at DESC)`, unique provider event/import, `(loan_id, due_at)`, `(portfolio_id, snapshot_date DESC)`. Query plan phải được kiểm tra bằng `EXPLAIN ANALYZE` trên fixture có ít nhất 10 lần dữ liệu dự kiến của 100 người dùng.
 
 ## Kế hoạch kiểm thử trước khi mở user thật
 
@@ -157,7 +157,7 @@ Các index tối thiểu: `(workspace_id, occurred_at DESC)` trên transaction, 
 3. Load test: 20 API request/giây + 20 webhook/giây trong 5 phút, theo dõi p95, error rate, queue lag và DB pool wait.
 4. Failure test: restart worker/API giữa job; simulate SePay retry/replay; không mất hoặc double-post event.
 5. Restore drill: restore point-in-time vào DB mới, chạy audit/rebuild snapshot; xác nhận net worth tái tạo được.
-6. Canary: bật SePay auto-post cho 1 workspace nội bộ trước; theo dõi reclassify rate rồi mới mở rộng.
+6. Canary: bật SePay auto-post cho 1 user nội bộ trước; theo dõi reclassify rate rồi mới mở rộng.
 
 ## Ngưỡng mở rộng có chủ đích
 

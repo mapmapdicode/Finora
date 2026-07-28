@@ -1,12 +1,12 @@
 # Thiết kế cơ sở dữ liệu WealthOS
 
-PostgreSQL là nguồn dữ liệu chuẩn. Khóa chính dùng UUID; bảng nghiệp vụ có `workspace_id`, `created_at`, `updated_at`. Không xóa cứng sổ cái, loan payment hay valuation đã dùng trong báo cáo.
+PostgreSQL là nguồn dữ liệu chuẩn. Khóa chính dùng UUID; bảng nghiệp vụ có `user_id`, `created_at`, `updated_at`. Không xóa cứng sổ cái, loan payment hay valuation đã dùng trong báo cáo.
 
 ## Bảng cốt lõi
 
 | Nhóm | Bảng | Trường quan trọng |
 |---|---|---|
-| Tenant | `workspaces`, `workspace_members` | owner, role |
+| Tenant | `users`, `user_members` | owner, role |
 | Portfolio | `portfolios`, `portfolio_memberships` | base_currency, ownership_share |
 | Cash | `accounts`, `transactions`, `transfers` | type, currency, amount, occurred_at, status |
 | Loan | `loans`, `loan_schedules`, `loan_accruals`, `loan_payments` | direction, principal, annual_rate, day_count_basis, due_at |
@@ -27,14 +27,14 @@ PostgreSQL là nguồn dữ liệu chuẩn. Khóa chính dùng UUID; bảng nghi
 - `bank_feed_events` unique theo `(provider, external_event_id)` và `bank_feed_transactions` unique theo `(connection_id, provider_transaction_id)`; retry/replay chỉ được tạo một candidate.
 - Bank-feed transaction là immutable import; `approve` hoặc policy auto-post mới tạo `transactions`, `transfers` hoặc `loan_payments` qua service ledger và idempotency key liên kết event nguồn.
 - `bank_feed_transactions` lưu `classification_type`, `category_id`, `classification_confidence`, `classification_evidence`, `posting_state` và `posted_transaction_id`; auto-post cũng phải liên kết duy nhất đến một ledger record.
-- `bank_automation_rules` thuộc workspace/account, có priority, điều kiện minh bạch, action/type/category và trạng thái enabled; rule không được tự gán loan payment hoặc transfer nếu thiếu reference/match chắc chắn.
+- `bank_automation_rules` thuộc user/account, có priority, điều kiện minh bạch, action/type/category và trạng thái enabled; rule không được tự gán loan payment hoặc transfer nếu thiếu reference/match chắc chắn.
 - Token/secret của provider được mã hóa; `bank_connections` lưu consent scope, `revoked_at` và không lưu thông tin đăng nhập ngân hàng.
 - `payment_requests.payment_code` unique; webhook match chỉ tạo candidate, không tự ghi principal/interest.
 
 ## Chỉ mục và snapshot
 
-- `(workspace_id, occurred_at DESC)` và `(account_id, occurred_at DESC)` cho transactions.
-- `(connection_id, occurred_at DESC)` cho bank feed; unique index provider event, index `(workspace_id, sync_state)` cho connection và `(account_id, as_of_at DESC)` cho reconciliation.
+- `(user_id, occurred_at DESC)` và `(account_id, occurred_at DESC)` cho transactions.
+- `(connection_id, occurred_at DESC)` cho bank feed; unique index provider event, index `(user_id, sync_state)` cho connection và `(account_id, as_of_at DESC)` cho reconciliation.
 - `(portfolio_id, status)`, `(loan_id, due_at)`, `(loan_id, accrual_date DESC)`, `(property_id, effective_at DESC)`.
 - Tạo `portfolio_snapshots` theo ngày cho dashboard nhanh, gồm net worth và attribution. Snapshot là cache có version nguồn; có thể rebuild từ ledger, valuation và tỷ giá.
 

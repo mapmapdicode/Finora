@@ -22,7 +22,7 @@ flowchart LR
 ## Thành phần
 
 - **Angular:** giao diện SPA; chỉ giữ token ngắn hạn, không giữ thông tin ngân hàng nhạy cảm trong local storage.
-- **Go API:** xác thực, phân quyền workspace, nghiệp vụ sổ cái và API đọc dashboard.
+- **Go API:** xác thực, phân quyền user, nghiệp vụ sổ cái và API đọc dashboard.
 - **PostgreSQL:** dữ liệu giao dịch, audit log, cấu hình và hàng đợi công việc bền vững.
 - **Worker/scheduler:** sinh giao dịch định kỳ, tính lại aggregate, tạo export và gửi nhắc lịch.
 - **Object storage:** hóa đơn đính kèm và file export; dùng URL ký, mã hóa và lifecycle rõ ràng.

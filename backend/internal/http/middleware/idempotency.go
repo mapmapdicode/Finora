@@ -105,10 +105,9 @@ func IdempotencyGuard(stores ...storage.Store) gin.HandlerFunc {
 		}
 
 		userID := currentContextString(c, "user_id")
-		workspaceID := currentContextString(c, "workspace_id")
 		sum := sha256.Sum256(rawBody)
 		bodyHash := hex.EncodeToString(sum[:])
-		marker := c.Request.Method + ":" + c.Request.URL.Path + ":" + userID + ":" + workspaceID + ":" + key + ":" + bodyHash
+		marker := c.Request.Method + ":" + c.Request.URL.Path + ":" + userID + ":" + key + ":" + bodyHash
 
 		if cached, ok := idempotencyResponseStore.Load(marker); ok {
 			if value, ok := cached.(idempotencyResponse); ok {

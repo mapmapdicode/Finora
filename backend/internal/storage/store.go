@@ -17,10 +17,9 @@ import (
 type InMemoryStore struct {
 	mu                sync.RWMutex
 	users             map[domain.ID]*domain.User
-	workspaces        map[domain.ID]*domain.Workspace
-	memberships       map[domain.ID]*domain.WorkspaceMember
 	portfolios        map[domain.ID]*domain.Portfolio
 	accounts          map[domain.ID]*domain.Account
+	botAccountKeys    map[domain.ID]*domain.BotAccountKey
 	transactions      map[domain.ID]*domain.Transaction
 	transfers         map[domain.ID]*domain.Transfer
 	loans             map[domain.ID]*domain.Loan
@@ -43,6 +42,14 @@ type InMemoryStore struct {
 	assistantCmds     map[domain.ID]*domain.AssistantCommand
 	auditLogs         map[domain.ID]*domain.AuditLog
 	userSettings      map[domain.ID]*domain.UserSettings
+	sepayProfiles     map[domain.ID]*domain.SePayUserProfile
+	sepayAccounts     map[domain.ID]*domain.SePayBankAccount
+	sepayAccountXIDs  map[string]domain.ID
+	bankAccountMaps   map[domain.ID]*domain.BankAccountMapping
+	sepayLinkSessions map[string]sepayLinkSession
+	unmappedSePay     map[string]*domain.SePayUnmappedEvent
+	suggestions       map[domain.ID]*domain.TransactionSuggestion
+	feedback          map[domain.ID]*domain.ClassificationFeedback
 	// idempotency keeps track of processed idempotency keys in-memory.
 	idempotencyKeys map[string]time.Time
 }
@@ -51,10 +58,9 @@ func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{
 		users:             map[domain.ID]*domain.User{},
 		userSettings:      map[domain.ID]*domain.UserSettings{},
-		workspaces:        map[domain.ID]*domain.Workspace{},
-		memberships:       map[domain.ID]*domain.WorkspaceMember{},
 		portfolios:        map[domain.ID]*domain.Portfolio{},
 		accounts:          map[domain.ID]*domain.Account{},
+		botAccountKeys:    map[domain.ID]*domain.BotAccountKey{},
 		transactions:      map[domain.ID]*domain.Transaction{},
 		transfers:         map[domain.ID]*domain.Transfer{},
 		loans:             map[domain.ID]*domain.Loan{},
@@ -77,7 +83,21 @@ func NewInMemoryStore() *InMemoryStore {
 		assistantCmds:     map[domain.ID]*domain.AssistantCommand{},
 		auditLogs:         map[domain.ID]*domain.AuditLog{},
 		idempotencyKeys:   map[string]time.Time{},
+		sepayProfiles:     map[domain.ID]*domain.SePayUserProfile{},
+		sepayAccounts:     map[domain.ID]*domain.SePayBankAccount{},
+		sepayAccountXIDs:  map[string]domain.ID{},
+		bankAccountMaps:   map[domain.ID]*domain.BankAccountMapping{},
+		sepayLinkSessions: map[string]sepayLinkSession{},
+		unmappedSePay:     map[string]*domain.SePayUnmappedEvent{},
+		suggestions:       map[domain.ID]*domain.TransactionSuggestion{},
+		feedback:          map[domain.ID]*domain.ClassificationFeedback{},
 	}
+}
+
+type sepayLinkSession struct {
+	userID    domain.ID
+	expiresAt time.Time
+	completed bool
 }
 
 func newID() domain.ID {
@@ -132,8 +152,8 @@ func (s *InMemoryStore) SeedDemoUser(email, name string, password string) domain
 }
 
 func (s *InMemoryStore) CreateAuditLog(input domain.AuditLog) (domain.AuditLog, error) {
-	if strings.TrimSpace(string(input.WorkspaceID)) == "" {
-		return domain.AuditLog{}, errors.New("workspaceId is required")
+	if strings.TrimSpace(string(input.UserID)) == "" {
+		return domain.AuditLog{}, errors.New("userId is required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -149,12 +169,12 @@ func (s *InMemoryStore) CreateAuditLog(input domain.AuditLog) (domain.AuditLog, 
 	return input, nil
 }
 
-func (s *InMemoryStore) ListAuditLogs(workspaceID domain.ID) []domain.AuditLog {
+func (s *InMemoryStore) ListAuditLogs(userID domain.ID) []domain.AuditLog {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]domain.AuditLog, 0)
 	for _, a := range s.auditLogs {
-		if a.WorkspaceID != workspaceID {
+		if a.UserID != userID {
 			continue
 		}
 		out = append(out, *a)
@@ -203,7 +223,6 @@ func (s *InMemoryStore) UpsertUserSettings(input domain.UserSettings) (*domain.U
 	return &cp, nil
 }
 
-
 func (s *InMemoryStore) GetUserByEmail(email string) (*domain.User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -230,17 +249,6 @@ func (s *InMemoryStore) GetUserByEmail(email string) (*domain.User, bool) {
 		}
 	}
 	return nil, false
-}
-
-func (s *InMemoryStore) GetWorkspace(id domain.ID) (*domain.Workspace, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	ws, ok := s.workspaces[id]
-	if !ok {
-		return nil, false
-	}
-	cp := *ws
-	return &cp, true
 }
 
 func (s *InMemoryStore) GetPortfolio(id domain.ID) (*domain.Portfolio, bool) {
@@ -339,8 +347,8 @@ func (s *InMemoryStore) GetBankFeed(id domain.ID) (*domain.BankFeedTransaction, 
 }
 
 func (s *InMemoryStore) CreateTransactionStrict(input domain.Transaction) (domain.Transaction, error) {
-	if input.WorkspaceID == "" || input.AccountID == "" || input.Currency == "" {
-		return domain.Transaction{}, errors.New("workspaceId, accountId and currency are required")
+	if input.UserID == "" || input.AccountID == "" || input.Currency == "" {
+		return domain.Transaction{}, errors.New("userId, accountId and currency are required")
 	}
 	if input.Amount == "" {
 		return domain.Transaction{}, errors.New("amount is required")
@@ -359,8 +367,8 @@ func (s *InMemoryStore) CreateTransactionStrict(input domain.Transaction) (domai
 	if !ok {
 		return domain.Transaction{}, errors.New("accountId does not exist")
 	}
-	if acc.WorkspaceID != input.WorkspaceID {
-		return domain.Transaction{}, errors.New("account does not belong to workspace")
+	if acc.UserID != input.UserID {
+		return domain.Transaction{}, errors.New("account does not belong to user")
 	}
 	if !isValidTransactionStatus(input.Status) {
 		return domain.Transaction{}, errors.New("invalid transaction status")
@@ -402,32 +410,18 @@ func (s *InMemoryStore) GetUserByID(id domain.ID) (*domain.User, bool) {
 	return &cp, true
 }
 
-func (s *InMemoryStore) CreateWorkspace(name, baseCurrency string, ownerID domain.ID) (*domain.Workspace, error) {
-	if name == "" {
-		return nil, errors.New("name is required")
-	}
+func (s *InMemoryStore) EnsureUserPortfolio(_ string, baseCurrency string, userID domain.ID) (*domain.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	id := newID()
-	ws := &domain.Workspace{
-		Timestamped: domain.Timestamped{
-			ID:        id,
-			CreatedAt: now(),
-			UpdatedAt: now(),
-		},
-		Name:         name,
-		BaseCurrency: baseCurrency,
+	user, ok := s.users[userID]
+	if !ok {
+		return nil, errors.New("user not found")
 	}
-	s.workspaces[id] = ws
-	s.memberships[newID()] = &domain.WorkspaceMember{
-		Timestamped: domain.Timestamped{
-			ID:        newID(),
-			CreatedAt: now(),
-			UpdatedAt: now(),
-		},
-		WorkspaceID: id,
-		UserID:      ownerID,
-		Role:        domain.RoleOwner,
+	for _, portfolio := range s.portfolios {
+		if portfolio.UserID == userID {
+			copy := *user
+			return &copy, nil
+		}
 	}
 
 	// Auto-seed one default portfolio for onboarding workflow.
@@ -438,47 +432,17 @@ func (s *InMemoryStore) CreateWorkspace(name, baseCurrency string, ownerID domai
 			CreatedAt: now(),
 			UpdatedAt: now(),
 		},
-		WorkspaceID:  id,
+		UserID:       userID,
 		Name:         "Default",
 		BaseCurrency: baseCurrency,
 	}
-	return ws, nil
-}
-
-func (s *InMemoryStore) ListWorkspaces(userID domain.ID) []domain.Workspace {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	workspaceIDs := map[domain.ID]struct{}{}
-	for _, m := range s.memberships {
-		if m.UserID == userID {
-			workspaceIDs[m.WorkspaceID] = struct{}{}
-		}
-	}
-	out := make([]domain.Workspace, 0, len(workspaceIDs))
-	for wid := range workspaceIDs {
-		if ws, ok := s.workspaces[wid]; ok {
-			cp := *ws
-			out = append(out, cp)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
-	return out
-}
-
-func (s *InMemoryStore) GetWorkspaceMemberRole(userID, workspaceID domain.ID) (domain.Role, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, m := range s.memberships {
-		if m.UserID == userID && m.WorkspaceID == workspaceID {
-			return m.Role, true
-		}
-	}
-	return "", false
+	copy := *user
+	return &copy, nil
 }
 
 func (s *InMemoryStore) CreateAccount(input domain.Account) (domain.Account, error) {
-	if input.WorkspaceID == "" || input.Name == "" {
-		return domain.Account{}, errors.New("workspaceId and name are required")
+	if input.UserID == "" || input.Name == "" {
+		return domain.Account{}, errors.New("userId and name are required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -490,9 +454,41 @@ func (s *InMemoryStore) CreateAccount(input domain.Account) (domain.Account, err
 	return input, nil
 }
 
+func (s *InMemoryStore) UpsertBotAccountKey(input domain.BotAccountKey) (domain.BotAccountKey, error) {
+	if input.AccountID == "" || strings.TrimSpace(input.SecretHash) == "" {
+		return domain.BotAccountKey{}, errors.New("accountId and secret hash are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.botAccountKeys {
+		if existing.AccountID == input.AccountID {
+			input.ID, input.CreatedAt = existing.ID, existing.CreatedAt
+		}
+	}
+	if input.ID == "" {
+		input.ID, input.CreatedAt = newID(), now()
+	}
+	input.UpdatedAt = now()
+	copy := input
+	s.botAccountKeys[input.ID] = &copy
+	return input, nil
+}
+
+func (s *InMemoryStore) GetActiveBotAccountKey(accountID domain.ID) (*domain.BotAccountKey, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, key := range s.botAccountKeys {
+		if key.AccountID == accountID && key.RevokedAt.IsZero() {
+			copy := *key
+			return &copy, true
+		}
+	}
+	return nil, false
+}
+
 func (s *InMemoryStore) CreatePortfolio(input domain.Portfolio) (domain.Portfolio, error) {
-	if input.WorkspaceID == "" || input.Name == "" {
-		return domain.Portfolio{}, errors.New("workspaceId and name are required")
+	if input.UserID == "" || input.Name == "" {
+		return domain.Portfolio{}, errors.New("userId and name are required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -503,12 +499,12 @@ func (s *InMemoryStore) CreatePortfolio(input domain.Portfolio) (domain.Portfoli
 	return input, nil
 }
 
-func (s *InMemoryStore) ListPortfolios(workspaceID domain.ID) []domain.Portfolio {
+func (s *InMemoryStore) ListPortfolios(userID domain.ID) []domain.Portfolio {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.Portfolio{}
 	for _, p := range s.portfolios {
-		if p.WorkspaceID == workspaceID {
+		if p.UserID == userID {
 			out = append(out, *p)
 		}
 	}
@@ -516,11 +512,11 @@ func (s *InMemoryStore) ListPortfolios(workspaceID domain.ID) []domain.Portfolio
 	return out
 }
 
-func (s *InMemoryStore) FirstPortfolio(workspaceID domain.ID) (domain.Portfolio, bool) {
+func (s *InMemoryStore) FirstPortfolio(userID domain.ID) (domain.Portfolio, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.portfolios {
-		if p.WorkspaceID == workspaceID {
+		if p.UserID == userID {
 			cp := *p
 			return cp, true
 		}
@@ -528,12 +524,12 @@ func (s *InMemoryStore) FirstPortfolio(workspaceID domain.ID) (domain.Portfolio,
 	return domain.Portfolio{}, false
 }
 
-func (s *InMemoryStore) ListAccounts(workspaceID domain.ID) []domain.Account {
+func (s *InMemoryStore) ListAccounts(userID domain.ID) []domain.Account {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.Account{}
 	for _, a := range s.accounts {
-		if a.WorkspaceID == workspaceID {
+		if a.UserID == userID {
 			out = append(out, *a)
 		}
 	}
@@ -541,55 +537,55 @@ func (s *InMemoryStore) ListAccounts(workspaceID domain.ID) []domain.Account {
 	return out
 }
 
-func (s *InMemoryStore) DeleteAccount(workspaceID domain.ID, id domain.ID) error {
+func (s *InMemoryStore) DeleteAccount(userID domain.ID, id domain.ID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	a, ok := s.accounts[id]
-	if !ok || a.WorkspaceID != workspaceID {
+	if !ok || a.UserID != userID {
 		return errors.New("account not found")
 	}
 	delete(s.accounts, id)
 	return nil
 }
 
-func (s *InMemoryStore) DeletePortfolio(workspaceID domain.ID, id domain.ID) error {
+func (s *InMemoryStore) DeletePortfolio(userID domain.ID, id domain.ID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, ok := s.portfolios[id]
-	if !ok || p.WorkspaceID != workspaceID {
+	if !ok || p.UserID != userID {
 		return errors.New("portfolio not found")
 	}
 	delete(s.portfolios, id)
 	return nil
 }
 
-func (s *InMemoryStore) DeleteLoan(workspaceID domain.ID, id domain.ID) error {
+func (s *InMemoryStore) DeleteLoan(userID domain.ID, id domain.ID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	l, ok := s.loans[id]
-	if !ok || l.WorkspaceID != workspaceID {
+	if !ok || l.UserID != userID {
 		return errors.New("loan not found")
 	}
 	delete(s.loans, id)
 	return nil
 }
 
-func (s *InMemoryStore) DeleteProperty(workspaceID domain.ID, id domain.ID) error {
+func (s *InMemoryStore) DeleteProperty(userID domain.ID, id domain.ID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	pr, ok := s.properties[id]
-	if !ok || pr.WorkspaceID != workspaceID {
+	if !ok || pr.UserID != userID {
 		return errors.New("property not found")
 	}
 	delete(s.properties, id)
 	return nil
 }
 
-func (s *InMemoryStore) DeleteAsset(workspaceID domain.ID, id domain.ID) error {
+func (s *InMemoryStore) DeleteAsset(userID domain.ID, id domain.ID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ast, ok := s.assets[id]
-	if !ok || ast.WorkspaceID != workspaceID {
+	if !ok || ast.UserID != userID {
 		return errors.New("asset not found")
 	}
 	delete(s.assets, id)
@@ -597,8 +593,8 @@ func (s *InMemoryStore) DeleteAsset(workspaceID domain.ID, id domain.ID) error {
 }
 
 func (s *InMemoryStore) CreateTransaction(input domain.Transaction) (domain.Transaction, error) {
-	if input.WorkspaceID == "" || input.AccountID == "" || input.Amount == "" {
-		return domain.Transaction{}, errors.New("workspaceId, accountId and amount are required")
+	if input.UserID == "" || input.AccountID == "" || input.Amount == "" {
+		return domain.Transaction{}, errors.New("userId, accountId and amount are required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -624,12 +620,12 @@ func (s *InMemoryStore) GetTransaction(id domain.ID) (*domain.Transaction, bool)
 	return &cp, true
 }
 
-func (s *InMemoryStore) ListTransactions(workspaceID domain.ID, accountID domain.ID) []domain.Transaction {
+func (s *InMemoryStore) ListTransactions(userID domain.ID, accountID domain.ID) []domain.Transaction {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.Transaction{}
 	for _, t := range s.transactions {
-		if t.WorkspaceID != workspaceID {
+		if t.UserID != userID {
 			continue
 		}
 		if accountID != "" && t.AccountID != accountID {
@@ -642,7 +638,7 @@ func (s *InMemoryStore) ListTransactions(workspaceID domain.ID, accountID domain
 }
 
 func (s *InMemoryStore) CreateTransfer(input domain.Transfer) (domain.Transfer, error) {
-	if input.WorkspaceID == "" || input.FromAccountID == "" || input.ToAccountID == "" || input.Amount == "" {
+	if input.UserID == "" || input.FromAccountID == "" || input.ToAccountID == "" || input.Amount == "" {
 		return domain.Transfer{}, errors.New("missing required transfer fields")
 	}
 	s.mu.Lock()
@@ -656,7 +652,7 @@ func (s *InMemoryStore) CreateTransfer(input domain.Transfer) (domain.Transfer, 
 }
 
 func (s *InMemoryStore) CreateLoan(input domain.Loan) (domain.Loan, error) {
-	if input.WorkspaceID == "" || input.PrincipalInitial == "" || input.AnnualRate == "" {
+	if input.UserID == "" || input.PrincipalInitial == "" || input.AnnualRate == "" {
 		return domain.Loan{}, errors.New("missing required loan fields")
 	}
 	if input.Status == "" {
@@ -672,12 +668,12 @@ func (s *InMemoryStore) CreateLoan(input domain.Loan) (domain.Loan, error) {
 	return input, nil
 }
 
-func (s *InMemoryStore) ListLoans(workspaceID domain.ID) []domain.Loan {
+func (s *InMemoryStore) ListLoans(userID domain.ID) []domain.Loan {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.Loan{}
 	for _, l := range s.loans {
-		if l.WorkspaceID == workspaceID {
+		if l.UserID == userID {
 			out = append(out, *l)
 		}
 	}
@@ -685,12 +681,12 @@ func (s *InMemoryStore) ListLoans(workspaceID domain.ID) []domain.Loan {
 	return out
 }
 
-func (s *InMemoryStore) ListLoanPayments(workspaceID domain.ID, loanID domain.ID) []domain.LoanPayment {
+func (s *InMemoryStore) ListLoanPayments(userID domain.ID, loanID domain.ID) []domain.LoanPayment {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.LoanPayment{}
 	for _, p := range s.loanPayments {
-		if p.WorkspaceID != workspaceID {
+		if p.UserID != userID {
 			continue
 		}
 		if loanID != "" && p.LoanID != loanID {
@@ -703,7 +699,7 @@ func (s *InMemoryStore) ListLoanPayments(workspaceID domain.ID, loanID domain.ID
 }
 
 func (s *InMemoryStore) CreateLoanPayment(input domain.LoanPayment) (domain.LoanPayment, error) {
-	if input.WorkspaceID == "" || input.LoanID == "" {
+	if input.UserID == "" || input.LoanID == "" {
 		return domain.LoanPayment{}, errors.New("missing required loan payment fields")
 	}
 	s.mu.Lock()
@@ -717,7 +713,7 @@ func (s *InMemoryStore) CreateLoanPayment(input domain.LoanPayment) (domain.Loan
 }
 
 func (s *InMemoryStore) CreateProperty(input domain.Property) (domain.Property, error) {
-	if input.WorkspaceID == "" || input.Name == "" {
+	if input.UserID == "" || input.Name == "" {
 		return domain.Property{}, errors.New("missing required property fields")
 	}
 	s.mu.Lock()
@@ -730,12 +726,12 @@ func (s *InMemoryStore) CreateProperty(input domain.Property) (domain.Property, 
 	return input, nil
 }
 
-func (s *InMemoryStore) ListProperties(workspaceID domain.ID) []domain.Property {
+func (s *InMemoryStore) ListProperties(userID domain.ID) []domain.Property {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.Property{}
 	for _, p := range s.properties {
-		if p.WorkspaceID == workspaceID {
+		if p.UserID == userID {
 			out = append(out, *p)
 		}
 	}
@@ -768,13 +764,13 @@ func (s *InMemoryStore) AddPropertyValuation(v domain.PropertyValuation) (domain
 	return v, nil
 }
 
-func (s *InMemoryStore) ListPropertyValues(workspaceID domain.ID) []domain.PropertyValuation {
+func (s *InMemoryStore) ListPropertyValues(userID domain.ID) []domain.PropertyValuation {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.PropertyValuation{}
 	for _, value := range s.propertyValues {
 		p, ok := s.properties[value.PropertyID]
-		if !ok || p.WorkspaceID != workspaceID {
+		if !ok || p.UserID != userID {
 			continue
 		}
 		out = append(out, *value)
@@ -783,7 +779,7 @@ func (s *InMemoryStore) ListPropertyValues(workspaceID domain.ID) []domain.Prope
 }
 
 func (s *InMemoryStore) CreateAsset(input domain.Asset) (domain.Asset, error) {
-	if input.WorkspaceID == "" || input.Name == "" {
+	if input.UserID == "" || input.Name == "" {
 		return domain.Asset{}, errors.New("missing required asset fields")
 	}
 	s.mu.Lock()
@@ -796,12 +792,12 @@ func (s *InMemoryStore) CreateAsset(input domain.Asset) (domain.Asset, error) {
 	return input, nil
 }
 
-func (s *InMemoryStore) ListAssets(workspaceID domain.ID) []domain.Asset {
+func (s *InMemoryStore) ListAssets(userID domain.ID) []domain.Asset {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.Asset{}
 	for _, a := range s.assets {
-		if a.WorkspaceID == workspaceID {
+		if a.UserID == userID {
 			out = append(out, *a)
 		}
 	}
@@ -823,13 +819,13 @@ func (s *InMemoryStore) AddAssetValuation(v domain.AssetValuation) (domain.Asset
 	return v, nil
 }
 
-func (s *InMemoryStore) ListAssetValues(workspaceID domain.ID) []domain.AssetValuation {
+func (s *InMemoryStore) ListAssetValues(userID domain.ID) []domain.AssetValuation {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.AssetValuation{}
 	for _, value := range s.assetValues {
 		a, ok := s.assets[value.AssetID]
-		if !ok || a.WorkspaceID != workspaceID {
+		if !ok || a.UserID != userID {
 			continue
 		}
 		out = append(out, *value)
@@ -849,7 +845,7 @@ func (s *InMemoryStore) GetAsset(id domain.ID) (*domain.Asset, bool) {
 }
 
 func (s *InMemoryStore) CreateBudget(input domain.Budget) (domain.Budget, error) {
-	if input.WorkspaceID == "" || input.Period == "" {
+	if input.UserID == "" || input.Period == "" {
 		return domain.Budget{}, errors.New("missing required budget fields")
 	}
 	s.mu.Lock()
@@ -863,13 +859,13 @@ func (s *InMemoryStore) CreateBudget(input domain.Budget) (domain.Budget, error)
 }
 
 func (s *InMemoryStore) UpsertBudget(input domain.Budget) (domain.Budget, error) {
-	if input.WorkspaceID == "" || input.Period == "" {
+	if input.UserID == "" || input.Period == "" {
 		return domain.Budget{}, errors.New("missing required budget fields")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, b := range s.budgets {
-		if b.WorkspaceID != input.WorkspaceID {
+		if b.UserID != input.UserID {
 			continue
 		}
 		if b.Period != input.Period {
@@ -899,12 +895,12 @@ func firstNonEmptyBudgetLimit(values ...string) string {
 	return "0"
 }
 
-func (s *InMemoryStore) ListBudgets(workspaceID domain.ID, period string) []domain.Budget {
+func (s *InMemoryStore) ListBudgets(userID domain.ID, period string) []domain.Budget {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.Budget{}
 	for _, b := range s.budgets {
-		if b.WorkspaceID == workspaceID && b.Period == period {
+		if b.UserID == userID && b.Period == period {
 			out = append(out, *b)
 		}
 	}
@@ -946,7 +942,7 @@ func (s *InMemoryStore) UpsertBudgetAllocs(input domain.BudgetAllocation) (domai
 }
 
 func (s *InMemoryStore) CreateForecastScenario(input domain.ForecastScenario) (domain.ForecastScenario, error) {
-	if input.WorkspaceID == "" || input.Name == "" {
+	if input.UserID == "" || input.Name == "" {
 		return domain.ForecastScenario{}, errors.New("missing required fields")
 	}
 	s.mu.Lock()
@@ -960,12 +956,12 @@ func (s *InMemoryStore) CreateForecastScenario(input domain.ForecastScenario) (d
 	return input, nil
 }
 
-func (s *InMemoryStore) ListForecastScenarios(workspaceID domain.ID) []domain.ForecastScenario {
+func (s *InMemoryStore) ListForecastScenarios(userID domain.ID) []domain.ForecastScenario {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.ForecastScenario{}
 	for _, f := range s.forecast {
-		if f.WorkspaceID == workspaceID {
+		if f.UserID == userID {
 			out = append(out, *f)
 		}
 	}
@@ -1020,8 +1016,8 @@ func (s *InMemoryStore) FinalizeForecastScenario(id domain.ID, status string, re
 }
 
 func (s *InMemoryStore) CreateBankConnection(input domain.BankConnection) (domain.BankConnection, error) {
-	if input.WorkspaceID == "" {
-		return domain.BankConnection{}, errors.New("workspaceId is required")
+	if input.UserID == "" {
+		return domain.BankConnection{}, errors.New("userId is required")
 	}
 	callbackState := strings.TrimSpace(input.CallbackState)
 	if callbackState == "" {
@@ -1043,21 +1039,271 @@ func (s *InMemoryStore) CreateBankConnection(input domain.BankConnection) (domai
 	return input, nil
 }
 
-func (s *InMemoryStore) ListBankConnections(workspaceID domain.ID) []domain.BankConnection {
+func (s *InMemoryStore) ListBankConnections(userID domain.ID) []domain.BankConnection {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.BankConnection{}
 	for _, c := range s.bankConnections {
-		if c.WorkspaceID == workspaceID {
+		if c.UserID == userID {
 			out = append(out, *c)
 		}
 	}
 	return out
 }
 
+func (s *InMemoryStore) UpsertSePayUserProfile(input domain.SePayUserProfile) (domain.SePayUserProfile, error) {
+	if input.UserID == "" || input.CompanyXID == "" {
+		return domain.SePayUserProfile{}, errors.New("userId and companyXid are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, ok := s.sepayProfiles[input.UserID]
+	if ok {
+		input.CreatedAt = current.CreatedAt
+	} else {
+		input.CreatedAt = now()
+	}
+	input.UpdatedAt = now()
+	copy := input
+	s.sepayProfiles[input.UserID] = &copy
+	return copy, nil
+}
+
+func (s *InMemoryStore) GetSePayUserProfile(userID domain.ID) (*domain.SePayUserProfile, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.sepayProfiles[userID]
+	if !ok {
+		return nil, false
+	}
+	copy := *item
+	return &copy, true
+}
+
+func (s *InMemoryStore) UpsertSePayBankAccount(input domain.SePayBankAccount) (domain.SePayBankAccount, error) {
+	if input.UserID == "" || input.BankAccountXID == "" {
+		return domain.SePayBankAccount{}, errors.New("userId and bankAccountXid are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existingID, ok := s.sepayAccountXIDs[input.BankAccountXID]; ok {
+		existing := s.sepayAccounts[existingID]
+		if existing.UserID != input.UserID {
+			return domain.SePayBankAccount{}, errors.New("bank account belongs to another user")
+		}
+		input.ID, input.CreatedAt = existing.ID, existing.CreatedAt
+	} else {
+		input.ID, input.CreatedAt = newID(), now()
+	}
+	input.UpdatedAt = now()
+	if input.Status == "" {
+		input.Status = "linked"
+	}
+	copy := input
+	s.sepayAccounts[input.ID] = &copy
+	s.sepayAccountXIDs[input.BankAccountXID] = input.ID
+	return copy, nil
+}
+
+func (s *InMemoryStore) ListSePayBankAccounts(userID domain.ID) []domain.SePayBankAccount {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.SePayBankAccount{}
+	for _, item := range s.sepayAccounts {
+		if item.UserID == userID {
+			out = append(out, *item)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out
+}
+
+func (s *InMemoryStore) GetSePayBankAccount(id domain.ID) (*domain.SePayBankAccount, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.sepayAccounts[id]
+	if !ok {
+		return nil, false
+	}
+	copy := *item
+	return &copy, true
+}
+
+func (s *InMemoryStore) GetSePayBankAccountByXID(xid string) (*domain.SePayBankAccount, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	id, ok := s.sepayAccountXIDs[xid]
+	if !ok {
+		return nil, false
+	}
+	item := s.sepayAccounts[id]
+	copy := *item
+	return &copy, true
+}
+
+func (s *InMemoryStore) SetSePayBankAccountStatus(id domain.ID, status string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.sepayAccounts[id]
+	if !ok {
+		return false
+	}
+	item.Status = status
+	item.UpdatedAt = now()
+	return true
+}
+
+func (s *InMemoryStore) UpsertBankAccountMapping(input domain.BankAccountMapping) (domain.BankAccountMapping, error) {
+	if input.SePayBankAccountID == "" || input.UserID == "" || input.AccountID == "" {
+		return domain.BankAccountMapping{}, errors.New("bank account mapping fields are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if old, ok := s.bankAccountMaps[input.SePayBankAccountID]; ok {
+		input.ID, input.CreatedAt = old.ID, old.CreatedAt
+	} else {
+		input.ID, input.CreatedAt = newID(), now()
+	}
+	if input.Status == "" {
+		input.Status = "active"
+	}
+	input.UpdatedAt = now()
+	copy := input
+	s.bankAccountMaps[input.SePayBankAccountID] = &copy
+	return copy, nil
+}
+
+func (s *InMemoryStore) GetBankAccountMapping(accountID domain.ID) (*domain.BankAccountMapping, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.bankAccountMaps[accountID]
+	if !ok {
+		return nil, false
+	}
+	copy := *item
+	return &copy, true
+}
+
+func (s *InMemoryStore) DeactivateBankAccountMapping(accountID domain.ID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.bankAccountMaps[accountID]
+	if !ok {
+		return false
+	}
+	item.Status = "inactive"
+	item.UpdatedAt = now()
+	return true
+}
+
+func (s *InMemoryStore) CreateSePayLinkSession(xid string, userID domain.ID, expiresAt time.Time) error {
+	if xid == "" || userID == "" {
+		return errors.New("xid and userId are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sepayLinkSessions[xid] = sepayLinkSession{userID: userID, expiresAt: expiresAt}
+	return nil
+}
+
+func (s *InMemoryStore) GetSePayLinkSessionUser(xid string) (domain.ID, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	session, ok := s.sepayLinkSessions[xid]
+	if !ok || (!session.expiresAt.IsZero() && session.expiresAt.Before(now())) {
+		return "", false
+	}
+	return session.userID, true
+}
+
+func (s *InMemoryStore) CompleteSePayLinkSession(xid string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sepayLinkSessions[xid]
+	if !ok {
+		return false
+	}
+	session.completed = true
+	s.sepayLinkSessions[xid] = session
+	return true
+}
+
+func (s *InMemoryStore) QuarantineSePayEvent(input domain.SePayUnmappedEvent) (domain.SePayUnmappedEvent, error) {
+	if input.Provider == "" || input.BankAccountXID == "" || input.TransactionID == "" {
+		return domain.SePayUnmappedEvent{}, errors.New("provider, bankAccountXid and transactionId are required")
+	}
+	key := input.Provider + "::" + input.BankAccountXID + "::" + input.TransactionID
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if current, ok := s.unmappedSePay[key]; ok {
+		copy := *current
+		return copy, nil
+	}
+	input.ID, input.CreatedAt, input.UpdatedAt = newID(), now(), now()
+	if input.Status == "" {
+		input.Status = "quarantined"
+	}
+	copy := input
+	s.unmappedSePay[key] = &copy
+	return copy, nil
+}
+
+func (s *InMemoryStore) CreateTransactionSuggestion(input domain.TransactionSuggestion) (domain.TransactionSuggestion, error) {
+	if input.BankFeedTransactionID == "" || input.Source == "" {
+		return domain.TransactionSuggestion{}, errors.New("suggestion feed and source are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	input.ID, input.CreatedAt, input.UpdatedAt = newID(), now(), now()
+	if input.Version == "" {
+		input.Version = "v1"
+	}
+	copy := input
+	s.suggestions[input.ID] = &copy
+	return copy, nil
+}
+
+func (s *InMemoryStore) ListTransactionSuggestions(feedID domain.ID) []domain.TransactionSuggestion {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.TransactionSuggestion{}
+	for _, item := range s.suggestions {
+		if item.BankFeedTransactionID == feedID {
+			out = append(out, *item)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out
+}
+
+func (s *InMemoryStore) CreateClassificationFeedback(input domain.ClassificationFeedback) (domain.ClassificationFeedback, error) {
+	if input.BankFeedTransactionID == "" || input.UserID == "" || input.Action == "" {
+		return domain.ClassificationFeedback{}, errors.New("feedback feed, user and action are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	input.ID, input.CreatedAt, input.UpdatedAt = newID(), now(), now()
+	copy := input
+	s.feedback[input.ID] = &copy
+	return copy, nil
+}
+
+func (s *InMemoryStore) ListClassificationFeedback(userID domain.ID) []domain.ClassificationFeedback {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []domain.ClassificationFeedback{}
+	for _, item := range s.feedback {
+		if item.UserID == userID {
+			out = append(out, *item)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
 func (s *InMemoryStore) EnqueueBankFeedEvent(input domain.BankFeedEvent) (domain.BankFeedEvent, error) {
-	if input.WorkspaceID == "" || input.ConnectionID == "" {
-		return domain.BankFeedEvent{}, errors.New("workspaceId and connectionId are required")
+	if input.UserID == "" || input.ConnectionID == "" {
+		return domain.BankFeedEvent{}, errors.New("userId and connectionId are required")
 	}
 	if input.Provider == "" {
 		return domain.BankFeedEvent{}, errors.New("provider is required")
@@ -1085,12 +1331,12 @@ func (s *InMemoryStore) EnqueueBankFeedEvent(input domain.BankFeedEvent) (domain
 	return input, nil
 }
 
-func (s *InMemoryStore) ListBankFeedEvents(workspaceID domain.ID, state string) []domain.BankFeedEvent {
+func (s *InMemoryStore) ListBankFeedEvents(userID domain.ID, state string) []domain.BankFeedEvent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.BankFeedEvent{}
 	for _, e := range s.bankFeedEvents {
-		if workspaceID != "" && e.WorkspaceID != workspaceID {
+		if userID != "" && e.UserID != userID {
 			continue
 		}
 		if state != "" && e.State != state {
@@ -1115,6 +1361,21 @@ func (s *InMemoryStore) GetBankFeedEvent(id domain.ID) (*domain.BankFeedEvent, b
 	return &cp, true
 }
 
+func (s *InMemoryStore) ClaimBankFeedEvent(id domain.ID) (*domain.BankFeedEvent, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	event, ok := s.bankFeedEvents[id]
+	if !ok || event.State != domain.BankFeedEventStateQueued {
+		return nil, false
+	}
+	event.State = domain.BankFeedEventStateRunning
+	event.Attempts++
+	event.LastError = ""
+	event.UpdatedAt = now()
+	copy := *event
+	return &copy, true
+}
+
 func (s *InMemoryStore) UpdateBankFeedEvent(id domain.ID, mutate func(*domain.BankFeedEvent)) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1128,8 +1389,8 @@ func (s *InMemoryStore) UpdateBankFeedEvent(id domain.ID, mutate func(*domain.Ba
 }
 
 func (s *InMemoryStore) IngestBankFeed(input domain.BankFeedTransaction) (domain.BankFeedTransaction, error) {
-	if input.WorkspaceID == "" || input.ConnectionID == "" {
-		return domain.BankFeedTransaction{}, errors.New("workspaceId and connectionId are required")
+	if input.UserID == "" || input.ConnectionID == "" {
+		return domain.BankFeedTransaction{}, errors.New("userId and connectionId are required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1155,12 +1416,12 @@ func (s *InMemoryStore) IngestBankFeed(input domain.BankFeedTransaction) (domain
 	return input, nil
 }
 
-func (s *InMemoryStore) ListBankFeed(workspaceID domain.ID) []domain.BankFeedTransaction {
+func (s *InMemoryStore) ListBankFeed(userID domain.ID) []domain.BankFeedTransaction {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.BankFeedTransaction{}
 	for _, t := range s.bankFeed {
-		if t.WorkspaceID == workspaceID {
+		if t.UserID == userID {
 			out = append(out, *t)
 		}
 	}
@@ -1168,7 +1429,7 @@ func (s *InMemoryStore) ListBankFeed(workspaceID domain.ID) []domain.BankFeedTra
 	return out
 }
 
-func (s *InMemoryStore) ListBankFeedByState(workspaceID domain.ID, state domain.TransactionPostingState) []domain.BankFeedTransaction {
+func (s *InMemoryStore) ListBankFeedByState(userID domain.ID, state domain.TransactionPostingState) []domain.BankFeedTransaction {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.BankFeedTransaction{}
@@ -1176,7 +1437,7 @@ func (s *InMemoryStore) ListBankFeedByState(workspaceID domain.ID, state domain.
 		if t.PostingState != state {
 			continue
 		}
-		if workspaceID != "" && t.WorkspaceID != workspaceID {
+		if userID != "" && t.UserID != userID {
 			continue
 		}
 		out = append(out, *t)
@@ -1193,6 +1454,9 @@ func (s *InMemoryStore) UpdateFeedState(id domain.ID, state domain.TransactionPo
 		return errors.New("bank feed transaction not found")
 	}
 	t.PostingState = state
+	if state == domain.PostingStateIgnored {
+		t.ClassificationStatus = "ignored"
+	}
 	t.Evidence = reason
 	t.UpdatedAt = now()
 	return nil
@@ -1214,12 +1478,13 @@ func (s *InMemoryStore) LinkBankFeedPosting(feedID domain.ID, txnID domain.ID) b
 	return s.UpdateFeed(feedID, func(f *domain.BankFeedTransaction) {
 		f.PostedTxnID = txnID
 		f.PostingState = domain.PostingStatePosted
+		f.ClassificationStatus = "confirmed"
 	})
 }
 
 func (s *InMemoryStore) CreateAutomationRule(input domain.AutomationRule) (domain.AutomationRule, error) {
-	if input.WorkspaceID == "" {
-		return domain.AutomationRule{}, errors.New("workspaceId is required")
+	if input.UserID == "" {
+		return domain.AutomationRule{}, errors.New("userId is required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1230,12 +1495,12 @@ func (s *InMemoryStore) CreateAutomationRule(input domain.AutomationRule) (domai
 	return input, nil
 }
 
-func (s *InMemoryStore) ListWorkspaceAutomationRules(workspaceID domain.ID) []domain.AutomationRule {
+func (s *InMemoryStore) ListUserAutomationRules(userID domain.ID) []domain.AutomationRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.AutomationRule{}
 	for _, r := range s.automationRules {
-		if r.WorkspaceID == workspaceID {
+		if r.UserID == userID {
 			out = append(out, *r)
 		}
 	}
@@ -1248,16 +1513,16 @@ func (s *InMemoryStore) ListWorkspaceAutomationRules(workspaceID domain.ID) []do
 	return out
 }
 
-func (s *InMemoryStore) ListWorkspaceRules(workspaceID domain.ID) []domain.AutomationRule {
-	return s.ListWorkspaceAutomationRules(workspaceID)
+func (s *InMemoryStore) ListUserRules(userID domain.ID) []domain.AutomationRule {
+	return s.ListUserAutomationRules(userID)
 }
 
-func (s *InMemoryStore) GetWorkspaceRules(workspaceID domain.ID, accountID domain.ID, direction string) []domain.AutomationRule {
+func (s *InMemoryStore) GetUserRules(userID domain.ID, accountID domain.ID, direction string) []domain.AutomationRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.AutomationRule{}
 	for _, r := range s.automationRules {
-		if r.WorkspaceID != workspaceID || !r.Enabled {
+		if r.UserID != userID || !r.Enabled {
 			continue
 		}
 		if direction != "" && r.Direction != "" && r.Direction != direction {
@@ -1319,8 +1584,8 @@ func (s *InMemoryStore) DeleteAutomationRule(id domain.ID) bool {
 }
 
 func (s *InMemoryStore) CreateBankPaymentRequest(input domain.BankPaymentRequest) (domain.BankPaymentRequest, error) {
-	if input.WorkspaceID == "" || input.LoanID == "" || input.Code == "" {
-		return domain.BankPaymentRequest{}, errors.New("workspaceId, loanId and paymentCode are required")
+	if input.UserID == "" || input.LoanID == "" || input.Code == "" {
+		return domain.BankPaymentRequest{}, errors.New("userId, loanId and paymentCode are required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1334,11 +1599,11 @@ func (s *InMemoryStore) CreateBankPaymentRequest(input domain.BankPaymentRequest
 	return input, nil
 }
 
-func (s *InMemoryStore) GetBankPaymentRequestByCode(workspaceID domain.ID, code string) (*domain.BankPaymentRequest, bool) {
+func (s *InMemoryStore) GetBankPaymentRequestByCode(userID domain.ID, code string) (*domain.BankPaymentRequest, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, req := range s.bankPaymentReqs {
-		if req.WorkspaceID != workspaceID || req.Code == "" {
+		if req.UserID != userID || req.Code == "" {
 			continue
 		}
 		if req.Code == code {
@@ -1349,12 +1614,12 @@ func (s *InMemoryStore) GetBankPaymentRequestByCode(workspaceID domain.ID, code 
 	return nil, false
 }
 
-func (s *InMemoryStore) ListBankPaymentRequests(workspaceID domain.ID) []domain.BankPaymentRequest {
+func (s *InMemoryStore) ListBankPaymentRequests(userID domain.ID) []domain.BankPaymentRequest {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.BankPaymentRequest{}
 	for _, req := range s.bankPaymentReqs {
-		if req.WorkspaceID == workspaceID {
+		if req.UserID == userID {
 			out = append(out, *req)
 		}
 	}
@@ -1375,12 +1640,12 @@ func (s *InMemoryStore) RevokeBankConnection(id domain.ID) (*domain.BankConnecti
 	return &cp, true
 }
 
-func (s *InMemoryStore) ListAutomationRules(workspaceID domain.ID) []domain.AutomationRule {
+func (s *InMemoryStore) ListAutomationRules(userID domain.ID) []domain.AutomationRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.AutomationRule{}
 	for _, r := range s.automationRules {
-		if r.WorkspaceID == workspaceID {
+		if r.UserID == userID {
 			out = append(out, *r)
 		}
 	}
@@ -1388,7 +1653,7 @@ func (s *InMemoryStore) ListAutomationRules(workspaceID domain.ID) []domain.Auto
 }
 
 func (s *InMemoryStore) CreateAssistantCommand(input domain.AssistantCommand) (domain.AssistantCommand, error) {
-	if input.WorkspaceID == "" || input.UserID == "" || input.Command == "" {
+	if input.UserID == "" || input.Command == "" {
 		return domain.AssistantCommand{}, errors.New("missing assistant command fields")
 	}
 	s.mu.Lock()
@@ -1418,12 +1683,12 @@ func (s *InMemoryStore) GetAssistantCommand(id domain.ID) (*domain.AssistantComm
 	return &cp, true
 }
 
-func (s *InMemoryStore) ListAssistantCommands(workspaceID domain.ID) []domain.AssistantCommand {
+func (s *InMemoryStore) ListAssistantCommands(userID domain.ID) []domain.AssistantCommand {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.AssistantCommand{}
 	for _, c := range s.assistantCmds {
-		if c.WorkspaceID == workspaceID {
+		if c.UserID == userID {
 			out = append(out, *c)
 		}
 	}
@@ -1466,12 +1731,12 @@ func (s *InMemoryStore) CreateBankReconciliation(input domain.BankReconciliation
 	return cp, nil
 }
 
-func (s *InMemoryStore) ListBankReconciliations(workspaceID domain.ID, connectionID domain.ID) []domain.BankReconciliation {
+func (s *InMemoryStore) ListBankReconciliations(userID domain.ID, connectionID domain.ID) []domain.BankReconciliation {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []domain.BankReconciliation{}
 	for _, r := range s.bankRecon {
-		if workspaceID != "" && r.WorkspaceID != workspaceID {
+		if userID != "" && r.UserID != userID {
 			continue
 		}
 		if connectionID != "" && r.ConnectionID != connectionID {
@@ -1491,4 +1756,3 @@ func (s *InMemoryStore) ListAllBankConnections() []domain.BankConnection {
 	}
 	return out
 }
-

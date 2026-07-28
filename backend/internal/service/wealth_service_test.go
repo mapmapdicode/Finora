@@ -13,8 +13,8 @@ import (
 func clearSnapshotState() {
 	snapshotMu.Lock()
 	defer snapshotMu.Unlock()
-	for k := range historyByWorkspace {
-		delete(historyByWorkspace, k)
+	for k := range historyByUser {
+		delete(historyByUser, k)
 	}
 	for k := range snapshotVersion {
 		delete(snapshotVersion, k)
@@ -30,9 +30,9 @@ func mustParseMoney(t *testing.T, value string) float64 {
 	return v
 }
 
-func setupDemoWorkspace(store *storage.InMemoryStore) (*domain.Workspace, domain.ID, error) {
+func setupDemoUser(store *storage.InMemoryStore) (*domain.User, domain.ID, error) {
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo Workspace", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo User", "VND", uid)
 	if err != nil {
 		return nil, "", err
 	}
@@ -41,7 +41,7 @@ func setupDemoWorkspace(store *storage.InMemoryStore) (*domain.Workspace, domain
 		return nil, "", err
 	}
 	_, err = store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p.ID,
 		Name:        "Main",
 		Type:        "cash",
@@ -53,17 +53,17 @@ func setupDemoWorkspace(store *storage.InMemoryStore) (*domain.Workspace, domain
 	return ws, p.ID, nil
 }
 
-func TestProcessQueuedBankFeed_OutboundAutoExpense(t *testing.T) {
+func TestProcessSePayIncoming_OutboundRequiresReview(t *testing.T) {
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID: ws.ID,
-		Provider:    "sepay",
-		ExternalID:  "conn-1",
+		UserID:     ws.ID,
+		Provider:   "sepay",
+		ExternalID: "conn-1",
 	})
 	if err != nil {
 		t.Fatalf("create connection: %v", err)
@@ -84,39 +84,24 @@ func TestProcessQueuedBankFeed_OutboundAutoExpense(t *testing.T) {
 	if err != nil {
 		t.Fatalf("incoming webhook: %v", err)
 	}
-	if feed.PostingState != domain.PostingStateAutoReady {
-		t.Fatalf("expected auto ready, got %s", feed.PostingState)
+	if feed.PostingState != domain.PostingStateReview {
+		t.Fatalf("expected review, got %s", feed.PostingState)
 	}
-
-	out, err := svc.ProcessQueuedBankFeed(feed.ID)
-	if err != nil {
-		t.Fatalf("process queued: %v", err)
-	}
-	if out.PostingState != domain.PostingStatePosted {
-		t.Fatalf("expected posted, got %s", out.PostingState)
-	}
-	if out.PostedTxnID == "" {
-		t.Fatal("expected posted transaction id")
-	}
-	txn, ok := store.GetTransaction(out.PostedTxnID)
-	if !ok {
-		t.Fatal("posted transaction missing")
-	}
-	if txn.Type != domain.TransactionTypeExpense {
-		t.Fatalf("expected expense, got %s", txn.Type)
+	if feed.PostedTxnID != "" {
+		t.Fatal("webhook must not create a ledger transaction")
 	}
 }
 
 func TestEnqueueAndProcessSePayEvent(t *testing.T) {
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID: ws.ID,
-		Provider:    "sepay",
-		ExternalID:  "conn-queue",
+		UserID:     ws.ID,
+		Provider:   "sepay",
+		ExternalID: "conn-queue",
 	})
 	if err != nil {
 		t.Fatalf("create connection: %v", err)
@@ -155,25 +140,21 @@ func TestEnqueueAndProcessSePayEvent(t *testing.T) {
 	if len(feeds) != 1 {
 		t.Fatalf("expected 1 feed, got %d", len(feeds))
 	}
-	out, err := svc.ProcessQueuedBankFeed(feeds[0].ID)
-	if err != nil {
-		t.Fatalf("process queued feed: %v", err)
-	}
-	if out.PostingState != domain.PostingStatePosted {
-		t.Fatalf("expected feed posted, got %s", out.PostingState)
+	if feeds[0].PostingState != domain.PostingStateReview {
+		t.Fatalf("expected feed pending review, got %s", feeds[0].PostingState)
 	}
 }
 
 func TestEnqueueSePayEventDeduplicatesByExternalID(t *testing.T) {
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID: ws.ID,
-		Provider:    "sepay",
-		ExternalID:  "conn-queue-dedupe",
+		UserID:     ws.ID,
+		Provider:   "sepay",
+		ExternalID: "conn-queue-dedupe",
 	})
 	if err != nil {
 		t.Fatalf("create connection: %v", err)
@@ -202,17 +183,17 @@ func TestEnqueueSePayEventDeduplicatesByExternalID(t *testing.T) {
 	}
 }
 
-func TestProcessQueuedBankFeed_InboundAutoIncome(t *testing.T) {
+func TestProcessSePayIncoming_InboundRequiresReview(t *testing.T) {
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID: ws.ID,
-		Provider:    "sepay",
-		ExternalID:  "conn-2",
+		UserID:     ws.ID,
+		Provider:   "sepay",
+		ExternalID: "conn-2",
 	})
 	if err != nil {
 		t.Fatalf("create connection: %v", err)
@@ -232,40 +213,103 @@ func TestProcessQueuedBankFeed_InboundAutoIncome(t *testing.T) {
 		t.Fatalf("incoming webhook: %v", err)
 	}
 
-	out, err := svc.ProcessQueuedBankFeed(feed.ID)
+	if feed.PostingState != domain.PostingStateReview {
+		t.Fatalf("expected feed pending review, got %s", feed.PostingState)
+	}
+	if feed.PostedTxnID != "" {
+		t.Fatal("webhook must not create income")
+	}
+}
+
+func TestSuggestionUsesRememberedFeedbackBeforeOtherMatchersAndKeepsFeedImmutable(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("classifier@example.test", "Classifier", "pass")
+	ws, err := store.EnsureUserPortfolio("Classifier", "VND", userID)
 	if err != nil {
-		t.Fatalf("process queued: %v", err)
+		t.Fatalf("user: %v", err)
 	}
-	if out.PostingState != domain.PostingStatePosted {
-		t.Fatalf("expected posted, got %s", out.PostingState)
-	}
-	if out.Confidence < 70 {
-		t.Fatalf("expected auto income confidence, got %.2f", out.Confidence)
-	}
-	if out.PostedTxnID == "" {
-		t.Fatal("expected posted transaction id")
-	}
-	txn, ok := store.GetTransaction(out.PostedTxnID)
+	portfolio, ok := store.FirstPortfolio(ws.ID)
 	if !ok {
-		t.Fatal("posted transaction missing")
+		t.Fatal("portfolio")
 	}
-	if txn.Type != domain.TransactionTypeIncome {
-		t.Fatalf("expected income, got %s", txn.Type)
+	account, err := store.CreateAccount(domain.Account{UserID: ws.ID, PortfolioID: portfolio.ID, Name: "Bank", Type: "bank", Currency: "VND"})
+	if err != nil {
+		t.Fatalf("account: %v", err)
+	}
+	connection, err := store.CreateBankConnection(domain.BankConnection{UserID: ws.ID, Provider: "sepay", ExternalID: "provider-a"})
+	if err != nil {
+		t.Fatalf("connection: %v", err)
+	}
+	prior, err := store.IngestBankFeed(domain.BankFeedTransaction{UserID: userID, ConnectionID: connection.ID, AccountID: account.ID, Amount: "50000", Currency: "VND", Direction: "out", Description: "CA PHE HIGHLANDS", Reference: "ABC", OccurredAt: time.Now().Add(-time.Hour), ExternalID: "prior", PostingState: domain.PostingStatePosted, ClassificationStatus: "confirmed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.CreateClassificationFeedback(domain.ClassificationFeedback{BankFeedTransactionID: prior.ID, UserID: userID, Action: "corrected", Name: "Cà phê", CategoryID: "food", AccountID: account.ID, TransactionType: "expense", RememberChoice: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.IngestBankFeed(domain.BankFeedTransaction{UserID: userID, ConnectionID: connection.ID, AccountID: account.ID, Amount: "72000", Currency: "VND", Direction: "out", Description: "ca phe highlands", Reference: "abc", OccurredAt: time.Now(), ExternalID: "current", PostingState: domain.PostingStateReview, ClassificationStatus: "needs_review", RawProviderData: `{"amount":"72000"}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewWealthService(store, nil)
+	svc.createSuggestionIfMissing(current)
+	suggestions := store.ListTransactionSuggestions(current.ID)
+	if len(suggestions) != 1 {
+		t.Fatalf("suggestions=%d", len(suggestions))
+	}
+	if suggestions[0].Source != "rule" || suggestions[0].Confidence != 100 || suggestions[0].SuggestedName != "Cà phê" {
+		t.Fatalf("unexpected suggestion: %+v", suggestions[0])
+	}
+	stored, ok := store.GetBankFeed(current.ID)
+	if !ok || stored.Amount != "72000" || stored.RawProviderData != `{"amount":"72000"}` {
+		t.Fatalf("classifier mutated immutable feed: %+v", stored)
+	}
+}
+
+func TestComparableHistoryRequiresAccountAmountAndCadence(t *testing.T) {
+	now := time.Now().UTC()
+	feed := domain.BankFeedTransaction{Timestamped: domain.Timestamped{ID: "new"}, AccountID: "account-1", Direction: "out", Amount: "100000", Description: "Netflix monthly", OccurredAt: now, PostingState: domain.PostingStateReview}
+	prior := domain.BankFeedTransaction{Timestamped: domain.Timestamped{ID: "old"}, AccountID: "account-1", Direction: "out", Amount: "103000", Description: "NETFLIX MONTHLY", OccurredAt: now.AddDate(0, 0, -30), PostingState: domain.PostingStatePosted, PostedTxnID: "txn"}
+	needle := normalizeSuggestionText(feed.Description + " " + feed.Reference)
+	if !isComparableHistoryFeed(feed, prior, needle) {
+		t.Fatal("expected monthly same-account history to match")
+	}
+	prior.AccountID = "another-account"
+	if isComparableHistoryFeed(feed, prior, needle) {
+		t.Fatal("different account must not match")
+	}
+	prior.AccountID, prior.Amount = "account-1", "140000"
+	if isComparableHistoryFeed(feed, prior, needle) {
+		t.Fatal("amount outside range must not match")
+	}
+	prior.Amount, prior.OccurredAt = "103000", now.AddDate(0, 0, -10)
+	if isComparableHistoryFeed(feed, prior, needle) {
+		t.Fatal("unrelated cadence must not match")
+	}
+}
+
+func TestTokenJaccardSupportsConservativeSemanticMatching(t *testing.T) {
+	if score := tokenJaccard(normalizeSuggestionText("THANH TOAN Grab"), normalizeSuggestionText("grab thanh toan don hang")); score < 0.60 {
+		t.Fatalf("expected merchant token overlap, got %v", score)
+	}
+	if score := tokenJaccard("luong cong ty", "thanh toan dien"); score != 0 {
+		t.Fatalf("unrelated content must not match, got %v", score)
 	}
 }
 
 func TestProcessQueuedBankFeed_InboundTransferNeedsReview(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID: ws.ID,
-		Provider:    "sepay",
-		ExternalID:  "conn-3",
+		UserID:     ws.ID,
+		Provider:   "sepay",
+		ExternalID: "conn-3",
 	})
 	if err != nil {
 		t.Fatalf("create connection: %v", err)
@@ -303,15 +347,15 @@ func TestProcessQueuedBankFeed_InboundTransferNeedsReview(t *testing.T) {
 
 func TestReclassifyBankFeedClearsRuleIDAndPosts(t *testing.T) {
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 
 	conn, err := store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID: ws.ID,
-		Provider:    "sepay",
-		ExternalID:  "conn-reclass",
+		UserID:     ws.ID,
+		Provider:   "sepay",
+		ExternalID: "conn-reclass",
 	})
 	if err != nil {
 		t.Fatalf("create connection: %v", err)
@@ -371,13 +415,13 @@ func TestReclassifyBankFeedClearsRuleIDAndPosts(t *testing.T) {
 func TestComputeNetWorthAttributionAndVersioning(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 
 	prop, err := store.CreateProperty(domain.Property{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: "p-none",
 		Name:        "Villa",
 		Address:     "HCM",
@@ -397,7 +441,7 @@ func TestComputeNetWorthAttributionAndVersioning(t *testing.T) {
 	}
 
 	asset, err := store.CreateAsset(domain.Asset{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: "p-none",
 		Name:        "Safe",
 		Type:        "gold",
@@ -439,13 +483,13 @@ func TestComputeNetWorthAttributionAndVersioning(t *testing.T) {
 	}
 
 	_, err = store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
-		AccountID:   store.ListAccounts(ws.ID)[0].ID,
-		Type:        domain.TransactionTypeIncome,
-		Amount:      "3000.00",
-		Currency:    "VND",
-		OccurredAt:  time.Now().UTC(),
-		Status:      domain.TransactionStatusPosted,
+		UserID:     ws.ID,
+		AccountID:  store.ListAccounts(ws.ID)[0].ID,
+		Type:       domain.TransactionTypeIncome,
+		Amount:     "3000.00",
+		Currency:   "VND",
+		OccurredAt: time.Now().UTC(),
+		Status:     domain.TransactionStatusPosted,
 	})
 	if err != nil {
 		t.Fatalf("create income: %v", err)
@@ -497,14 +541,14 @@ func TestComputeNetWorthAttributionAndVersioning(t *testing.T) {
 func TestComputeNetWorthAtHistoricalCutsByAsOf(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
-	ws, pID, err := setupDemoWorkspace(store)
+	ws, pID, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 
 	base := time.Date(2026, time.July, 15, 8, 0, 0, 0, time.UTC)
 	prop, err := store.CreateProperty(domain.Property{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: pID,
 		Name:        "Historical Land",
 		Address:     "HCM",
@@ -540,7 +584,7 @@ func TestComputeNetWorthAtHistoricalCutsByAsOf(t *testing.T) {
 	acc := accounts[0]
 
 	_, err = store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		AccountID:   acc.ID,
 		PortfolioID: pID,
 		Type:        domain.TransactionTypeIncome,
@@ -554,7 +598,7 @@ func TestComputeNetWorthAtHistoricalCutsByAsOf(t *testing.T) {
 	}
 
 	_, err = store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		AccountID:   acc.ID,
 		PortfolioID: pID,
 		Type:        domain.TransactionTypeIncome,
@@ -586,10 +630,10 @@ func TestComputeNetWorthAtHistoricalCutsByAsOf(t *testing.T) {
 	}
 
 	snapshotMu.RLock()
-	workspaceHistory := historyByWorkspace[ws.ID]
+	userHistory := historyByUser[ws.ID]
 	snapshotMu.RUnlock()
-	if len(workspaceHistory) != 0 {
-		t.Fatalf("expected no snapshots written for as-of queries, got %d workspace history entries", len(workspaceHistory))
+	if len(userHistory) != 0 {
+		t.Fatalf("expected no snapshots written for as-of queries, got %d user history entries", len(userHistory))
 	}
 
 	current, err := svc.GetPortfolioNetWorth(string(pID))
@@ -600,8 +644,8 @@ func TestComputeNetWorthAtHistoricalCutsByAsOf(t *testing.T) {
 		t.Fatalf("expected current net worth to match latest as-of, got %s", current.NetWorth)
 	}
 	snapshotMu.RLock()
-	workspaceHistory = historyByWorkspace[ws.ID]
-	historyLen := len(workspaceHistory[pID])
+	userHistory = historyByUser[ws.ID]
+	historyLen := len(userHistory[pID])
 	snapshotMu.RUnlock()
 	if historyLen != 1 {
 		t.Fatalf("expected current compute to persist one snapshot, got %d", historyLen)
@@ -612,16 +656,16 @@ func TestGetPortfolioNetWorthUsesPortfolioScope(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo Workspace", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo User", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	p1, ok := store.FirstPortfolio(ws.ID)
 	if !ok {
 		t.Fatal("missing default portfolio")
 	}
 	p2, err := store.CreatePortfolio(domain.Portfolio{
-		WorkspaceID:  ws.ID,
+		UserID:       ws.ID,
 		Name:         "Secondary",
 		BaseCurrency: "VND",
 	})
@@ -630,7 +674,7 @@ func TestGetPortfolioNetWorthUsesPortfolioScope(t *testing.T) {
 	}
 
 	acc1, err := store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p1.ID,
 		Name:        "Main",
 		Type:        "cash",
@@ -640,7 +684,7 @@ func TestGetPortfolioNetWorthUsesPortfolioScope(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	acc2, err := store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p2.ID,
 		Name:        "Backup",
 		Type:        "cash",
@@ -651,7 +695,7 @@ func TestGetPortfolioNetWorthUsesPortfolioScope(t *testing.T) {
 	}
 
 	if _, err := store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		AccountID:   acc1.ID,
 		PortfolioID: p1.ID,
 		Type:        domain.TransactionTypeIncome,
@@ -663,7 +707,7 @@ func TestGetPortfolioNetWorthUsesPortfolioScope(t *testing.T) {
 		t.Fatalf("create p1 transaction: %v", err)
 	}
 	if _, err := store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		AccountID:   acc2.ID,
 		PortfolioID: p2.ID,
 		Type:        domain.TransactionTypeIncome,
@@ -676,7 +720,7 @@ func TestGetPortfolioNetWorthUsesPortfolioScope(t *testing.T) {
 	}
 
 	prop1, err := store.CreateProperty(domain.Property{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p1.ID,
 		Name:        "Villa",
 		Address:     "HCM",
@@ -695,7 +739,7 @@ func TestGetPortfolioNetWorthUsesPortfolioScope(t *testing.T) {
 	}
 
 	prop2, err := store.CreateProperty(domain.Property{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p2.ID,
 		Name:        "House",
 		Address:     "HCM",
@@ -738,22 +782,22 @@ func TestGetPortfolioNetWorthUsesPortfolioScope(t *testing.T) {
 
 	wsNet, err := svc.ComputeNetWorth(ws.ID)
 	if err != nil {
-		t.Fatalf("compute workspace net worth: %v", err)
+		t.Fatalf("compute user net worth: %v", err)
 	}
 	if wsNet.NetWorth != "1650.00" {
-		t.Fatalf("expected workspace net worth 1650.00, got %s", wsNet.NetWorth)
+		t.Fatalf("expected user net worth 1650.00, got %s", wsNet.NetWorth)
 	}
 	if wsNet.SnapshotVersion != 1 {
-		t.Fatalf("expected workspace snapshot version 1, got %d", wsNet.SnapshotVersion)
+		t.Fatalf("expected user snapshot version 1, got %d", wsNet.SnapshotVersion)
 	}
 }
 
 func TestGetPortfolioSnapshotsPagination(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 	acc := store.ListAccounts(ws.ID)
 	if len(acc) == 0 {
@@ -763,13 +807,13 @@ func TestGetPortfolioSnapshotsPagination(t *testing.T) {
 	svc := NewWealthService(store, nil)
 	for i := 0; i < 5; i++ {
 		_, err := store.CreateTransaction(domain.Transaction{
-			WorkspaceID: ws.ID,
-			AccountID:   acc[0].ID,
-			Type:        domain.TransactionTypeIncome,
-			Amount:      "10.00",
-			Currency:    "VND",
-			OccurredAt:  time.Now().UTC(),
-			Status:      domain.TransactionStatusPosted,
+			UserID:     ws.ID,
+			AccountID:  acc[0].ID,
+			Type:       domain.TransactionTypeIncome,
+			Amount:     "10.00",
+			Currency:   "VND",
+			OccurredAt: time.Now().UTC(),
+			Status:     domain.TransactionStatusPosted,
 		})
 		if err != nil {
 			t.Fatalf("create transaction %d: %v", i, err)
@@ -810,16 +854,16 @@ func TestGetPortfolioSnapshotsForPortfolio(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
 	uid := store.SeedDemoUser("demo@wealthos.vn", "Demo User", "pass")
-	ws, err := store.CreateWorkspace("Demo", "VND", uid)
+	ws, err := store.EnsureUserPortfolio("Demo", "VND", uid)
 	if err != nil {
-		t.Fatalf("create workspace: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
 	p1, ok := store.FirstPortfolio(ws.ID)
 	if !ok {
 		t.Fatalf("missing portfolio")
 	}
 	p2, err := store.CreatePortfolio(domain.Portfolio{
-		WorkspaceID:  ws.ID,
+		UserID:       ws.ID,
 		Name:         "Backup",
 		BaseCurrency: "VND",
 	})
@@ -828,7 +872,7 @@ func TestGetPortfolioSnapshotsForPortfolio(t *testing.T) {
 	}
 
 	acc1, err := store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p1.ID,
 		Name:        "Main",
 		Type:        "cash",
@@ -838,7 +882,7 @@ func TestGetPortfolioSnapshotsForPortfolio(t *testing.T) {
 		t.Fatalf("create account p1: %v", err)
 	}
 	acc2, err := store.CreateAccount(domain.Account{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		PortfolioID: p2.ID,
 		Name:        "Backup",
 		Type:        "cash",
@@ -850,7 +894,7 @@ func TestGetPortfolioSnapshotsForPortfolio(t *testing.T) {
 
 	svc := NewWealthService(store, nil)
 	if _, err := store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		AccountID:   acc1.ID,
 		PortfolioID: p1.ID,
 		Type:        domain.TransactionTypeIncome,
@@ -866,7 +910,7 @@ func TestGetPortfolioSnapshotsForPortfolio(t *testing.T) {
 	}
 
 	if _, err := store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		AccountID:   acc1.ID,
 		PortfolioID: p1.ID,
 		Type:        domain.TransactionTypeIncome,
@@ -882,7 +926,7 @@ func TestGetPortfolioSnapshotsForPortfolio(t *testing.T) {
 	}
 
 	if _, err := store.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
+		UserID:      ws.ID,
 		AccountID:   acc2.ID,
 		PortfolioID: p2.ID,
 		Type:        domain.TransactionTypeIncome,
@@ -920,9 +964,9 @@ func TestGetPortfolioSnapshotsForPortfolio(t *testing.T) {
 func TestCreateTransactionRejectsInvalidStatus(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 	accs := store.ListAccounts(ws.ID)
 	if len(accs) == 0 {
@@ -931,56 +975,60 @@ func TestCreateTransactionRejectsInvalidStatus(t *testing.T) {
 	svc := NewWealthService(store, nil)
 
 	_, err = svc.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
-		AccountID:   accs[0].ID,
-		Type:        domain.TransactionTypeExpense,
-		Amount:      "12000",
-		Currency:    "VND",
-		Status:      domain.TransactionStatus("unknown"),
-		OccurredAt:  time.Now().UTC(),
+		UserID:     ws.ID,
+		AccountID:  accs[0].ID,
+		Type:       domain.TransactionTypeExpense,
+		Amount:     "12000",
+		Currency:   "VND",
+		Status:     domain.TransactionStatus("unknown"),
+		OccurredAt: time.Now().UTC(),
 	})
 	if err == nil {
 		t.Fatal("expected invalid status error")
 	}
 }
 
-func TestCreateTransactionRejectsCrossWorkspaceAccount(t *testing.T) {
+func TestCreateTransactionRejectsCrossUserAccount(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
-	ws1, _, err := setupDemoWorkspace(store)
+	ws1, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace 1: %v", err)
+		t.Fatalf("prepare user 1: %v", err)
 	}
-	ws2, _, err := setupDemoWorkspace(store)
+	otherID := store.SeedDemoUser("other@example.com", "Other User", "pass")
+	ws2, err := store.EnsureUserPortfolio("", "VND", otherID)
 	if err != nil {
-		t.Fatalf("prepare workspace 2: %v", err)
+		t.Fatalf("prepare user 2: %v", err)
+	}
+	account2, err := store.CreateAccount(domain.Account{UserID: ws2.ID, Name: "Other bank", Type: "bank", Currency: "VND"})
+	if err != nil {
+		t.Fatalf("create user 2 account: %v", err)
 	}
 	accounts1 := store.ListAccounts(ws1.ID)
-	accounts2 := store.ListAccounts(ws2.ID)
-	if len(accounts1) == 0 || len(accounts2) == 0 {
-		t.Fatal("missing accounts in workspace setup")
+	if len(accounts1) == 0 {
+		t.Fatal("missing accounts in user setup")
 	}
 	svc := NewWealthService(store, nil)
 
 	_, err = svc.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws1.ID,
-		AccountID:   accounts2[0].ID,
-		Type:        domain.TransactionTypeIncome,
-		Amount:      "50000",
-		Currency:    "VND",
-		OccurredAt:  time.Now().UTC(),
+		UserID:     ws1.ID,
+		AccountID:  account2.ID,
+		Type:       domain.TransactionTypeIncome,
+		Amount:     "50000",
+		Currency:   "VND",
+		OccurredAt: time.Now().UTC(),
 	})
 	if err == nil {
-		t.Fatal("expected cross-workspace account error")
+		t.Fatal("expected cross-user account error")
 	}
 }
 
 func TestPendingTransactionDoesNotAffectNetWorth(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 	accs := store.ListAccounts(ws.ID)
 	if len(accs) == 0 {
@@ -989,13 +1037,13 @@ func TestPendingTransactionDoesNotAffectNetWorth(t *testing.T) {
 	svc := NewWealthService(store, nil)
 
 	posted, err := svc.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
-		AccountID:   accs[0].ID,
-		Type:        domain.TransactionTypeIncome,
-		Amount:      "150",
-		Currency:    "VND",
-		Status:      domain.TransactionStatusPosted,
-		OccurredAt:  time.Now().UTC(),
+		UserID:     ws.ID,
+		AccountID:  accs[0].ID,
+		Type:       domain.TransactionTypeIncome,
+		Amount:     "150",
+		Currency:   "VND",
+		Status:     domain.TransactionStatusPosted,
+		OccurredAt: time.Now().UTC(),
 	})
 	if err != nil {
 		t.Fatalf("create posted tx: %v", err)
@@ -1003,13 +1051,13 @@ func TestPendingTransactionDoesNotAffectNetWorth(t *testing.T) {
 	_ = posted
 
 	_, err = svc.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
-		AccountID:   accs[0].ID,
-		Type:        domain.TransactionTypeIncome,
-		Amount:      "150",
-		Currency:    "VND",
-		Status:      domain.TransactionStatusPending,
-		OccurredAt:  time.Now().UTC(),
+		UserID:     ws.ID,
+		AccountID:  accs[0].ID,
+		Type:       domain.TransactionTypeIncome,
+		Amount:     "150",
+		Currency:   "VND",
+		Status:     domain.TransactionStatusPending,
+		OccurredAt: time.Now().UTC(),
 	})
 	if err != nil {
 		t.Fatalf("create pending tx: %v", err)
@@ -1030,9 +1078,9 @@ func TestPendingTransactionDoesNotAffectNetWorth(t *testing.T) {
 func TestCreateTransactionRejectsNonPositiveAmount(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()
-	ws, _, err := setupDemoWorkspace(store)
+	ws, _, err := setupDemoUser(store)
 	if err != nil {
-		t.Fatalf("prepare workspace: %v", err)
+		t.Fatalf("prepare user: %v", err)
 	}
 	accs := store.ListAccounts(ws.ID)
 	if len(accs) == 0 {
@@ -1041,12 +1089,12 @@ func TestCreateTransactionRejectsNonPositiveAmount(t *testing.T) {
 	svc := NewWealthService(store, nil)
 
 	_, err = svc.CreateTransaction(domain.Transaction{
-		WorkspaceID: ws.ID,
-		AccountID:   accs[0].ID,
-		Type:        domain.TransactionTypeExpense,
-		Amount:      "0",
-		Currency:    "VND",
-		OccurredAt:  time.Now().UTC(),
+		UserID:     ws.ID,
+		AccountID:  accs[0].ID,
+		Type:       domain.TransactionTypeExpense,
+		Amount:     "0",
+		Currency:   "VND",
+		OccurredAt: time.Now().UTC(),
 	})
 	if err == nil {
 		t.Fatal("expected non-positive amount error")

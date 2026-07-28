@@ -1,6 +1,6 @@
 # Thiết kế API WealthOS
 
-Base URL: `/api/v1`. API dùng JSON, UTC ISO-8601, decimal dưới dạng chuỗi và access token suy ra workspace. Tất cả response tài sản ròng/forecast phải có `asOfAt`, `baseCurrency`, `dataQuality` và các nguồn cấu thành.
+Base URL: `/api/v1`. API dùng JSON, UTC ISO-8601, decimal dưới dạng chuỗi và access token suy ra user. Tất cả response tài sản ròng/forecast phải có `asOfAt`, `baseCurrency`, `dataQuality` và các nguồn cấu thành.
 
 ## Quy ước
 
@@ -44,7 +44,7 @@ Base URL: `/api/v1`. API dùng JSON, UTC ISO-8601, decimal dưới dạng chuỗ
 | `POST` | `/loans/{id}/payment-requests` | Tạo VietQR payment request cho một kỳ thu loan |
 | `POST` | `/assistant/telegram/webhook` | Nhận Telegram update đã xác thực webhook secret |
 | `POST` | `/assistant/commands` | Tạo command từ web/mobile hoặc adapter Telegram |
-| `GET` | `/assistant/commands` | Danh sách command của workspace hiện tại |
+| `GET` | `/assistant/commands` | Danh sách command của user hiện tại |
 | `GET` | `/assistant/commands/{id}` | Xem trạng thái, plan, approval và kết quả |
 | `POST` | `/assistant/commands/{id}/approve` | Phê duyệt command cần confirmation một lần |
 | `POST` | `/assistant/commands/{id}/cancel` | Hủy command chưa hoàn tất |

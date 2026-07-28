@@ -83,7 +83,7 @@ func ErrorEnvelope() gin.HandlerFunc {
 				userID = "anonymous"
 			}
 			wsID := ""
-			if val, ok := c.Get("workspace_id"); ok {
+			if val, ok := c.Get("user_id"); ok {
 				if s, ok2 := val.(string); ok2 {
 					wsID = s
 				}
@@ -108,7 +108,7 @@ func ErrorEnvelope() gin.HandlerFunc {
 				clientIP = c.ClientIP()
 			}
 
-			log.Printf("[HTTP ERROR %d %s] TraceID: %s | %s %s | IP: %s | User: %s | Workspace: %s | Code: %s | Message: %s",
+			log.Printf("[HTTP ERROR %d %s] TraceID: %s | %s %s | IP: %s | User: %s | User: %s | Code: %s | Message: %s",
 				writer.status, statusText, traceID, reqMethod, reqPath, clientIP, userID, wsID, code, msg)
 		}
 

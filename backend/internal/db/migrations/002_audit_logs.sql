@@ -1,6 +1,6 @@
 ﻿CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
     actor_role TEXT,
     action TEXT NOT NULL,
@@ -19,8 +19,8 @@
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_audit_logs_workspace_created
-    ON audit_logs (workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created
+    ON audit_logs (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor
     ON audit_logs (actor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_target

@@ -4,7 +4,7 @@ Roadmap là **asset-first**: đưa người dùng tới tài sản ròng đúng 
 
 | Giai đoạn | Phạm vi | Tiêu chí hoàn thành |
 |---|---|---|
-| 0. Foundation | Auth, workspace, RBAC nền tảng, audit, portfolio, account, migration, decimal/multi-currency | Tenant isolation, backup, quyền và ledger tái tạo được |
+| 0. Foundation | Auth, user, RBAC nền tảng, audit, portfolio, account, migration, decimal/multi-currency | Tenant isolation, backup, quyền và ledger tái tạo được |
 | 1. Wealth snapshot | Cash/bank, tài sản thủ công, net worth as-of, valuation history, đối soát snapshot và data-quality indicators | Net worth có breakdown, nguồn dữ liệu, trạng thái stale/drill-down; snapshot có `draft`/`reviewed`/`locked` và điều chỉnh được audit |
 | 2. Loan portfolio | Khoản phải thu/phải trả, lịch thu, accrual, payment split, overdue, counterparty tối thiểu và liên kết chứng từ | Dư gốc/lãi đúng, payment không làm sai cash hay net worth; trạng thái loan không bị nhầm với credit score hay nhận định pháp lý |
 | 3. Cash flow | Thu/chi/chuyển tiền, recurring, import CSV theo batch, lịch nghĩa vụ, financial inbox | Cash forecast ngắn hạn khớp ledger và lịch loan; import có preview/validation/audit, inbox truy vết được về dữ liệu nguồn |

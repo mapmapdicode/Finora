@@ -18,7 +18,7 @@ Với thiết bị thật hoặc khi backend chạy máy khác, chỉ định đ
 flutter run --dart-define=API_BASE=http://192.168.1.10:8080
 ```
 
-Ứng dụng bao gồm: xác thực, workspace, dashboard tài sản ròng, tài khoản, giao dịch, khoản vay, tài sản, bất động sản, ngân sách, dự báo, danh mục, SePay/ngân hàng, tự động hóa, trợ lý và audit log.
+Ứng dụng bao gồm: xác thực, user, dashboard tài sản ròng, tài khoản, giao dịch, khoản vay, tài sản, bất động sản, ngân sách, dự báo, danh mục, SePay/ngân hàng, tự động hóa, trợ lý và audit log.
 
 ## Kiến trúc
 

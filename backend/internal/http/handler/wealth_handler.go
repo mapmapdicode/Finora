@@ -2,8 +2,10 @@ package handler
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -23,6 +25,8 @@ import (
 	"wealthos-backend/internal/config"
 	"wealthos-backend/internal/domain"
 	"wealthos-backend/internal/http/dto"
+	"wealthos-backend/internal/integration/sepay"
+	"wealthos-backend/internal/metrics"
 	"wealthos-backend/internal/service"
 	"wealthos-backend/internal/storage"
 )
@@ -53,7 +57,7 @@ type assistantCommandApprovalRequest struct {
 
 type telegramWebhookPayload struct {
 	UpdateID      int64                    `json:"update_id"`
-	WorkspaceID   string                   `json:"workspaceId"`
+	UserID        string                   `json:"userId"`
 	Message       *telegramWebhookMessage  `json:"message"`
 	EditedMessage *telegramWebhookMessage  `json:"edited_message"`
 	ChannelPost   *telegramWebhookMessage  `json:"channel_post"`
@@ -188,6 +192,10 @@ type WealthHandler struct {
 	hermesSecret   string
 	jwtSecret      string
 	jwtTTL         time.Duration
+	bankHub        sepay.BankHubLinkClient
+	bankHubCompany string
+	bankHubAPIKey  string
+	pilotBanks     map[string]struct{}
 }
 
 func NewWealthHandler(store storage.Store, svc *service.WealthService, cfg *config.Config) *WealthHandler {
@@ -209,6 +217,21 @@ func NewWealthHandler(store storage.Store, svc *service.WealthService, cfg *conf
 			jwtTTL = cfg.JWTTTL
 		}
 	}
+	var bankHub sepay.BankHubLinkClient
+	bankHubCompany := ""
+	bankHubAPIKey := ""
+	pilotBanks := map[string]struct{}{}
+	if cfg != nil {
+		candidate := sepay.NewBankHubClient(cfg.SePayBankHubBaseURL, cfg.SePayBankHubClientID, cfg.SePayBankHubSecret)
+		if candidate.Configured() {
+			bankHub = candidate
+		}
+		bankHubCompany = cfg.SePayBankHubCompanyID
+		bankHubAPIKey = cfg.SePayBankHubAPIKey
+		for _, code := range cfg.SePayBankHubPilotBanks {
+			pilotBanks[strings.ToUpper(strings.TrimSpace(code))] = struct{}{}
+		}
+	}
 	return &WealthHandler{
 		service:        svcRef,
 		store:          store,
@@ -217,6 +240,10 @@ func NewWealthHandler(store storage.Store, svc *service.WealthService, cfg *conf
 		hermesSecret:   hermesSecret,
 		jwtSecret:      jwtSecret,
 		jwtTTL:         jwtTTL,
+		bankHub:        bankHub,
+		bankHubCompany: strings.TrimSpace(bankHubCompany),
+		bankHubAPIKey:  strings.TrimSpace(bankHubAPIKey),
+		pilotBanks:     pilotBanks,
 	}
 }
 
@@ -239,15 +266,13 @@ func (h *WealthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "REGISTER_FAIL", "message": err.Error()})
 		return
 	}
-	workspace, _ := h.store.CreateWorkspace(defaultWorkspaceName(body.WorkspaceName), "VND", user.ID)
-	if workspace == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": "WORKSPACE_CREATE_FAIL", "message": "unable to create default workspace"})
+	if _, err := h.store.EnsureUserPortfolio("", "VND", user.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "PORTFOLIO_CREATE_FAIL", "message": "unable to create default portfolio"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"user":      user,
-		"workspace": workspace,
-		"token":     h.issueAuthToken(string(user.ID)),
+		"user":  user,
+		"token": h.issueAuthToken(string(user.ID)),
 	})
 }
 
@@ -274,33 +299,8 @@ func (h *WealthHandler) Readyz(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ready", "ts": time.Now().UTC()})
 }
 
-func (h *WealthHandler) ListWorkspaces(c *gin.Context) {
-	uid := currentUser(c)
-	list := h.store.ListWorkspaces(domain.ID(uid))
-	if list == nil {
-		list = []domain.Workspace{}
-	}
-	out := make([]gin.H, 0, len(list))
-	for _, item := range list {
-		role, hasRole := h.store.GetWorkspaceMemberRole(domain.ID(uid), item.ID)
-		record := gin.H{
-			"id":           item.ID,
-			"name":         item.Name,
-			"baseCurrency": item.BaseCurrency,
-		}
-		if item.FiscalYearEnd != "" {
-			record["fiscalYearEnd"] = item.FiscalYearEnd
-		}
-		if hasRole {
-			record["role"] = string(role)
-		}
-		out = append(out, record)
-	}
-	c.JSON(http.StatusOK, out)
-}
-
 func (h *WealthHandler) ListPortfolios(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	c.JSON(http.StatusOK, h.store.ListPortfolios(domain.ID(wsID)))
 }
 
@@ -313,9 +313,9 @@ func (h *WealthHandler) CreatePortfolio(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
 		return
 	}
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	item := domain.Portfolio{
-		WorkspaceID:  domain.ID(wsID),
+		UserID:       domain.ID(wsID),
 		Name:         body.Name,
 		BaseCurrency: body.BaseCurrency,
 	}
@@ -339,7 +339,7 @@ func (h *WealthHandler) GetPortfolioNetWorth(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "portfolio not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, portfolio.WorkspaceID) {
+	if !h.requireUserMatch(c, portfolio.UserID) {
 		return
 	}
 
@@ -377,14 +377,13 @@ func (h *WealthHandler) GetPortfolioNetWorth(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-
 func (h *WealthHandler) requireEditorRole(c *gin.Context) bool {
-	_, ok := h.requireWorkspaceOrReject(c)
+	_, ok := h.requireUserOrReject(c)
 	if !ok {
 		return false
 	}
 	role := strings.TrimSpace(func() string {
-		if v, ok := c.Get("workspace_role"); ok {
+		if v, ok := c.Get("user_role"); ok {
 			if s, ok2 := v.(string); ok2 {
 				return s
 			}
@@ -392,7 +391,7 @@ func (h *WealthHandler) requireEditorRole(c *gin.Context) bool {
 		return ""
 	}())
 	if role == "" {
-		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing workspace role"})
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing user role"})
 		return false
 	}
 	if role == string(domain.RoleViewer) {
@@ -403,12 +402,12 @@ func (h *WealthHandler) requireEditorRole(c *gin.Context) bool {
 }
 
 func (h *WealthHandler) requireOwnerRole(c *gin.Context) bool {
-	_, ok := h.requireWorkspaceOrReject(c)
+	_, ok := h.requireUserOrReject(c)
 	if !ok {
 		return false
 	}
 	role := strings.TrimSpace(func() string {
-		if v, ok := c.Get("workspace_role"); ok {
+		if v, ok := c.Get("user_role"); ok {
 			if s, ok2 := v.(string); ok2 {
 				return s
 			}
@@ -416,7 +415,7 @@ func (h *WealthHandler) requireOwnerRole(c *gin.Context) bool {
 		return ""
 	}())
 	if role == "" {
-		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing workspace role"})
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing user role"})
 		return false
 	}
 	if role != string(domain.RoleOwner) {
@@ -437,7 +436,7 @@ func (h *WealthHandler) ListPortfolioSnapshots(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "portfolio not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, p.WorkspaceID) {
+	if !h.requireUserMatch(c, p.UserID) {
 		return
 	}
 
@@ -451,12 +450,12 @@ func (h *WealthHandler) ListPortfolioSnapshots(c *gin.Context) {
 		}
 	}
 	cursor := strings.TrimSpace(c.Query("cursor"))
-	out := h.service.GetPortfolioSnapshotsForPortfolio(p.WorkspaceID, p.ID, limit, cursor)
+	out := h.service.GetPortfolioSnapshotsForPortfolio(p.UserID, p.ID, limit, cursor)
 	c.JSON(http.StatusOK, out)
 }
 
 func (h *WealthHandler) ListAccounts(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	list := h.store.ListAccounts(domain.ID(wsID))
 	c.JSON(http.StatusOK, list)
 }
@@ -466,7 +465,7 @@ func (h *WealthHandler) getOrCreatePrimaryPortfolio(wsID domain.ID) domain.Portf
 		return p
 	}
 	p, err := h.store.CreatePortfolio(domain.Portfolio{
-		WorkspaceID:  wsID,
+		UserID:       wsID,
 		Name:         "Cá nhân",
 		BaseCurrency: "VND",
 	})
@@ -485,13 +484,13 @@ func (h *WealthHandler) CreateAccount(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
 		return
 	}
-	wsID := domain.ID(h.requireWorkspaceID(c))
+	wsID := domain.ID(h.requireUserID(c))
 	pID := domain.ID(body.PortfolioID)
 	if pID == "" {
 		pID = h.getOrCreatePrimaryPortfolio(wsID).ID
 	}
 	account, err := h.store.CreateAccount(domain.Account{
-		WorkspaceID: wsID,
+		UserID:      wsID,
 		PortfolioID: pID,
 		Name:        body.Name,
 		Type:        body.Type,
@@ -505,17 +504,126 @@ func (h *WealthHandler) CreateAccount(c *gin.Context) {
 	c.JSON(http.StatusCreated, account)
 }
 
+// CreateBotAccountKey rotates the public-bot secret for one account. The
+// plaintext is returned once and is never stored or logged.
+func (h *WealthHandler) CreateBotAccountKey(c *gin.Context) {
+	if !h.requireEditorRole(c) {
+		return
+	}
+	accountID := domain.ID(c.Param("id"))
+	account, ok := h.store.GetAccount(accountID)
+	if !ok || account.UserID != domain.ID(h.requireUserID(c)) {
+		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "account not found"})
+		return
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "KEY_GENERATION_FAILED"})
+		return
+	}
+	secret := "finora_bot_" + base64.RawURLEncoding.EncodeToString(raw)
+	digest := sha256.Sum256([]byte(secret))
+	key, err := h.store.UpsertBotAccountKey(domain.BotAccountKey{AccountID: accountID, SecretHash: hex.EncodeToString(digest[:]), Prefix: secret[:18]})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "KEY_CREATE_FAILED", "message": err.Error()})
+		return
+	}
+	h.recordAudit(c, "", "bot_account_key", key.ID, nil, map[string]any{"accountId": accountID, "prefix": key.Prefix}, "success", "")
+	c.JSON(http.StatusCreated, gin.H{"accountId": accountID, "secret": secret, "prefix": key.Prefix, "warning": "Lưu secret ngay; Finora sẽ không hiển thị lại."})
+}
+
+func (h *WealthHandler) authenticateBotAccount(c *gin.Context) (*domain.Account, bool) {
+	accountID := domain.ID(c.Param("id"))
+	account, ok := h.store.GetAccount(accountID)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND"})
+		return nil, false
+	}
+	key, ok := h.store.GetActiveBotAccountKey(accountID)
+	secret := strings.TrimSpace(c.GetHeader("X-Finora-Account-Key"))
+	if !ok || secret == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
+		return nil, false
+	}
+	digest := sha256.Sum256([]byte(secret))
+	expected, decodeErr := hex.DecodeString(key.SecretHash)
+	if decodeErr != nil || subtle.ConstantTimeCompare(expected, digest[:]) != 1 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
+		return nil, false
+	}
+	return account, true
+}
+
+func (h *WealthHandler) BotCreateTransaction(c *gin.Context) {
+	account, ok := h.authenticateBotAccount(c)
+	if !ok {
+		return
+	}
+	var body dto.BotTransactionCreateRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+	typeValue := domain.TransactionType(strings.ToLower(strings.TrimSpace(body.Type)))
+	if typeValue != domain.TransactionTypeIncome && typeValue != domain.TransactionTypeExpense {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_TYPE", "message": "type must be income or expense"})
+		return
+	}
+	if _, err := strconv.ParseFloat(strings.TrimSpace(body.Amount), 64); err != nil || strings.TrimSpace(body.Amount) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_AMOUNT"})
+		return
+	}
+	occurredAt := time.Now().UTC()
+	if strings.TrimSpace(body.OccurredAt) != "" {
+		var err error
+		occurredAt, err = parseDateTime(body.OccurredAt)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_DATE"})
+			return
+		}
+	}
+	transaction, err := h.service.CreateTransaction(domain.Transaction{UserID: account.UserID, AccountID: account.ID, PortfolioID: account.PortfolioID, CategoryID: domain.ID(body.CategoryID), Name: strings.TrimSpace(body.Name), Type: typeValue, Amount: strings.TrimSpace(body.Amount), Currency: account.Currency, Note: strings.TrimSpace(body.Note), OccurredAt: occurredAt, Status: domain.TransactionStatusPosted, Source: "bot_public_api"})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"transaction": transaction})
+}
+
+func (h *WealthHandler) BotListTransactions(c *gin.Context) {
+	account, ok := h.authenticateBotAccount(c)
+	if !ok {
+		return
+	}
+	from, to := parseDateFilter(strings.TrimSpace(c.Query("from"))), parseDateFilter(strings.TrimSpace(c.Query("to")))
+	if c.Query("from") == "" || c.Query("to") == "" || from.IsZero() || to.IsZero() || from.After(to) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_DATE_RANGE", "message": "from and to are required dates (YYYY-MM-DD or RFC3339), with from <= to"})
+		return
+	}
+	// A date-only `to` means the entire requested calendar day.
+	if len(strings.TrimSpace(c.Query("to"))) == len("2006-01-02") {
+		to = to.Add(24*time.Hour - time.Nanosecond)
+	}
+	items := []domain.Transaction{}
+	for _, item := range h.store.ListTransactions(account.UserID, account.ID) {
+		if !item.OccurredAt.Before(from) && !item.OccurredAt.After(to) {
+			items = append(items, item)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"accountId": account.ID, "from": from.Format(time.RFC3339), "to": to.Format(time.RFC3339), "items": items})
+}
+
 func (h *WealthHandler) DeleteAccount(c *gin.Context) {
 	if !h.requireEditorRole(c) {
 		return
 	}
 	accountID := domain.ID(c.Param("id"))
-	wsID := domain.ID(h.requireWorkspaceID(c))
+	wsID := domain.ID(h.requireUserID(c))
 
 	account, ok := h.store.GetAccount(accountID)
 	targetWsID := wsID
-	if ok && account.WorkspaceID != "" {
-		targetWsID = account.WorkspaceID
+	if ok && account.UserID != "" {
+		targetWsID = account.UserID
 	}
 
 	txs := h.store.ListTransactions(targetWsID, accountID)
@@ -541,7 +649,7 @@ func (h *WealthHandler) DeletePortfolio(c *gin.Context) {
 		return
 	}
 	id := domain.ID(c.Param("id"))
-	wsID := domain.ID(h.requireWorkspaceID(c))
+	wsID := domain.ID(h.requireUserID(c))
 	if err := h.store.DeletePortfolio(wsID, id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
 		return
@@ -554,7 +662,7 @@ func (h *WealthHandler) DeleteLoan(c *gin.Context) {
 		return
 	}
 	id := domain.ID(c.Param("id"))
-	wsID := domain.ID(h.requireWorkspaceID(c))
+	wsID := domain.ID(h.requireUserID(c))
 	if err := h.store.DeleteLoan(wsID, id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
 		return
@@ -567,7 +675,7 @@ func (h *WealthHandler) DeleteProperty(c *gin.Context) {
 		return
 	}
 	id := domain.ID(c.Param("id"))
-	wsID := domain.ID(h.requireWorkspaceID(c))
+	wsID := domain.ID(h.requireUserID(c))
 	if err := h.store.DeleteProperty(wsID, id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
 		return
@@ -580,7 +688,7 @@ func (h *WealthHandler) DeleteAsset(c *gin.Context) {
 		return
 	}
 	id := domain.ID(c.Param("id"))
-	wsID := domain.ID(h.requireWorkspaceID(c))
+	wsID := domain.ID(h.requireUserID(c))
 	if err := h.store.DeleteAsset(wsID, id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
 		return
@@ -635,7 +743,7 @@ func (h *WealthHandler) ListTransactions(c *gin.Context) {
 		}
 	}
 
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	raw := h.store.ListTransactions(domain.ID(wsID), domain.ID(query.AccountID))
 	filtered := make([]domain.Transaction, 0, len(raw))
 	qType := strings.ToLower(query.Type)
@@ -715,7 +823,6 @@ func (h *WealthHandler) ListTransactions(c *gin.Context) {
 	})
 }
 
-
 func (h *WealthHandler) CreateTransaction(c *gin.Context) {
 	if !h.requireEditorRole(c) {
 		return
@@ -729,7 +836,7 @@ func (h *WealthHandler) CreateTransaction(c *gin.Context) {
 	if happened.IsZero() {
 		happened = time.Now().UTC()
 	}
-	wsID := domain.ID(h.requireWorkspaceID(c))
+	wsID := domain.ID(h.requireUserID(c))
 	pID := domain.ID(body.PortfolioID)
 	accID := domain.ID(body.AccountID)
 	if pID == "" && accID != "" {
@@ -741,7 +848,7 @@ func (h *WealthHandler) CreateTransaction(c *gin.Context) {
 		pID = h.getOrCreatePrimaryPortfolio(wsID).ID
 	}
 	item, err := h.service.CreateTransaction(domain.Transaction{
-		WorkspaceID: wsID,
+		UserID:      wsID,
 		AccountID:   accID,
 		CategoryID:  domain.ID(body.CategoryID),
 		PortfolioID: pID,
@@ -775,7 +882,7 @@ func (h *WealthHandler) CreateTransfer(c *gin.Context) {
 		happened = time.Now().UTC()
 	}
 	transfer, err := h.service.CreateTransfer(domain.Transfer{
-		WorkspaceID:   domain.ID(h.requireWorkspaceID(c)),
+		UserID:        domain.ID(h.requireUserID(c)),
 		FromAccountID: domain.ID(body.FromAccountID),
 		ToAccountID:   domain.ID(body.ToAccountID),
 		Amount:        body.Amount,
@@ -792,7 +899,7 @@ func (h *WealthHandler) CreateTransfer(c *gin.Context) {
 }
 
 func (h *WealthHandler) ListLoans(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	c.JSON(http.StatusOK, h.store.ListLoans(domain.ID(wsID)))
 }
 
@@ -814,7 +921,7 @@ func (h *WealthHandler) CreateLoan(c *gin.Context) {
 		dueAt = startAt.AddDate(0, 1, 0)
 	}
 	lo, err := h.store.CreateLoan(domain.Loan{
-		WorkspaceID:      domain.ID(h.requireWorkspaceID(c)),
+		UserID:           domain.ID(h.requireUserID(c)),
 		PortfolioID:      domain.ID(body.PortfolioID),
 		Counterparty:     body.Counterparty,
 		Direction:        domain.LoanDirection(body.Direction),
@@ -845,7 +952,7 @@ func (h *WealthHandler) GetLoanAccruals(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "loan not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, loan.WorkspaceID) {
+	if !h.requireUserMatch(c, loan.UserID) {
 		return
 	}
 	out, err := h.service.GetLoanAccruals(id)
@@ -878,16 +985,16 @@ func (h *WealthHandler) CreateLoanPayment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "loan not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, loan.WorkspaceID) {
+	if !h.requireUserMatch(c, loan.UserID) {
 		return
 	}
 	payment, err := h.service.CreateLoanPayment(loanID, domain.LoanPayment{
-		WorkspaceID: loan.WorkspaceID,
-		Principal:   body.Principal,
-		Interest:    body.Interest,
-		Fee:         body.Fee,
-		Waived:      body.Waived,
-		OccurredAt:  nowOrUTC(body.OccurredAt.Time),
+		UserID:     loan.UserID,
+		Principal:  body.Principal,
+		Interest:   body.Interest,
+		Fee:        body.Fee,
+		Waived:     body.Waived,
+		OccurredAt: nowOrUTC(body.OccurredAt.Time),
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
@@ -898,7 +1005,7 @@ func (h *WealthHandler) CreateLoanPayment(c *gin.Context) {
 }
 
 func (h *WealthHandler) ListProperties(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	c.JSON(http.StatusOK, h.store.ListProperties(domain.ID(wsID)))
 }
 
@@ -912,7 +1019,7 @@ func (h *WealthHandler) CreateProperty(c *gin.Context) {
 		return
 	}
 	item, err := h.store.CreateProperty(domain.Property{
-		WorkspaceID: domain.ID(h.requireWorkspaceID(c)),
+		UserID:      domain.ID(h.requireUserID(c)),
 		PortfolioID: domain.ID(body.PortfolioID),
 		Name:        body.Name,
 		Address:     body.Address,
@@ -940,7 +1047,7 @@ func (h *WealthHandler) AddPropertyValuation(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "property not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, prop.WorkspaceID) {
+	if !h.requireUserMatch(c, prop.UserID) {
 		return
 	}
 	var body dto.PropertyValuationRequest
@@ -964,7 +1071,7 @@ func (h *WealthHandler) AddPropertyValuation(c *gin.Context) {
 }
 
 func (h *WealthHandler) ListAssets(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	c.JSON(http.StatusOK, h.store.ListAssets(domain.ID(wsID)))
 }
 
@@ -978,7 +1085,7 @@ func (h *WealthHandler) CreateAsset(c *gin.Context) {
 		return
 	}
 	item, err := h.store.CreateAsset(domain.Asset{
-		WorkspaceID: domain.ID(h.requireWorkspaceID(c)),
+		UserID:      domain.ID(h.requireUserID(c)),
 		PortfolioID: domain.ID(body.PortfolioID),
 		Name:        body.Name,
 		Type:        body.AssetType,
@@ -1013,7 +1120,7 @@ func (h *WealthHandler) AddAssetValuation(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "asset not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, asset.WorkspaceID) {
+	if !h.requireUserMatch(c, asset.UserID) {
 		return
 	}
 	v, err := h.store.AddAssetValuation(domain.AssetValuation{
@@ -1032,9 +1139,9 @@ func (h *WealthHandler) AddAssetValuation(c *gin.Context) {
 }
 
 func (h *WealthHandler) GetBudget(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	if wsID == "" {
-		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing workspace"})
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing user"})
 		return
 	}
 	period := strings.TrimSpace(c.Param("period"))
@@ -1050,9 +1157,9 @@ func (h *WealthHandler) UpsertBudget(c *gin.Context) {
 	if !h.requireEditorRole(c) {
 		return
 	}
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	if wsID == "" {
-		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing workspace"})
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing user"})
 		return
 	}
 
@@ -1079,7 +1186,7 @@ func (h *WealthHandler) UpsertBudget(c *gin.Context) {
 }
 
 func (h *WealthHandler) ListForecastScenarios(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	c.JSON(http.StatusOK, h.store.ListForecastScenarios(domain.ID(wsID)))
 }
 
@@ -1093,7 +1200,7 @@ func (h *WealthHandler) CreateForecastScenario(c *gin.Context) {
 		return
 	}
 	scenario, err := h.store.CreateForecastScenario(domain.ForecastScenario{
-		WorkspaceID: domain.ID(h.requireWorkspaceID(c)),
+		UserID:      domain.ID(h.requireUserID(c)),
 		Name:        body.Name,
 		Assumptions: body.Assumptions,
 	})
@@ -1110,7 +1217,7 @@ func (h *WealthHandler) RunForecastScenario(c *gin.Context) {
 		return
 	}
 	id := strings.TrimSpace(c.Param("id"))
-	wsID, ok := h.requireWorkspaceOrReject(c)
+	wsID, ok := h.requireUserOrReject(c)
 	if !ok {
 		return
 	}
@@ -1165,7 +1272,7 @@ func (h *WealthHandler) CreateSePayConnection(c *gin.Context) {
 	}
 	callbackState := uuid.NewString()
 	conn, err := h.store.CreateBankConnection(domain.BankConnection{
-		WorkspaceID:   domain.ID(h.requireWorkspaceID(c)),
+		UserID:        domain.ID(h.requireUserID(c)),
 		Provider:      provider,
 		Scope:         scope,
 		ExternalID:    fmt.Sprintf("conn_%s", uuid.NewString()),
@@ -1179,13 +1286,39 @@ func (h *WealthHandler) CreateSePayConnection(c *gin.Context) {
 	h.recordAudit(c, "", "bank_connection", conn.ID, nil, conn, "success", "")
 
 	connectURL := h.buildSePayConnectURL(c.Request, callbackState)
+	linkSessionXID := ""
+	linkExpiresAt := ""
+	if h.bankHub != nil && h.bankHub.Configured() {
+		link, err := h.bankHub.CreateLink(c.Request.Context(), h.bankHubCompany, connectURL)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"code": "SEPAY_BANKHUB_UNAVAILABLE", "message": err.Error()})
+			return
+		}
+		linkSessionXID = link.XID
+		linkExpiresAt = link.ExpiresAt
+		connectURL = link.HostedLinkURL
+		_ = h.store.UpdateBankConnection(conn.ID, func(item *domain.BankConnection) {
+			// Until Bank Hub emits BANK_ACCOUNT_LINKED, ExternalID identifies this
+			// short-lived Hosted Link. The event later replaces it with bank_account_xid.
+			item.ExternalID = link.XID
+			item.Status = "pending"
+			item.SyncStatus = "link_pending"
+		})
+		if refreshed, ok := h.store.GetBankConnection(conn.ID); ok {
+			conn = *refreshed
+		}
+	}
 	c.JSON(http.StatusCreated, gin.H{
-		"connectionId":  conn.ID,
-		"provider":      conn.Provider,
-		"scope":         conn.Scope,
-		"externalId":    conn.ExternalID,
-		"callbackState": conn.CallbackState,
-		"connectUrl":    connectURL,
+		"connectionId":     conn.ID,
+		"provider":         conn.Provider,
+		"scope":            conn.Scope,
+		"externalId":       conn.ExternalID,
+		"callbackState":    conn.CallbackState,
+		"connectUrl":       connectURL,
+		"linkSessionXid":   linkSessionXID,
+		"hosted_link_url":  connectURL,
+		"link_session_xid": linkSessionXID,
+		"expires_at":       linkExpiresAt,
 	})
 }
 
@@ -1218,7 +1351,7 @@ func (h *WealthHandler) SePayCallback(c *gin.Context) {
 }
 
 func (h *WealthHandler) GetBankConnections(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	c.JSON(http.StatusOK, h.store.ListBankConnections(domain.ID(wsID)))
 }
 
@@ -1232,7 +1365,7 @@ func (h *WealthHandler) SyncBankConnection(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "connection not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, conn.WorkspaceID) {
+	if !h.requireUserMatch(c, conn.UserID) {
 		return
 	}
 	now := time.Now().UTC()
@@ -1295,7 +1428,7 @@ func (h *WealthHandler) RevokeBankConnection(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "connection not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, conn.WorkspaceID) {
+	if !h.requireUserMatch(c, conn.UserID) {
 		return
 	}
 	revoked, ok := h.store.RevokeBankConnection(id)
@@ -1324,6 +1457,18 @@ func (h *WealthHandler) WebhookSePay(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
 		return
 	}
+	// Dashboard Webhooks identify the account by accountNumber rather than a
+	// Finora connection ID. Resolve only an already configured connection; do
+	// not let an incoming payload choose a user or account.
+	if payload.ConnectionID == "" && payload.AccountID != "" {
+		if connection, ok := h.bankConnectionByExternalID(payload.AccountID); ok {
+			payload.ConnectionID = string(connection.ID)
+		}
+	}
+	if payload.ConnectionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "SEPAY_WEBHOOK_FAIL", "message": "no mapped Finora connection for this SePay account"})
+		return
+	}
 
 	event, err := h.service.EnqueueSePayIncoming(payload)
 	if err != nil {
@@ -1339,6 +1484,191 @@ func (h *WealthHandler) WebhookSePay(c *gin.Context) {
 		"connectionId": event.ConnectionID,
 		"externalId":   event.ExternalID,
 	})
+}
+
+// BankHubIPN receives real-time debit/credit events from SePay Bank Hub. The
+// provider identifies the bank account, never a Finora user, so we first
+// resolve the account against the connection established by a Bank Hub event.
+func (h *WealthHandler) BankHubIPN(c *gin.Context) {
+	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20))
+	if err != nil || len(body) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_PAYLOAD", "message": "empty webhook payload"})
+		return
+	}
+	if err := h.verifyBankHubAPIKey(c.Request); err != nil {
+		metrics.Inc("sepay_webhook_failures_total")
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "SEPAY_BANKHUB_UNAUTHORIZED", "message": err.Error()})
+		return
+	}
+
+	payload, bankAccountXID, err := h.parseBankHubIPN(body)
+	if err != nil {
+		metrics.Inc("sepay_webhook_failures_total")
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_PAYLOAD", "message": err.Error()})
+		return
+	}
+	conn, ok := h.bankConnectionByExternalID(bankAccountXID)
+	if !ok {
+		metrics.Inc("sepay_unknown_bank_account_total")
+		quarantined, quarantineErr := h.store.QuarantineSePayEvent(domain.SePayUnmappedEvent{Provider: "sepay", BankAccountXID: bankAccountXID, TransactionID: payload.ExternalID, Payload: string(body), Status: "quarantined"})
+		if quarantineErr != nil {
+			metrics.Inc("sepay_webhook_failures_total")
+			c.JSON(http.StatusInternalServerError, gin.H{"code": "SEPAY_BANKHUB_IPN_FAIL", "message": "could not persist unmapped event"})
+			return
+		}
+		// Ack a durable, valid provider event even before the user finishes
+		// mapping it. This avoids provider retry storms; the record remains
+		// visible to operations for reconciliation.
+		c.JSON(http.StatusOK, gin.H{"success": true, "status": "quarantined", "eventId": quarantined.ID})
+		return
+	}
+	payload.ConnectionID = string(conn.ID)
+
+	event, err := h.service.EnqueueSePayIncoming(payload)
+	if err != nil {
+		metrics.Inc("sepay_webhook_failures_total")
+		c.JSON(http.StatusBadRequest, gin.H{"code": "SEPAY_BANKHUB_IPN_FAIL", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "eventId": event.ID, "eventState": event.State})
+}
+
+// BankHubEvent associates a completed Hosted Link with the resulting bank
+// account XID. It is deliberately separate from IPN: SePay documents these as
+// different delivery streams with different payloads.
+func (h *WealthHandler) BankHubEvent(c *gin.Context) {
+	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20))
+	if err != nil || len(body) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_PAYLOAD", "message": "empty webhook payload"})
+		return
+	}
+	if err := h.verifyBankHubAPIKey(c.Request); err != nil {
+		metrics.Inc("sepay_webhook_failures_total")
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "SEPAY_BANKHUB_UNAUTHORIZED", "message": err.Error()})
+		return
+	}
+
+	var event struct {
+		Event    string `json:"event"`
+		Metadata struct {
+			BankAccountXID string `json:"bank_account_xid"`
+			LinkTokenXID   string `json:"link_token_xid"`
+			BrandName      string `json:"brand_name"`
+			BankCode       string `json:"bank_code"`
+			AccountNumber  string `json:"account_number"`
+			SupportsIn     bool   `json:"supports_in"`
+			SupportsOut    bool   `json:"supports_out"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(body, &event); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+	if event.Event == "BANK_ACCOUNT_LINKED" && event.Metadata.BankAccountXID != "" && event.Metadata.LinkTokenXID != "" {
+		if userID, found := h.store.GetSePayLinkSessionUser(event.Metadata.LinkTokenXID); found {
+			masked := maskBankAccountNumber(event.Metadata.AccountNumber)
+			bankCode := strings.ToUpper(strings.TrimSpace(event.Metadata.BankCode))
+			_, pilotAllowed := h.pilotBanks[bankCode]
+			status := "linked"
+			if len(h.pilotBanks) == 0 || !pilotAllowed || !event.Metadata.SupportsIn || !event.Metadata.SupportsOut {
+				status = "unsupported"
+			}
+			_, err := h.store.UpsertSePayBankAccount(domain.SePayBankAccount{UserID: userID, BankAccountXID: event.Metadata.BankAccountXID, BankCode: bankCode, BankName: event.Metadata.BrandName, AccountNumberMasked: masked, SupportsIn: event.Metadata.SupportsIn, SupportsOut: event.Metadata.SupportsOut, Status: status})
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": "BANK_ACCOUNT_LINK_FAILED", "message": err.Error()})
+				return
+			}
+			_ = h.store.CompleteSePayLinkSession(event.Metadata.LinkTokenXID)
+			if profile, ok := h.store.GetSePayUserProfile(userID); ok {
+				profile.Status = "active"
+				profile.LinkedAt = time.Now().UTC()
+				_, _ = h.store.UpsertSePayUserProfile(*profile)
+			}
+		} else if conn, ok := h.bankConnectionByExternalID(event.Metadata.LinkTokenXID); ok {
+			_ = h.store.UpdateBankConnection(conn.ID, func(item *domain.BankConnection) {
+				item.ExternalID = event.Metadata.BankAccountXID
+				item.BankCode = event.Metadata.BrandName
+				item.Status = "connected"
+				item.SyncStatus = "idle"
+			})
+		} else {
+			c.JSON(http.StatusNotFound, gin.H{"code": "UNKNOWN_LINK_TOKEN", "message": "Bank Hub link token is not known"})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func maskBankAccountNumber(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "••••"
+	}
+	runes := []rune(value)
+	if len(runes) <= 4 {
+		return "••••" + value
+	}
+	return "•••• " + string(runes[len(runes)-4:])
+}
+
+func (h *WealthHandler) verifyBankHubAPIKey(req *http.Request) error {
+	if h.bankHubAPIKey == "" {
+		return fmt.Errorf("Bank Hub IPN API key is not configured")
+	}
+	got := strings.TrimSpace(req.Header.Get("Authorization"))
+	const prefix = "Apikey "
+	if !strings.HasPrefix(got, prefix) || subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(got, prefix)), []byte(h.bankHubAPIKey)) != 1 {
+		return fmt.Errorf("invalid Bank Hub API key")
+	}
+	return nil
+}
+
+func (h *WealthHandler) bankConnectionByExternalID(externalID string) (*domain.BankConnection, bool) {
+	key := strings.TrimSpace(externalID)
+	if key == "" {
+		return nil, false
+	}
+	for _, connection := range h.store.ListAllBankConnections() {
+		if connection.ExternalID == key {
+			copy := connection
+			return &copy, true
+		}
+	}
+	return nil, false
+}
+
+func (h *WealthHandler) parseBankHubIPN(body []byte) (service.SePayWebhookEvent, string, error) {
+	var payload struct {
+		TransactionDate string `json:"transaction_date"`
+		BankAccountXID  string `json:"bank_account_xid"`
+		Content         string `json:"content"`
+		TransferType    string `json:"transfer_type"`
+		Amount          any    `json:"amount"`
+		ReferenceCode   string `json:"reference_code"`
+		TransactionID   string `json:"transaction_id"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return service.SePayWebhookEvent{}, "", fmt.Errorf("invalid webhook json: %w", err)
+	}
+	direction := map[string]string{"credit": "in", "debit": "out"}[strings.ToLower(strings.TrimSpace(payload.TransferType))]
+	if direction == "" || payload.BankAccountXID == "" || payload.TransactionID == "" {
+		return service.SePayWebhookEvent{}, "", fmt.Errorf("bank_account_xid, transaction_id and credit/debit transfer_type are required")
+	}
+	amount := formatAmountLikeString(payload.Amount)
+	if amount == "" {
+		return service.SePayWebhookEvent{}, "", fmt.Errorf("amount is required")
+	}
+	return service.SePayWebhookEvent{
+		ProviderAccountID: payload.BankAccountXID,
+		Direction:         direction,
+		Amount:            amount,
+		Currency:          "VND",
+		Description:       payload.Content,
+		Content:           payload.Content,
+		Reference:         payload.ReferenceCode,
+		ExternalID:        payload.TransactionID,
+		OccurredAt:        payload.TransactionDate,
+	}, payload.BankAccountXID, nil
 }
 
 func (h *WealthHandler) verifySePayWebhook(body []byte, req *http.Request) error {
@@ -1364,12 +1694,14 @@ func (h *WealthHandler) verifySePayWebhook(body []byte, req *http.Request) error
 	}
 
 	expected := signSePayPayload(secret, timestamp, body)
-	expectedHex := make([]byte, hex.DecodedLen(len(expected)))
-	_ = hex.Encode(expectedHex, expected)
 
 	var signatureRaw string
 	for _, p := range strings.Split(signatureHeader, ",") {
 		part := strings.TrimSpace(p)
+		if strings.HasPrefix(strings.ToLower(part), "sha256=") {
+			signatureRaw = part[len("sha256="):]
+			break
+		}
 		if strings.HasPrefix(strings.ToLower(part), "v1=") {
 			signatureRaw = strings.TrimPrefix(part, "v1=")
 			break
@@ -1404,37 +1736,44 @@ func signSePayPayload(secret, timestamp string, body []byte) []byte {
 
 func parseSePayWebhookPayload(body []byte) (service.SePayWebhookEvent, error) {
 	var payload struct {
-		ConnectionID string `json:"connectionId"`
-		AccountID    string `json:"accountId"`
-		Direction    string `json:"direction"`
-		TransferType string `json:"transferType"`
-		Amount       any    `json:"amount"`
-		Currency     string `json:"currency"`
-		Counterparty string `json:"counterparty"`
-		Description  string `json:"description"`
-		Reference    string `json:"reference"`
-		Content      string `json:"content"`
-		ExternalID   string `json:"externalTransactionId"`
-		OccurredAt   string `json:"occurredAt"`
-		EventID      string `json:"eventId"`
-		ID           string `json:"id"`
-		Code         string `json:"code"`
+		ConnectionID    string `json:"connectionId"`
+		AccountID       string `json:"accountId"`
+		Direction       string `json:"direction"`
+		TransferType    string `json:"transferType"`
+		Amount          any    `json:"amount"`
+		TransferAmount  any    `json:"transferAmount"`
+		Currency        string `json:"currency"`
+		Counterparty    string `json:"counterparty"`
+		Description     string `json:"description"`
+		Reference       string `json:"reference"`
+		Content         string `json:"content"`
+		ExternalID      string `json:"externalTransactionId"`
+		OccurredAt      string `json:"occurredAt"`
+		TransactionDate string `json:"transactionDate"`
+		AccountNumber   string `json:"accountNumber"`
+		ReferenceCode   string `json:"referenceCode"`
+		EventID         string `json:"eventId"`
+		ID              any    `json:"id"`
+		Code            string `json:"code"`
 	}
 	if err := json.Unmarshal(body, &payload); err == nil && (payload.Direction != "" || payload.TransferType != "" || payload.ConnectionID != "") {
 		ev := service.SePayWebhookEvent{
 			ConnectionID: payload.ConnectionID,
-			AccountID:    payload.AccountID,
+			AccountID:    firstNonEmpty(payload.AccountID, payload.AccountNumber),
 			Direction:    firstNonEmpty(payload.Direction, payload.TransferType),
 			Currency:     firstNonEmpty(payload.Currency, "VND"),
 			Counterparty: payload.Counterparty,
 			Description:  firstNonEmpty(payload.Description, payload.Content),
-			Reference:    payload.Reference,
+			Reference:    firstNonEmpty(payload.Reference, payload.ReferenceCode),
 			Content:      payload.Content,
-			ExternalID:   firstNonEmpty(payload.ExternalID, payload.EventID, payload.ID, payload.Code),
-			OccurredAt:   payload.OccurredAt,
+			ExternalID:   firstNonEmpty(payload.ExternalID, payload.EventID, formatAmountLikeString(payload.ID), payload.Code),
+			OccurredAt:   firstNonEmpty(payload.OccurredAt, payload.TransactionDate),
 		}
 
 		amount := formatAmountLikeString(payload.Amount)
+		if amount == "" {
+			amount = formatAmountLikeString(payload.TransferAmount)
+		}
 		if amount != "" {
 			ev.Amount = amount
 		}
@@ -1509,7 +1848,7 @@ func formatAmountLikeString(v any) string {
 }
 
 func (h *WealthHandler) ListBankFeedTransactions(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	state := c.Query("state")
 	if state == "" {
 		state = c.Query("postingState")
@@ -1554,7 +1893,7 @@ func (h *WealthHandler) ApproveBankFeed(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "bank feed transaction not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, feed.WorkspaceID) {
+	if !h.requireUserMatch(c, feed.UserID) {
 		return
 	}
 	posted, err := h.service.ApproveBankFeed(domain.ID(id), *feed)
@@ -1563,7 +1902,7 @@ func (h *WealthHandler) ApproveBankFeed(c *gin.Context) {
 		return
 	}
 	h.recordAudit(c, "", "bank_feed_transaction", domain.ID(id), feed, map[string]any{
-		"status":             string("posted"),
+		"status":              string("posted"),
 		"postedTransactionID": string(posted.ID),
 	}, "success", "")
 	c.JSON(http.StatusOK, posted)
@@ -1579,7 +1918,7 @@ func (h *WealthHandler) ReclassifyBankFeed(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "bank feed transaction not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, feed.WorkspaceID) {
+	if !h.requireUserMatch(c, feed.UserID) {
 		return
 	}
 	var body dto.BankFeedActionRequest
@@ -1615,7 +1954,7 @@ func (h *WealthHandler) IgnoreBankFeed(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "bank feed transaction not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, feed.WorkspaceID) {
+	if !h.requireUserMatch(c, feed.UserID) {
 		return
 	}
 	if err := h.store.UpdateFeedState(domain.ID(id), domain.PostingStateIgnored, "ignored_by_user"); err != nil {
@@ -1628,7 +1967,7 @@ func (h *WealthHandler) IgnoreBankFeed(c *gin.Context) {
 }
 
 func (h *WealthHandler) ListAutomationRules(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	c.JSON(http.StatusOK, h.store.ListAutomationRules(domain.ID(wsID)))
 }
 
@@ -1642,7 +1981,7 @@ func (h *WealthHandler) CreateAutomationRule(c *gin.Context) {
 		return
 	}
 	rule, err := h.store.CreateAutomationRule(domain.AutomationRule{
-		WorkspaceID:      domain.ID(h.requireWorkspaceID(c)),
+		UserID:           domain.ID(h.requireUserID(c)),
 		AccountID:        domain.ID(body.AccountID),
 		Name:             body.Name,
 		Predicate:        body.Predicate,
@@ -1691,7 +2030,7 @@ func (h *WealthHandler) ModifyAutomationRule(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "rule not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, existing.WorkspaceID) {
+	if !h.requireUserMatch(c, existing.UserID) {
 		return
 	}
 	if c.Request.Method == http.MethodDelete {
@@ -1755,7 +2094,7 @@ func (h *WealthHandler) ModifyAutomationRule(c *gin.Context) {
 }
 
 func (h *WealthHandler) PreviewAutomationRule(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	var payload bankFeedPreviewRequest
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		sample := h.store.ListBankFeed(domain.ID(wsID))
@@ -1775,7 +2114,7 @@ func (h *WealthHandler) PreviewAutomationRule(c *gin.Context) {
 			Reference:    row.Reference,
 			CounterParty: row.CounterParty,
 			AccountID:    rowAccountID(row.AccountID),
-			WorkspaceID:  domain.ID(wsID),
+			UserID:       domain.ID(wsID),
 		})
 		if len(samples) >= limit {
 			break
@@ -1862,12 +2201,12 @@ func (h *WealthHandler) CreatePaymentRequest(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "loan not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, loan.WorkspaceID) {
+	if !h.requireUserMatch(c, loan.UserID) {
 		return
 	}
 	var body loanPaymentRequestPayload
 	_ = c.ShouldBindJSON(&body)
-	created, err := h.service.CreateLoanPaymentRequest(loan.WorkspaceID, domain.ID(loanID), service.PaymentRequestCreate{
+	created, err := h.service.CreateLoanPaymentRequest(loan.UserID, domain.ID(loanID), service.PaymentRequestCreate{
 		Amount:    body.Amount,
 		Currency:  body.Currency,
 		ExpiresAt: body.ExpiresAt,
@@ -1904,7 +2243,7 @@ func (h *WealthHandler) TelegramWebhook(c *gin.Context) {
 		return
 	}
 
-	action, commandID, approvalID, text, userID, workspaceID := h.extractTelegramCommandAndIdentity(c, payload)
+	action, commandID, approvalID, text, userID, _ := h.extractTelegramCommandAndIdentity(c, payload)
 	if action != "" && commandID != "" {
 		if commandID == "" || approvalID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "invalid callback payload"})
@@ -1915,12 +2254,12 @@ func (h *WealthHandler) TelegramWebhook(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "command not found"})
 			return
 		}
-		if workspaceID == "" || strings.TrimSpace(string(cmd.WorkspaceID)) != workspaceID {
-			c.JSON(http.StatusForbidden, gin.H{"code": "WORKSPACE_MISMATCH", "message": "command does not belong to workspace"})
+		if userID == "" || strings.TrimSpace(string(cmd.UserID)) != userID {
+			c.JSON(http.StatusForbidden, gin.H{"code": "USER_MISMATCH", "message": "command does not belong to user"})
 			return
 		}
 		if userID != "" && string(cmd.UserID) != "" && userID != string(cmd.UserID) {
-			c.JSON(http.StatusForbidden, gin.H{"code": "WORKSPACE_MISMATCH", "message": "callback actor does not match command owner"})
+			c.JSON(http.StatusForbidden, gin.H{"code": "USER_MISMATCH", "message": "callback actor does not match command owner"})
 			return
 		}
 		switch action {
@@ -1969,8 +2308,8 @@ func (h *WealthHandler) TelegramWebhook(c *gin.Context) {
 		return
 	}
 
-	if workspaceID == "" {
-		c.JSON(http.StatusForbidden, gin.H{"code": "WORKSPACE_LINK_REQUIRED", "message": "telegram chat is not linked to a workspace"})
+	if userID == "" {
+		c.JSON(http.StatusForbidden, gin.H{"code": "USER_LINK_REQUIRED", "message": "telegram chat is not linked to a user"})
 		return
 	}
 	uid := strings.TrimSpace(userID)
@@ -1981,11 +2320,10 @@ func (h *WealthHandler) TelegramWebhook(c *gin.Context) {
 	status := h.initialStatusForAssistantIntent(intent)
 
 	command, err := h.store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: domain.ID(workspaceID),
-		UserID:      domain.ID(uid),
-		Command:     text,
-		Plan:        intent,
-		Status:      status,
+		UserID:  domain.ID(userID),
+		Command: text,
+		Plan:    intent,
+		Status:  status,
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
@@ -1993,9 +2331,9 @@ func (h *WealthHandler) TelegramWebhook(c *gin.Context) {
 	}
 
 	out := gin.H{
-		"status":      "received",
-		"commandId":   command.ID,
-		"workspaceId": workspaceID,
+		"status":    "received",
+		"commandId": command.ID,
+		"userId":    userID,
 	}
 	if command.ApprovalID != "" {
 		out["approvalId"] = command.ApprovalID
@@ -2013,16 +2351,14 @@ func (h *WealthHandler) CreateAssistantCommand(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
 		return
 	}
-	uid := domain.ID(currentUser(c))
-	wsID := domain.ID(h.requireWorkspaceID(c))
+	wsID := domain.ID(h.requireUserID(c))
 	intent := h.classifyAssistantIntent(body.Command, body.Plan)
 	status := h.initialStatusForAssistantIntent(intent)
 	command, err := h.store.CreateAssistantCommand(domain.AssistantCommand{
-		WorkspaceID: wsID,
-		UserID:      uid,
-		Command:     body.Command,
-		Plan:        intent,
-		Status:      status,
+		UserID:  wsID,
+		Command: body.Command,
+		Plan:    intent,
+		Status:  status,
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
@@ -2033,15 +2369,15 @@ func (h *WealthHandler) CreateAssistantCommand(c *gin.Context) {
 }
 
 func (h *WealthHandler) ListAssistantCommands(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	commands := h.store.ListAssistantCommands(domain.ID(wsID))
 	c.JSON(http.StatusOK, commands)
 }
 
 func (h *WealthHandler) ListAuditLogs(c *gin.Context) {
-	wsID := h.requireWorkspaceID(c)
+	wsID := h.requireUserID(c)
 	if wsID == "" {
-		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing workspace"})
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing user"})
 		return
 	}
 	logs := h.store.ListAuditLogs(domain.ID(wsID))
@@ -2054,7 +2390,7 @@ func (h *WealthHandler) GetAssistantCommand(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "command not found"})
 		return
 	}
-	if !h.requireWorkspaceMatch(c, cmd.WorkspaceID) {
+	if !h.requireUserMatch(c, cmd.UserID) {
 		return
 	}
 	c.JSON(http.StatusOK, cmd)
@@ -2076,7 +2412,7 @@ func (h *WealthHandler) ApproveCommand(c *gin.Context) {
 	cmdID := domain.ID(c.Param("id"))
 	cmd, ok := h.store.GetAssistantCommand(cmdID)
 	if ok {
-		if !h.requireWorkspaceMatch(c, cmd.WorkspaceID) {
+		if !h.requireUserMatch(c, cmd.UserID) {
 			return
 		}
 	} else {
@@ -2114,7 +2450,7 @@ func (h *WealthHandler) CancelCommand(c *gin.Context) {
 	cmdID := domain.ID(c.Param("id"))
 	cmd, ok := h.store.GetAssistantCommand(cmdID)
 	if ok {
-		if !h.requireWorkspaceMatch(c, cmd.WorkspaceID) {
+		if !h.requireUserMatch(c, cmd.UserID) {
 			return
 		}
 	} else {
@@ -2380,21 +2716,21 @@ func (h *WealthHandler) validateTelegramWebhookSecret(c *gin.Context) bool {
 }
 
 func (h *WealthHandler) extractTelegramCommandAndIdentity(c *gin.Context, payload telegramWebhookPayload) (string, string, string, string, string, string) {
-	workspaceID := strings.TrimSpace(c.Query("workspaceId"))
-	if workspaceID == "" {
-		workspaceID = strings.TrimSpace(c.GetHeader("x-workspace-id"))
+	userID := strings.TrimSpace(c.Query("userId"))
+	if userID == "" {
+		userID = strings.TrimSpace(c.GetHeader("x-user-id"))
 	}
-	if workspaceID == "" {
-		workspaceID = strings.TrimSpace(payload.WorkspaceID)
+	if userID == "" {
+		userID = strings.TrimSpace(payload.UserID)
 	}
 
 	var (
-		action    string
-		cmdID     string
-		apprID    string
-		text      string
-		userID    string
-		sourceMsg *telegramWebhookMessage
+		action         string
+		cmdID          string
+		apprID         string
+		text           string
+		telegramUserID string
+		sourceMsg      *telegramWebhookMessage
 	)
 
 	switch {
@@ -2405,7 +2741,7 @@ func (h *WealthHandler) extractTelegramCommandAndIdentity(c *gin.Context, payloa
 			text = payloadText
 		}
 		if payload.CallbackQuery.From != nil {
-			userID = strconv.FormatInt(payload.CallbackQuery.From.ID, 10)
+			telegramUserID = strconv.FormatInt(payload.CallbackQuery.From.ID, 10)
 		}
 		sourceMsg = payload.CallbackQuery.Message
 	case payload.Message != nil:
@@ -2421,15 +2757,15 @@ func (h *WealthHandler) extractTelegramCommandAndIdentity(c *gin.Context, payloa
 
 	if text == "" {
 		if action != "" {
-			return action, cmdID, apprID, "", userID, workspaceID
+			return action, cmdID, apprID, "", userID, telegramUserID
 		}
-		return "", "", "", "", userID, workspaceID
+		return "", "", "", "", userID, telegramUserID
 	}
 
-	if userID == "" && sourceMsg != nil && sourceMsg.From != nil {
-		userID = strconv.FormatInt(sourceMsg.From.ID, 10)
+	if telegramUserID == "" && sourceMsg != nil && sourceMsg.From != nil {
+		telegramUserID = strconv.FormatInt(sourceMsg.From.ID, 10)
 	}
-	return action, cmdID, apprID, text, userID, workspaceID
+	return action, cmdID, apprID, text, userID, telegramUserID
 }
 
 func parseTelegramCallbackApproval(data string) (string, string, string) {
@@ -2448,48 +2784,44 @@ func (h *WealthHandler) NotFound(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "route not found"})
 }
 
-func (h *WealthHandler) requireWorkspaceID(c *gin.Context) string {
-	if v, ok := c.Get("workspace_id"); ok {
+func (h *WealthHandler) requireUserID(c *gin.Context) string {
+	if v, ok := c.Get("user_id"); ok {
 		if ws, ok2 := v.(string); ok2 && strings.TrimSpace(ws) != "" {
 			return strings.TrimSpace(ws)
 		}
 	}
 
-	headerWs := strings.TrimSpace(c.GetHeader("x-workspace-id"))
+	headerWs := strings.TrimSpace(c.GetHeader("x-user-id"))
 	if headerWs != "" {
 		return headerWs
 	}
-	workspaceID := c.Query("workspaceId")
-	if workspaceID != "" {
-		return workspaceID
+	userID := c.Query("userId")
+	if userID != "" {
+		return userID
 	}
 	uid := currentUser(c)
 	if uid == "" {
 		return ""
 	}
-	workspaces := h.store.ListWorkspaces(domain.ID(uid))
-	if len(workspaces) > 0 {
-		return string(workspaces[0].ID)
-	}
-	return ""
+	return uid
 }
 
-func (h *WealthHandler) requireWorkspaceOrReject(c *gin.Context) (string, bool) {
-	ws := h.requireWorkspaceID(c)
+func (h *WealthHandler) requireUserOrReject(c *gin.Context) (string, bool) {
+	ws := h.requireUserID(c)
 	if ws == "" {
-		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing workspace context"})
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "missing user context"})
 		return "", false
 	}
 	return ws, true
 }
 
-func (h *WealthHandler) requireWorkspaceMatch(c *gin.Context, resourceWorkspaceID domain.ID) bool {
-	wsID, ok := h.requireWorkspaceOrReject(c)
+func (h *WealthHandler) requireUserMatch(c *gin.Context, resourceUserID domain.ID) bool {
+	wsID, ok := h.requireUserOrReject(c)
 	if !ok {
 		return false
 	}
-	if strings.TrimSpace(string(resourceWorkspaceID)) != wsID {
-		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "workspace mismatch"})
+	if strings.TrimSpace(string(resourceUserID)) != wsID {
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "user mismatch"})
 		return false
 	}
 	return true
@@ -2504,7 +2836,7 @@ func currentUser(c *gin.Context) string {
 	return ""
 }
 
-func defaultWorkspaceName(name string) string {
+func defaultUserName(name string) string {
 	if strings.TrimSpace(name) == "" {
 		return "Tài khoản cá nhân"
 	}
@@ -2601,7 +2933,7 @@ func (h *WealthHandler) recordAudit(c *gin.Context, action string, targetType st
 		return
 	}
 
-	wsID := h.resolveAuditWorkspaceID(c, targetID)
+	wsID := h.resolveAuditUserID(c, targetID)
 	if wsID == "" {
 		return
 	}
@@ -2638,9 +2970,9 @@ func (h *WealthHandler) recordAudit(c *gin.Context, action string, targetType st
 	}
 
 	entry := domain.AuditLog{
-		WorkspaceID:    wsID,
+		UserID:         wsID,
 		ActorID:        domain.ID(actorID),
-		ActorRole:      h.workspaceRole(c),
+		ActorRole:      h.userRole(c),
 		Action:         strings.TrimSpace(action),
 		TargetType:     strings.TrimSpace(targetType),
 		TargetID:       targetID,
@@ -2660,27 +2992,24 @@ func (h *WealthHandler) recordAudit(c *gin.Context, action string, targetType st
 	_, _ = h.store.CreateAuditLog(entry)
 }
 
-func (h *WealthHandler) resolveAuditWorkspaceID(c *gin.Context, targetID domain.ID) domain.ID {
-	if explicit, ok := c.Get("workspace_id"); ok {
+func (h *WealthHandler) resolveAuditUserID(c *gin.Context, targetID domain.ID) domain.ID {
+	if explicit, ok := c.Get("user_id"); ok {
 		if raw, ok := explicit.(string); ok && strings.TrimSpace(raw) != "" {
 			return domain.ID(strings.TrimSpace(raw))
 		}
 	}
-	if explicit := strings.TrimSpace(c.GetHeader("x-workspace-id")); explicit != "" {
+	if explicit := strings.TrimSpace(c.GetHeader("x-user-id")); explicit != "" {
 		return domain.ID(explicit)
 	}
-	if explicit := strings.TrimSpace(c.Query("workspaceId")); explicit != "" {
+	if explicit := strings.TrimSpace(c.Query("userId")); explicit != "" {
 		return domain.ID(explicit)
 	}
 	if targetID != "" {
-		// Keep best effort resilience if handlers log object IDs that are guaranteed to belong to the workspace.
+		// Keep best effort resilience if handlers log object IDs that are guaranteed to belong to the user.
 		// Lookup is best effort and currently unsupported by interface for all target types.
 	}
 	if uid := strings.TrimSpace(currentUser(c)); uid != "" && h != nil && h.store != nil {
-		list := h.store.ListWorkspaces(domain.ID(uid))
-		if len(list) > 0 {
-			return list[0].ID
-		}
+		return domain.ID(uid)
 	}
 	return ""
 }
@@ -2731,11 +3060,11 @@ func (h *WealthHandler) normalizeAuditAction(method, path, targetType, explicit 
 	}
 }
 
-func (h *WealthHandler) workspaceRole(c *gin.Context) string {
+func (h *WealthHandler) userRole(c *gin.Context) string {
 	if c == nil {
 		return ""
 	}
-	if raw, ok := c.Get("workspace_role"); ok {
+	if raw, ok := c.Get("user_role"); ok {
 		if role, ok := raw.(string); ok {
 			return strings.TrimSpace(role)
 		}
@@ -2849,3 +3178,368 @@ func (h *WealthHandler) UpdateUserSettings(c *gin.Context) {
 	})
 }
 
+// GetMySePay exposes only the authenticated user's provider state. Shared
+// user mappings are included as references, never as another user's
+// bank connection data.
+func (h *WealthHandler) GetMySePay(c *gin.Context) {
+	userID := domain.ID(currentUser(c))
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
+		return
+	}
+	profile, _ := h.store.GetSePayUserProfile(userID)
+	accounts := h.store.ListSePayBankAccounts(userID)
+	type accountView struct {
+		domain.SePayBankAccount
+		Mapping *domain.BankAccountMapping `json:"mapping,omitempty"`
+	}
+	items := make([]accountView, 0, len(accounts))
+	for _, account := range accounts {
+		mapping, _ := h.store.GetBankAccountMapping(account.ID)
+		items = append(items, accountView{SePayBankAccount: account, Mapping: mapping})
+	}
+	c.JSON(http.StatusOK, gin.H{"profile": profile, "bankAccounts": items, "sharingWarning": "Giao dịch được chia sẻ với thành viên có quyền trong user đã map."})
+}
+
+func (h *WealthHandler) CreateMySePayLinkSession(c *gin.Context) {
+	userID := domain.ID(currentUser(c))
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
+		return
+	}
+	if h.bankHub == nil || !h.bankHub.Configured() || h.bankHubCompany == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": "SEPAY_BANKHUB_UNAVAILABLE", "message": "Bank Hub is not configured"})
+		return
+	}
+	companyXID := h.bankHubCompany
+	if profile, ok := h.store.GetSePayUserProfile(userID); ok && strings.TrimSpace(profile.CompanyXID) != "" {
+		companyXID = profile.CompanyXID
+	}
+	link, err := h.bankHub.CreateLink(c.Request.Context(), companyXID, "")
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"code": "SEPAY_BANKHUB_UNAVAILABLE", "message": err.Error()})
+		return
+	}
+	expiresAt, _ := parseDateTime(link.ExpiresAt)
+	if err := h.store.CreateSePayLinkSession(link.XID, userID, expiresAt); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "SEPAY_LINK_SESSION_FAILED", "message": err.Error()})
+		return
+	}
+	_, _ = h.store.UpsertSePayUserProfile(domain.SePayUserProfile{UserID: userID, CompanyXID: companyXID, Status: "link_pending"})
+	c.JSON(http.StatusCreated, gin.H{"hosted_link_url": link.HostedLinkURL, "link_session_xid": link.XID, "expires_at": link.ExpiresAt})
+}
+
+func (h *WealthHandler) ListMySePayBankAccounts(c *gin.Context) { h.GetMySePay(c) }
+
+// SyncMySePayBankAccounts is invoked only after the Hosted Link web view
+// emits its completion event. It never trusts a client-provided provider XID;
+// it resolves the account from Bank Hub with the server bearer token and saves
+// only exact account-number matches for this user's company profile.
+func (h *WealthHandler) SyncMySePayBankAccounts(c *gin.Context) {
+	userID := domain.ID(currentUser(c))
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
+		return
+	}
+	if h.bankHub == nil || !h.bankHub.Configured() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": "SEPAY_BANKHUB_UNAVAILABLE"})
+		return
+	}
+	var body dto.SePayBankAccountSyncRequest
+	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.AccountNumber) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": "accountNumber is required"})
+		return
+	}
+	profile, ok := h.store.GetSePayUserProfile(userID)
+	if !ok || strings.TrimSpace(profile.CompanyXID) == "" {
+		c.JSON(http.StatusConflict, gin.H{"code": "SEPAY_PROFILE_NOT_FOUND"})
+		return
+	}
+	accounts, err := h.bankHub.ListBankAccounts(c.Request.Context(), profile.CompanyXID, body.AccountNumber)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"code": "SEPAY_BANKHUB_UNAVAILABLE", "message": err.Error()})
+		return
+	}
+	matched := make([]domain.SePayBankAccount, 0, len(accounts))
+	want := normalizeBankAccountNumber(body.AccountNumber)
+	for _, providerAccount := range accounts {
+		if providerAccount.XID == "" || normalizeBankAccountNumber(providerAccount.AccountNumber) != want {
+			continue
+		}
+		bankCode := strings.ToUpper(strings.TrimSpace(providerAccount.BankCode))
+		_, pilotAllowed := h.pilotBanks[bankCode]
+		connected, active := providerFlag(providerAccount.BankAPIConnected), providerFlag(providerAccount.Active)
+		supports := connected && active && len(h.pilotBanks) > 0 && pilotAllowed
+		status := "unsupported"
+		if supports {
+			status = "linked"
+		}
+		item, upsertErr := h.store.UpsertSePayBankAccount(domain.SePayBankAccount{UserID: userID, BankAccountXID: providerAccount.XID, BankCode: bankCode, BankName: providerAccount.BrandName, AccountNumberMasked: maskBankAccountNumber(providerAccount.AccountNumber), SupportsIn: supports, SupportsOut: supports, Status: status})
+		if upsertErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "BANK_ACCOUNT_SYNC_FAILED", "message": upsertErr.Error()})
+			return
+		}
+		matched = append(matched, item)
+	}
+	if len(matched) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"code": "BANK_ACCOUNT_NOT_FOUND", "message": "SePay has not finished linking this account yet"})
+		return
+	}
+	profile.Status, profile.LinkedAt, profile.LastSyncedAt = "active", time.Now().UTC(), time.Now().UTC()
+	_, _ = h.store.UpsertSePayUserProfile(*profile)
+	c.JSON(http.StatusOK, gin.H{"bankAccounts": matched})
+}
+
+func normalizeBankAccountNumber(value string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, value)
+}
+
+func providerFlag(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true") || strings.EqualFold(strings.TrimSpace(v), "active") || strings.TrimSpace(v) == "1"
+	case float64:
+		return v != 0
+	default:
+		return false
+	}
+}
+
+func (h *WealthHandler) MapMySePayBankAccount(c *gin.Context) {
+	userID := domain.ID(currentUser(c))
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
+		return
+	}
+	bankAccount, ok := h.store.GetSePayBankAccount(domain.ID(c.Param("id")))
+	if !ok || bankAccount.UserID != userID {
+		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "bank account not found"})
+		return
+	}
+	if bankAccount.Status != "linked" || !bankAccount.SupportsIn || !bankAccount.SupportsOut {
+		c.JSON(http.StatusConflict, gin.H{"code": "BANK_ACCOUNT_UNSUPPORTED", "message": "bank must be enabled for the two-way pilot before mapping"})
+		return
+	}
+	var body dto.SePayBankAccountMapRequest
+	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.AccountID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": "accountId is required"})
+		return
+	}
+	account, ok := h.store.GetAccount(domain.ID(body.AccountID))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "Finora account not found"})
+		return
+	}
+	if account.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "editor or owner role is required for this user"})
+		return
+	}
+	mapping, err := h.store.UpsertBankAccountMapping(domain.BankAccountMapping{SePayBankAccountID: bankAccount.ID, UserID: account.UserID, AccountID: account.ID, Status: "active"})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	// Compatibility bridge for the durable ingress worker. It is never exposed
+	// as a user connection; the new mapping remains the ownership authority.
+	found := false
+	for _, conn := range h.store.ListBankConnections(account.UserID) {
+		if conn.Provider == "sepay" && conn.ExternalID == bankAccount.BankAccountXID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		_, _ = h.store.CreateBankConnection(domain.BankConnection{UserID: account.UserID, Provider: "sepay", ExternalID: bankAccount.BankAccountXID, Status: "connected", Scope: "read_transactions", SyncStatus: "idle"})
+	}
+	h.recordAudit(c, "", "sepay_bank_account_mapping", mapping.ID, nil, mapping, "success", "")
+	c.JSON(http.StatusOK, mapping)
+}
+
+func (h *WealthHandler) UnlinkMySePayBankAccount(c *gin.Context) {
+	userID := domain.ID(currentUser(c))
+	account, ok := h.store.GetSePayBankAccount(domain.ID(c.Param("id")))
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
+		return
+	}
+	if !ok || account.UserID != userID {
+		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND"})
+		return
+	}
+	if mapping, ok := h.store.GetBankAccountMapping(account.ID); ok {
+		_ = h.store.DeactivateBankAccountMapping(account.ID)
+		h.recordAudit(c, "", "sepay_bank_account_mapping", mapping.ID, mapping, map[string]string{"status": "inactive"}, "success", "")
+	}
+	_ = h.store.SetSePayBankAccountStatus(account.ID, "unlinked")
+	c.JSON(http.StatusOK, gin.H{"status": "unlinked", "bankAccountId": account.ID})
+}
+
+func (h *WealthHandler) myMappedFeed(userID domain.ID) map[domain.ID]domain.BankAccountMapping {
+	allowed := map[domain.ID]domain.BankAccountMapping{}
+	for _, bankAccount := range h.store.ListSePayBankAccounts(userID) {
+		mapping, ok := h.store.GetBankAccountMapping(bankAccount.ID)
+		if !ok || mapping.UserID != userID || mapping.Status != "active" {
+			continue
+		}
+		for _, conn := range h.store.ListBankConnections(mapping.UserID) {
+			if conn.Provider != "sepay" || conn.ExternalID != bankAccount.BankAccountXID {
+				continue
+			}
+			for _, feed := range h.store.ListBankFeed(mapping.UserID) {
+				if feed.ConnectionID == conn.ID {
+					allowed[feed.ID] = *mapping
+				}
+			}
+		}
+	}
+	return allowed
+}
+
+func (h *WealthHandler) ListMyBankFeed(c *gin.Context) {
+	userID := domain.ID(currentUser(c))
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
+		return
+	}
+	state := strings.TrimSpace(c.DefaultQuery("state", "needs_review"))
+	stateMap := map[string]domain.TransactionPostingState{"needs_review": domain.PostingStateReview, "confirmed": domain.PostingStatePosted, "ignored": domain.PostingStateIgnored, "ai_tagged": domain.PostingStateReview}
+	if _, ok := stateMap[state]; !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "invalid state"})
+		return
+	}
+	allowed := h.myMappedFeed(userID)
+	type feedView struct {
+		domain.BankFeedTransaction
+		Suggestions []domain.TransactionSuggestion `json:"suggestions"`
+		Mapping     domain.BankAccountMapping      `json:"mapping"`
+	}
+	items := []feedView{}
+	for feedID, mapping := range allowed {
+		feed, ok := h.store.GetBankFeed(feedID)
+		if !ok || feed.PostingState != stateMap[state] {
+			continue
+		}
+		suggestions := h.store.ListTransactionSuggestions(feed.ID)
+		if state == "ai_tagged" && len(suggestions) == 0 {
+			continue
+		}
+		items = append(items, feedView{BankFeedTransaction: *feed, Suggestions: suggestions, Mapping: mapping})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].OccurredAt.After(items[j].OccurredAt) })
+	c.JSON(http.StatusOK, gin.H{"items": items, "state": state})
+}
+
+func (h *WealthHandler) getMyFeed(c *gin.Context) (*domain.BankFeedTransaction, domain.BankAccountMapping, domain.ID, bool) {
+	userID := domain.ID(currentUser(c))
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
+		return nil, domain.BankAccountMapping{}, "", false
+	}
+	feed, ok := h.store.GetBankFeed(domain.ID(c.Param("id")))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "bank feed not found"})
+		return nil, domain.BankAccountMapping{}, "", false
+	}
+	mapping, ok := h.myMappedFeed(userID)[feed.ID]
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN"})
+		return nil, domain.BankAccountMapping{}, "", false
+	}
+	if mapping.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "user editor or owner role is required"})
+		return nil, domain.BankAccountMapping{}, "", false
+	}
+	return feed, mapping, userID, true
+}
+
+func (h *WealthHandler) ConfirmMyBankFeed(c *gin.Context) { h.postMyBankFeed(c, false) }
+func (h *WealthHandler) CorrectMyBankFeed(c *gin.Context) { h.postMyBankFeed(c, true) }
+
+func (h *WealthHandler) postMyBankFeed(c *gin.Context, correct bool) {
+	feed, mapping, userID, ok := h.getMyFeed(c)
+	if !ok {
+		return
+	}
+	if feed.PostingState != domain.PostingStateReview {
+		c.JSON(http.StatusConflict, gin.H{"code": "INVALID_STATE", "message": "bank feed is not awaiting review"})
+		return
+	}
+	request := dto.BankFeedCorrectRequest{}
+	if correct {
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+			return
+		}
+	}
+	accountID := mapping.AccountID
+	if correct && strings.TrimSpace(request.AccountID) != "" {
+		accountID = domain.ID(request.AccountID)
+	}
+	account, exists := h.store.GetAccount(accountID)
+	if !exists || account.UserID != mapping.UserID {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_ACCOUNT", "message": "account must belong to mapped user"})
+		return
+	}
+	typeValue := domain.TransactionTypeExpense
+	if strings.EqualFold(feed.Direction, "in") {
+		typeValue = domain.TransactionTypeIncome
+	}
+	if correct && request.Type != "" {
+		typeValue = domain.TransactionType(request.Type)
+	}
+	if typeValue != domain.TransactionTypeIncome && typeValue != domain.TransactionTypeExpense {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_TYPE", "message": "only income or expense is supported"})
+		return
+	}
+	name := feed.Description
+	if correct && strings.TrimSpace(request.Name) != "" {
+		name = request.Name
+	}
+	categoryID := domain.ID("")
+	if correct {
+		categoryID = domain.ID(request.CategoryID)
+	}
+	transaction, err := h.service.CreateTransaction(domain.Transaction{UserID: mapping.UserID, AccountID: accountID, PortfolioID: account.PortfolioID, CategoryID: categoryID, Name: name, Type: typeValue, Amount: feed.Amount, Currency: feed.Currency, Note: request.Note, OccurredAt: feed.OccurredAt, Status: domain.TransactionStatusPosted, Source: "sepay_bank_feed"})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	h.store.LinkBankFeedPosting(feed.ID, transaction.ID)
+	action := "confirmed"
+	if correct {
+		action = "corrected"
+		metrics.Inc("sepay_ai_suggestions_corrected_total")
+	}
+	if request.RememberChoice {
+		metrics.Inc("sepay_user_confirmed_rule_total")
+	}
+	_, _ = h.store.CreateClassificationFeedback(domain.ClassificationFeedback{BankFeedTransactionID: feed.ID, UserID: userID, Action: action, Name: name, CategoryID: categoryID, AccountID: accountID, TransactionType: string(typeValue), Note: request.Note, RememberChoice: request.RememberChoice})
+	h.recordAudit(c, "", "bank_feed_transaction", feed.ID, feed, map[string]any{"postedTransactionId": transaction.ID, "action": action}, "success", "")
+	c.JSON(http.StatusOK, gin.H{"transaction": transaction, "feedId": feed.ID, "status": "confirmed"})
+}
+
+func (h *WealthHandler) IgnoreMyBankFeed(c *gin.Context) {
+	feed, _, userID, ok := h.getMyFeed(c)
+	if !ok {
+		return
+	}
+	if feed.PostingState != domain.PostingStateReview {
+		c.JSON(http.StatusConflict, gin.H{"code": "INVALID_STATE"})
+		return
+	}
+	if err := h.store.UpdateFeedState(feed.ID, domain.PostingStateIgnored, "ignored by user"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "INTERNAL_ERROR", "message": err.Error()})
+		return
+	}
+	_, _ = h.store.CreateClassificationFeedback(domain.ClassificationFeedback{BankFeedTransactionID: feed.ID, UserID: userID, Action: "ignored"})
+	metrics.Inc("sepay_bank_feed_ignored_total")
+	h.recordAudit(c, "", "bank_feed_transaction", feed.ID, feed, map[string]string{"status": "ignored"}, "success", "")
+	c.JSON(http.StatusOK, gin.H{"feedId": feed.ID, "status": "ignored"})
+}

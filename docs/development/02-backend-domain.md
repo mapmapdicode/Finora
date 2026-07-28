@@ -11,7 +11,7 @@ internal/
   platform/postgres/   pool, tx helper, migration, repository primitives
   platform/jobs/       durable queue, lease, retry, outbox
   platform/security/   auth, RBAC, encryption, audit, secret interface
-  identity/            workspace/member/session use cases
+  identity/            user/member/session use cases
   ledger/              account, category, transaction, transfer
   portfolio/           asset/property/valuation/snapshot
   loans/               loan, schedule, accrual, payment split
@@ -29,7 +29,7 @@ Handler chỉ parse/auth/validate sơ bộ → gọi application use case → ma
 - Mọi response có `traceId`; list cursor pagination gồm `items`, `nextCursor`.
 - `POST` mutation yêu cầu `Idempotency-Key` UUID do client tạo, trừ callback/webhook provider.
 - Error: `{ "code": "…", "message": "…", "fields": { "amount": "…" }, "traceId": "…" }`.
-- JWT xác định actor; workspace chọn từ path/header chỉ sau membership check. Không tin `workspace_id` từ body.
+- JWT xác định actor; user chọn từ path/header chỉ sau membership check. Không tin `user_id` từ body.
 - `GET` không mutation; `PATCH` chỉ cho update metadata cho phép; financial correction dùng endpoint adjustment/void chuyên biệt.
 
 ## Middleware theo thứ tự
@@ -37,7 +37,7 @@ Handler chỉ parse/auth/validate sơ bộ → gọi application use case → ma
 1. Request ID / trusted proxy / HTTPS redirect.
 2. Body-size limit, content type, JSON decoder strict.
 3. Rate limit theo IP + actor/route.
-4. Authentication; `RequireWorkspaceRole` theo endpoint.
+4. Authentication; `RequireUserRole` theo endpoint.
 5. Idempotency middleware cho mutation: tìm existing result hoặc reserve key trong DB transaction.
 6. Handler/use case; audit interceptor lấy before/after redacted.
 7. Structured access log, metric/status/latency, panic recovery.
@@ -52,7 +52,7 @@ Webhook SePay dùng router riêng: raw body trước JSON parsing, HMAC verifica
 BEGIN
   assert actor membership + role
   lock/validate referenced aggregate
-  enforce idempotency unique (workspace, actor, key)
+  enforce idempotency unique (user, actor, key)
   append domain record(s)
   append audit log
   append outbox/job if projection/notification required
@@ -71,11 +71,11 @@ Không gửi email, gọi SePay, render export hay rebuild snapshot bên trong t
 
 ## Domain use case theo module
 
-### Identity/workspace
+### Identity/user
 
 | Use case | Validate | Side effects |
 |---|---|---|
-| Create workspace | base currency, owner | portfolio mặc định, audit |
+| Create user | base currency, owner | portfolio mặc định, audit |
 | Invite/change role | owner, role policy | membership/audit/notification job |
 | Export | re-auth/permission/range | export job + signed URL + audit |
 | Delete/revoke | retention/legal/audit policy | async workflow, không hard-delete ledger |
@@ -144,7 +144,7 @@ Sau claim, set lease. Success mark `completed`; lỗi retryable exponential back
 | Post transaction/valuation | ✓ | ✓ | — | bank-feed policy only |
 | Loan restructure/write-off | ✓ | policy optional | — | — |
 | Connect/revoke bank | ✓ | — | — | callback only |
-| Export full workspace | ✓ | — | — | — |
+| Export full user | ✓ | — | — | — |
 | Manage members/policy | ✓ | — | — | — |
 | Receive provider webhook | — | — | — | signed provider endpoint |
 
@@ -152,7 +152,7 @@ Authorization is server-side in every use case, not only router/UI. Attachment a
 
 ## API contract implementation order
 
-1. Auth/workspace/categories/accounts.
+1. Auth/user/categories/accounts.
 2. Transactions/transfers/net-worth read/snapshots.
 3. Assets/property/valuations/attachments.
 4. Loans/accrual/payment/agenda.
@@ -164,4 +164,4 @@ For every endpoint: OpenAPI request/response/error examples, permission test, va
 
 ## Observability fields
 
-All logs/metrics/traces include `trace_id`, route/job type, workspace hash (not raw ID where avoidable), actor type and provider correlation ID. Financial amount/account note/full account number/token must not be in log. Audit is not a debug log and is stored separately with redaction policy.
+All logs/metrics/traces include `trace_id`, route/job type, user hash (not raw ID where avoidable), actor type and provider correlation ID. Financial amount/account note/full account number/token must not be in log. Audit is not a debug log and is stored separately with redaction policy.

@@ -23,11 +23,6 @@ type SeedResult struct {
 		Name     string `json:"name"`
 		Password string `json:"password"`
 	} `json:"user"`
-	Workspace struct {
-		ID           string `json:"id"`
-		Name         string `json:"name"`
-		BaseCurrency string `json:"baseCurrency"`
-	} `json:"workspace"`
 	Portfolio struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -147,27 +142,19 @@ func main() {
 		ON CONFLICT (user_id) DO UPDATE SET amount_display_mode = 'full', updated_at = now()
 	`, userID)
 
-	// 3. Workspace
-	existingWorkspaces := store.ListWorkspaces(userID)
-	var ws *domain.Workspace
-	if len(existingWorkspaces) > 0 {
-		ws = &existingWorkspaces[0]
-	} else {
-		var errWS error
-		ws, errWS = store.CreateWorkspace(username, "VND", userID)
-		if errWS != nil {
-			log.Fatalf("Failed to create workspace: %v", errWS)
-		}
+	// 3. User
+	if _, err := store.EnsureUserPortfolio("", "VND", userID); err != nil {
+		log.Fatalf("Failed to create default portfolio: %v", err)
 	}
 
 	// 4. Portfolio
-	p, ok := store.FirstPortfolio(ws.ID)
+	p, ok := store.FirstPortfolio(userID)
 	if !ok {
-		log.Fatalf("Portfolio not found for workspace %s", ws.ID)
+		log.Fatalf("Portfolio not found for user %s", userID)
 	}
 
 	// 5. Account: Bank
-	accounts := store.ListAccounts(ws.ID)
+	accounts := store.ListAccounts(userID)
 	var bankAccount *domain.Account
 	for _, acc := range accounts {
 		if strings.EqualFold(acc.Name, "Bank") {
@@ -178,7 +165,7 @@ func main() {
 
 	if bankAccount == nil {
 		acc, err := store.CreateAccount(domain.Account{
-			WorkspaceID: ws.ID,
+			UserID:      userID,
 			PortfolioID: p.ID,
 			Name:        "Bank",
 			Type:        "bank",
@@ -193,19 +180,19 @@ func main() {
 	// 6. Category: Initial Balance / Số dư ban đầu
 	var catID domain.ID
 	errCat := pool.QueryRow(ctx, `
-		SELECT id FROM categories WHERE workspace_id=$1 AND name=$2 AND kind=$3
-	`, ws.ID, "Số dư ban đầu", "income").Scan(&catID)
+		SELECT id FROM categories WHERE user_id=$1 AND name=$2 AND kind=$3
+	`, userID, "Số dư ban đầu", "income").Scan(&catID)
 	if errCat != nil || catID == "" {
 		_ = pool.QueryRow(ctx, `
-			INSERT INTO categories (workspace_id, name, kind)
+			INSERT INTO categories (user_id, name, kind)
 			VALUES ($1, $2, $3)
-			ON CONFLICT (workspace_id, name, kind) DO UPDATE SET updated_at = now()
+			ON CONFLICT (user_id, name, kind) DO UPDATE SET updated_at = now()
 			RETURNING id
-		`, ws.ID, "Số dư ban đầu", "income").Scan(&catID)
+		`, userID, "Số dư ban đầu", "income").Scan(&catID)
 	}
 
 	// 7. Transaction: 180,000,000 VND
-	txList := store.ListTransactions(ws.ID, bankAccount.ID)
+	txList := store.ListTransactions(userID, bankAccount.ID)
 	var initTx *domain.Transaction
 	if len(txList) > 0 {
 		for _, tx := range txList {
@@ -218,7 +205,7 @@ func main() {
 
 	if initTx == nil {
 		tx, err := store.CreateTransaction(domain.Transaction{
-			WorkspaceID: ws.ID,
+			UserID:      userID,
 			AccountID:   bankAccount.ID,
 			CategoryID:  catID,
 			PortfolioID: p.ID,
@@ -243,10 +230,6 @@ func main() {
 	result.User.Email = u.Email
 	result.User.Name = u.Name
 	result.User.Password = password
-
-	result.Workspace.ID = string(ws.ID)
-	result.Workspace.Name = ws.Name
-	result.Workspace.BaseCurrency = ws.BaseCurrency
 
 	result.Portfolio.ID = string(p.ID)
 	result.Portfolio.Name = p.Name

@@ -9,28 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS workspaces (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    base_currency VARCHAR(10) NOT NULL DEFAULT 'VND',
-    fiscal_year_end DATE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS workspace_members (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role TEXT NOT NULL CHECK (role IN ('owner', 'editor', 'viewer')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (workspace_id, user_id)
-);
-
 CREATE TABLE IF NOT EXISTS portfolios (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     base_currency VARCHAR(10) NOT NULL DEFAULT 'VND',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -39,7 +20,7 @@ CREATE TABLE IF NOT EXISTS portfolios (
 
 CREATE TABLE IF NOT EXISTS accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
@@ -50,17 +31,17 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 CREATE TABLE IF NOT EXISTS categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     kind TEXT NOT NULL DEFAULT 'general',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(workspace_id, name, kind)
+    UNIQUE(user_id, name, kind)
 );
 
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE SET NULL,
@@ -78,7 +59,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 
 CREATE TABLE IF NOT EXISTS transfers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     from_account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
     to_account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
     amount NUMERIC(24,4) NOT NULL,
@@ -91,7 +72,7 @@ CREATE TABLE IF NOT EXISTS transfers (
 
 CREATE TABLE IF NOT EXISTS loans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE SET NULL,
     counterparty TEXT,
     direction TEXT NOT NULL,
@@ -109,7 +90,7 @@ CREATE TABLE IF NOT EXISTS loans (
 
 CREATE TABLE IF NOT EXISTS loan_payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     loan_id UUID NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
     transaction_id UUID REFERENCES transactions(id) ON DELETE SET NULL,
@@ -124,7 +105,7 @@ CREATE TABLE IF NOT EXISTS loan_payments (
 
 CREATE TABLE IF NOT EXISTS properties (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
     address TEXT,
@@ -148,7 +129,7 @@ CREATE TABLE IF NOT EXISTS property_valuations (
 
 CREATE TABLE IF NOT EXISTS assets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
     asset_type TEXT NOT NULL,
@@ -169,13 +150,13 @@ CREATE TABLE IF NOT EXISTS asset_valuations (
 
 CREATE TABLE IF NOT EXISTS budgets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     period TEXT NOT NULL,
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
     limit_amount NUMERIC(24,4) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (workspace_id, period, category_id)
+    UNIQUE (user_id, period, category_id)
 );
 
 CREATE TABLE IF NOT EXISTS budget_allocations (
@@ -189,7 +170,7 @@ CREATE TABLE IF NOT EXISTS budget_allocations (
 
 CREATE TABLE IF NOT EXISTS forecast_scenarios (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft',
     assumptions TEXT,
@@ -200,7 +181,7 @@ CREATE TABLE IF NOT EXISTS forecast_scenarios (
 
 CREATE TABLE IF NOT EXISTS bank_connections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider TEXT NOT NULL,
     external_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'connected',
@@ -212,12 +193,12 @@ CREATE TABLE IF NOT EXISTS bank_connections (
     last_sync_requested_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (workspace_id, provider, external_id)
+    UNIQUE (user_id, provider, external_id)
 );
 
 CREATE TABLE IF NOT EXISTS bank_feed_transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     connection_id UUID NOT NULL REFERENCES bank_connections(id) ON DELETE CASCADE,
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
     amount NUMERIC(24,4) NOT NULL,
@@ -237,12 +218,12 @@ CREATE TABLE IF NOT EXISTS bank_feed_transactions (
     source TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (workspace_id, connection_id, external_transaction_id)
+    UNIQUE (user_id, connection_id, external_transaction_id)
 );
 
 CREATE TABLE IF NOT EXISTS bank_feed_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     connection_id UUID NOT NULL REFERENCES bank_connections(id) ON DELETE CASCADE,
     provider TEXT NOT NULL DEFAULT 'sepay',
     event_key TEXT NOT NULL,
@@ -258,7 +239,7 @@ CREATE TABLE IF NOT EXISTS bank_feed_events (
 
 CREATE TABLE IF NOT EXISTS bank_automation_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
     name TEXT NOT NULL DEFAULT 'Rule',
     priority INTEGER NOT NULL DEFAULT 100,
@@ -278,7 +259,7 @@ CREATE TABLE IF NOT EXISTS bank_automation_rules (
 
 CREATE TABLE IF NOT EXISTS bank_payment_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     loan_id UUID NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
     payment_code TEXT NOT NULL,
     amount NUMERIC(24,4) NOT NULL,
@@ -289,12 +270,11 @@ CREATE TABLE IF NOT EXISTS bank_payment_requests (
     source TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (workspace_id, payment_code)
+    UNIQUE (user_id, payment_code)
 );
 
 CREATE TABLE IF NOT EXISTS assistant_commands (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     command TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
@@ -308,7 +288,7 @@ CREATE TABLE IF NOT EXISTS assistant_commands (
 
 CREATE TABLE IF NOT EXISTS idempotency_keys (
     key TEXT PRIMARY KEY,
-    workspace_id UUID,
+    user_id UUID,
     actor_id UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -334,13 +314,13 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_accounts_workspace ON accounts (workspace_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_workspace ON transactions (workspace_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts (user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions (user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions (account_id);
-CREATE INDEX IF NOT EXISTS idx_loans_workspace ON loans (workspace_id);
-CREATE INDEX IF NOT EXISTS idx_bank_feed_workspace ON bank_feed_transactions (workspace_id);
-CREATE INDEX IF NOT EXISTS idx_assistant_workspace ON assistant_commands (workspace_id);
+CREATE INDEX IF NOT EXISTS idx_loans_user ON loans (user_id);
+CREATE INDEX IF NOT EXISTS idx_bank_feed_user ON bank_feed_transactions (user_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_user ON assistant_commands (user_id);
 CREATE INDEX IF NOT EXISTS idx_bank_feed_state ON bank_feed_transactions (posting_state, occurred_at);
-CREATE INDEX IF NOT EXISTS idx_portfolios_workspace ON portfolios (workspace_id);
-CREATE INDEX IF NOT EXISTS idx_bank_connections_workspace ON bank_connections (workspace_id);
-CREATE INDEX IF NOT EXISTS idx_bank_feed_events_workspace ON bank_feed_events (workspace_id, state, created_at);
+CREATE INDEX IF NOT EXISTS idx_portfolios_user ON portfolios (user_id);
+CREATE INDEX IF NOT EXISTS idx_bank_connections_user ON bank_connections (user_id);
+CREATE INDEX IF NOT EXISTS idx_bank_feed_events_user ON bank_feed_events (user_id, state, created_at);

@@ -2,7 +2,7 @@
 
 ## Mục tiêu
 
-Cho chủ workspace nhắn Telegram để hỏi dữ liệu WealthOS hoặc yêu cầu Hermes Agent trên Mac Mini thực hiện một thao tác phần mềm có kiểm soát, ví dụ: “Mở Chrome và vào `https://hrm.company.vn`”. Telegram nhận/trả tin nhắn; WealthOS quyết định có cho phép không; Hermes chỉ là executor.
+Cho chủ user nhắn Telegram để hỏi dữ liệu WealthOS hoặc yêu cầu Hermes Agent trên Mac Mini thực hiện một thao tác phần mềm có kiểm soát, ví dụ: “Mở Chrome và vào `https://hrm.company.vn`”. Telegram nhận/trả tin nhắn; WealthOS quyết định có cho phép không; Hermes chỉ là executor.
 
 ## Kiến trúc khuyến nghị
 
@@ -95,9 +95,9 @@ Hermes trả event `accepted`, `started`, `progress`, `completed` hoặc `failed
 ## Liên kết tài khoản và bảo mật
 
 1. User đăng nhập WealthOS, tạo mã liên kết một lần có TTL ngắn.
-2. User gửi mã đó cho bot; Gateway lưu mapping `telegram_chat_id ↔ user_id/workspace_id` sau khi kiểm tra mã.
+2. User gửi mã đó cho bot; Gateway lưu mapping `telegram_chat_id ↔ user_id/user_id` sau khi kiểm tra mã.
 3. Bot chỉ nhận update qua HTTPS webhook và secret token; bot token nằm trong secret manager.
-4. Hermes đăng ký bằng credential riêng của executor, mTLS/VPN và chỉ có scope workspace/command được chỉ định.
+4. Hermes đăng ký bằng credential riêng của executor, mTLS/VPN và chỉ có scope user/command được chỉ định.
 5. Approval dùng inline callback chứa mã ngẫu nhiên một lần; Gateway kiểm tra actor, command, hạn dùng và trạng thái trước dispatch.
 6. Audit log lưu input đã redact, policy decision, approval, executor event và kết quả. Telegram message ID/correlation ID hỗ trợ tra cứu, không thay thế audit log.
 

@@ -7,7 +7,6 @@ import 'package:mobile/core/network/api_exception.dart';
 /// HTTP boundary for the Finora backend.
 class ApiClient {
   String? token;
-  String? workspaceId;
 
   Future<dynamic> request(
     String method,
@@ -23,9 +22,6 @@ class ApiClient {
       request.headers.contentType = ContentType.json;
       if (token != null) {
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      }
-      if (workspaceId != null) {
-        request.headers.set('X-Workspace-ID', workspaceId!);
       }
       if (body != null) {
         request.headers.set(
