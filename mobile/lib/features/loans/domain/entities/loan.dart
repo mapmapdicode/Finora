@@ -6,6 +6,7 @@ class Loan {
     required this.dailyRatePerMillion,
     required this.status,
     this.days = 0,
+    this.principalInitial = '',
     this.customerId = '',
     this.startDate = '',
     this.accruedInterest = '0',
@@ -14,6 +15,7 @@ class Loan {
 
   final String id;
   final String borrower;
+  final String principalInitial;
   final String principalBalance;
   final String dailyRatePerMillion;
   final String status;
@@ -26,6 +28,10 @@ class Loan {
   factory Loan.fromJson(Map<String, dynamic> json) => Loan(
     id: json['id']?.toString() ?? '',
     borrower: json['counterparty']?.toString() ?? 'Chưa đặt tên',
+    principalInitial:
+        json['principalInitial']?.toString() ??
+        json['principalBalance']?.toString() ??
+        '0',
     principalBalance:
         json['principalBalance']?.toString() ??
         json['principalInitial']?.toString() ??

@@ -362,10 +362,24 @@ class _BorrowerCard extends StatelessWidget {
   );
 }
 
-class _BorrowerDetailPage extends StatelessWidget {
+class _BorrowerDetailPage extends StatefulWidget {
   const _BorrowerDetailPage({required this.group, required this.viewModel});
   final _BorrowerGroup group;
   final LoanViewModel viewModel;
+
+  @override
+  State<_BorrowerDetailPage> createState() => _BorrowerDetailPageState();
+}
+
+class _BorrowerDetailPageState extends State<_BorrowerDetailPage> {
+  late final Future<_BorrowerLoanMetrics> _metrics = _loadMetrics();
+
+  Future<_BorrowerLoanMetrics> _loadMetrics() async {
+    final histories = await Future.wait(
+      widget.group.loans.map((loan) => widget.viewModel.payments(loan.id)),
+    );
+    return _BorrowerLoanMetrics.fromLoans(widget.group.loans, histories);
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -373,36 +387,36 @@ class _BorrowerDetailPage extends StatelessWidget {
     appBar: AppBar(
       backgroundColor: FinoraColors.background,
       foregroundColor: FinoraColors.textPrimary,
-      title: Text(group.name),
+      title: Text(widget.group.name),
     ),
     body: ListView(
       padding: const EdgeInsets.all(FinoraSpace.md),
       children: [
-        FinoraCard(
-          child: Row(
-            children: [
-              Expanded(
-                child: _detailMetric('Tổng gốc', _money(group.principal)),
-              ),
-              Expanded(
-                child: _detailMetric('Lãi cộng dồn', _money(group.accrued)),
-              ),
-            ],
-          ),
+        FutureBuilder<_BorrowerLoanMetrics>(
+          future: _metrics,
+          builder: (context, snapshot) {
+            final metrics =
+                snapshot.data ??
+                _BorrowerLoanMetrics.fromLoans(widget.group.loans, const []);
+            return _BorrowerOverview(
+              metrics: metrics,
+              loading: snapshot.connectionState == ConnectionState.waiting,
+            );
+          },
         ),
         const SizedBox(height: FinoraSpace.xl),
         const Text('Khoản vay', style: FinoraTypography.h3),
         const SizedBox(height: FinoraSpace.sm),
-        ...group.loans.map(
+        ...widget.group.loans.map(
           (loan) => Padding(
             padding: const EdgeInsets.only(bottom: FinoraSpace.sm),
             child: _LoanCard(
               loan: loan,
-              accrual: viewModel.accruals[loan.id],
+              accrual: widget.viewModel.accruals[loan.id],
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) =>
-                      _LoanDetailPage(loan: loan, viewModel: viewModel),
+                      _LoanDetailPage(loan: loan, viewModel: widget.viewModel),
                 ),
               ),
             ),
@@ -411,15 +425,280 @@ class _BorrowerDetailPage extends StatelessWidget {
       ],
     ),
   );
+}
 
-  Widget _detailMetric(String label, String value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+class _BorrowerOverview extends StatelessWidget {
+  const _BorrowerOverview({required this.metrics, required this.loading});
+  final _BorrowerLoanMetrics metrics;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) => Column(
     children: [
-      Text(label, style: FinoraTypography.caption),
-      const SizedBox(height: FinoraSpace.xs),
-      Text(value, style: FinoraTypography.title),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(FinoraSpace.lg),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [FinoraColors.purple, FinoraColors.primaryDeep],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: FinoraRadius.xl,
+          boxShadow: FinoraElevation.floating,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'TỔNG QUAN KHOẢN VAY',
+              style: TextStyle(
+                color: Color(0xdfffffff),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: .6,
+              ),
+            ),
+            const SizedBox(height: FinoraSpace.md),
+            Row(
+              children: [
+                Expanded(
+                  child: _overviewMetric(
+                    'Đã cho vay',
+                    _money(metrics.lentPrincipal),
+                  ),
+                ),
+                const SizedBox(width: FinoraSpace.md),
+                Expanded(
+                  child: _overviewMetric(
+                    'Đã thu hồi gốc',
+                    _money(metrics.recoveredPrincipal),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: FinoraSpace.md),
+            Row(
+              children: [
+                Expanded(
+                  child: _overviewMetric(
+                    'Lãi đã nhận',
+                    loading
+                        ? 'Đang tổng hợp'
+                        : _money(metrics.receivedInterest),
+                  ),
+                ),
+                const SizedBox(width: FinoraSpace.md),
+                Expanded(
+                  child: _overviewMetric(
+                    'Dư nợ còn lại',
+                    _money(metrics.outstandingPrincipal),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: FinoraSpace.md),
+      FinoraCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.task_alt_rounded,
+                  color: FinoraColors.success,
+                  size: 20,
+                ),
+                const SizedBox(width: FinoraSpace.xs),
+                const Expanded(
+                  child: Text(
+                    'Tỷ lệ quyết toán',
+                    style: FinoraTypography.title,
+                  ),
+                ),
+                Text(
+                  '${(metrics.settlementRate * 100).round()}%',
+                  style: FinoraTypography.title.copyWith(
+                    color: FinoraColors.success,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: FinoraSpace.sm),
+            ClipRRect(
+              borderRadius: FinoraRadius.full,
+              child: LinearProgressIndicator(
+                value: metrics.settlementRate,
+                minHeight: 8,
+                backgroundColor: FinoraColors.primarySoft,
+                valueColor: const AlwaysStoppedAnimation(FinoraColors.success),
+              ),
+            ),
+            const SizedBox(height: FinoraSpace.xs),
+            Text(
+              '${metrics.settledLoans}/${metrics.loanCount} khoản đã quyết toán',
+              style: FinoraTypography.caption.copyWith(
+                color: FinoraColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: FinoraSpace.md),
+      FinoraCard(
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: const BoxDecoration(
+                color: FinoraColors.primarySoft,
+                borderRadius: FinoraRadius.sm,
+              ),
+              child: const Icon(
+                Icons.auto_graph_rounded,
+                color: FinoraColors.primary,
+              ),
+            ),
+            const SizedBox(width: FinoraSpace.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Dự báo lãi 30 ngày',
+                    style: FinoraTypography.title,
+                  ),
+                  const SizedBox(height: FinoraSpace.xxs),
+                  Text(
+                    metrics.outstandingPrincipal > 0
+                        ? 'Ước tính theo dư nợ và lãi suất hiện tại'
+                        : 'Không còn dư nợ để dự báo lãi',
+                    style: FinoraTypography.caption.copyWith(
+                      color: FinoraColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: FinoraSpace.sm),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                _money(metrics.forecastInterest30Days),
+                style: FinoraTypography.title.copyWith(
+                  color: FinoraColors.primaryDeep,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     ],
   );
+
+  Widget _overviewMetric(String label, String value) => Container(
+    padding: const EdgeInsets.all(FinoraSpace.sm),
+    decoration: const BoxDecoration(
+      color: Color(0x20ffffff),
+      borderRadius: FinoraRadius.sm,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xdfffffff),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: FinoraSpace.xxs),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _BorrowerLoanMetrics {
+  const _BorrowerLoanMetrics({
+    required this.lentPrincipal,
+    required this.recoveredPrincipal,
+    required this.receivedInterest,
+    required this.outstandingPrincipal,
+    required this.forecastInterest30Days,
+    required this.settledLoans,
+    required this.loanCount,
+  });
+
+  final double lentPrincipal;
+  final double recoveredPrincipal;
+  final double receivedInterest;
+  final double outstandingPrincipal;
+  final double forecastInterest30Days;
+  final int settledLoans;
+  final int loanCount;
+
+  double get settlementRate => loanCount == 0 ? 0 : settledLoans / loanCount;
+
+  factory _BorrowerLoanMetrics.fromLoans(
+    List<Loan> loans,
+    List<List<LoanPaymentRecord>> histories,
+  ) {
+    var lentPrincipal = 0.0;
+    var recoveredPrincipal = 0.0;
+    var receivedInterest = 0.0;
+    var outstandingPrincipal = 0.0;
+    var forecastInterest30Days = 0.0;
+    var settledLoans = 0;
+
+    for (var index = 0; index < loans.length; index++) {
+      final loan = loans[index];
+      final payments = index < histories.length ? histories[index] : const [];
+      final receivedPrincipal = payments.fold<double>(
+        0,
+        (total, payment) => total + _amount(payment.principal),
+      );
+      final initial = _amount(loan.principalInitial);
+      final balance = _amount(loan.principalBalance);
+      lentPrincipal += initial > 0 ? initial : balance + receivedPrincipal;
+      recoveredPrincipal += receivedPrincipal;
+      receivedInterest += payments.fold<double>(
+        0,
+        (total, payment) => total + _amount(payment.interest),
+      );
+      outstandingPrincipal += balance;
+      if (_loanStatusPresentation(loan).label == 'Đã quyết toán') {
+        settledLoans++;
+      } else {
+        forecastInterest30Days += _dailyInterest(loan) * 30;
+      }
+    }
+
+    return _BorrowerLoanMetrics(
+      lentPrincipal: lentPrincipal,
+      recoveredPrincipal: recoveredPrincipal,
+      receivedInterest: receivedInterest,
+      outstandingPrincipal: outstandingPrincipal,
+      forecastInterest30Days: forecastInterest30Days,
+      settledLoans: settledLoans,
+      loanCount: loans.length,
+    );
+  }
 }
 
 class _LoanCard extends StatelessWidget {
@@ -448,11 +727,17 @@ class _LoanCard extends StatelessWidget {
                 style: FinoraTypography.title,
               ),
               const SizedBox(height: FinoraSpace.xxs),
-              Text(
-                '${loan.days} ngày · ${_statusLabel(loan.status)}',
-                style: FinoraTypography.caption.copyWith(
-                  color: FinoraColors.textSecondary,
-                ),
+              Row(
+                children: [
+                  Text(
+                    '${loan.days} ngày',
+                    style: FinoraTypography.caption.copyWith(
+                      color: FinoraColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: FinoraSpace.xs),
+                  _LoanStatusBadge(loan: loan),
+                ],
               ),
             ],
           ),
@@ -489,6 +774,54 @@ class _LoanCard extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _LoanStatusBadge extends StatelessWidget {
+  const _LoanStatusBadge({required this.loan});
+  final Loan loan;
+
+  @override
+  Widget build(BuildContext context) {
+    final presentation = _loanStatusPresentation(loan);
+    return Semantics(
+      label: 'Trạng thái: ${presentation.label}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: presentation.background,
+          borderRadius: FinoraRadius.full,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(presentation.icon, size: 12, color: presentation.foreground),
+            const SizedBox(width: 4),
+            Text(
+              presentation.label,
+              style: FinoraTypography.caption.copyWith(
+                color: presentation.foreground,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoanStatusPresentation {
+  const _LoanStatusPresentation({
+    required this.label,
+    required this.foreground,
+    required this.background,
+    required this.icon,
+  });
+
+  final String label;
+  final Color foreground;
+  final Color background;
+  final IconData icon;
 }
 
 class _LoanDetailPage extends StatefulWidget {
@@ -644,7 +977,15 @@ class _LoanDetailPageState extends State<_LoanDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(loan.borrower, style: FinoraTypography.h3),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(loan.borrower, style: FinoraTypography.h3),
+                    ),
+                    const SizedBox(width: FinoraSpace.sm),
+                    _LoanStatusBadge(loan: loan),
+                  ],
+                ),
                 const SizedBox(height: FinoraSpace.lg),
                 _detailRow('Gốc', _money(principal)),
                 _detailRow('Lãi/ngày', _money(daily)),
@@ -2121,9 +2462,46 @@ String _initials(String name) => name
     .map((part) => part[0].toUpperCase())
     .join();
 
+_LoanStatusPresentation _loanStatusPresentation(Loan loan) {
+  final status = loan.status.trim().toLowerCase();
+  // A zero principal is settled even if an older API response has not yet
+  // reflected the closed status.
+  if (status == 'closed' || _amount(loan.principalBalance) <= 0) {
+    return const _LoanStatusPresentation(
+      label: 'Đã quyết toán',
+      foreground: FinoraColors.primaryDeep,
+      background: FinoraColors.primarySoft,
+      icon: Icons.task_alt_rounded,
+    );
+  }
+  if (status == 'active') {
+    return const _LoanStatusPresentation(
+      label: 'Hoạt động',
+      foreground: Color(0xff18864b),
+      background: Color(0xffe9f8ef),
+      icon: Icons.radio_button_checked_rounded,
+    );
+  }
+  if (status == 'overdue') {
+    return const _LoanStatusPresentation(
+      label: 'Quá hạn',
+      foreground: Color(0xffb45309),
+      background: Color(0xfffff4df),
+      icon: Icons.schedule_rounded,
+    );
+  }
+  return _LoanStatusPresentation(
+    label: _statusLabel(status),
+    foreground: FinoraColors.textSecondary,
+    background: const Color(0xfff1f1f3),
+    icon: Icons.info_outline_rounded,
+  );
+}
+
 String _statusLabel(String status) => switch (status) {
-  'active' => 'Đang hoạt động',
-  'overdue' => 'Quá hạn',
-  'closed' => 'Đã tất toán',
-  _ => status,
+  'draft' => 'Nháp',
+  'restructured' => 'Cơ cấu lại',
+  'written_off' => 'Đã xóa nợ',
+  'cancelled' => 'Đã hủy',
+  _ => status.isEmpty ? 'Chưa xác định' : status,
 };

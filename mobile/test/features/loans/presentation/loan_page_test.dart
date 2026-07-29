@@ -34,6 +34,43 @@ void main() {
     },
   );
 
+  testWidgets('shows a clear status for active and settled loans', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: LoanPage(viewModel: LoanViewModel(_LoanRepository()))),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Chị Mai'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hoạt động'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Đã quyết toán'), 180);
+    expect(find.text('Đã quyết toán'), findsOneWidget);
+  });
+
+  testWidgets('summarizes lending, recovery, interest, and forecast', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoanPage(viewModel: LoanViewModel(_MetricsLoanRepository())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Chị Mai'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('150,000,000 VND'), findsOneWidget);
+    expect(find.text('90,000,000 VND'), findsOneWidget);
+    expect(find.text('9,000,000 VND'), findsOneWidget);
+    expect(find.text('50%'), findsOneWidget);
+    expect(find.text('1/2 khoản đã quyết toán'), findsOneWidget);
+    expect(find.text('1,800,000 VND'), findsOneWidget);
+  });
+
   testWidgets('opens the familiar interest-rate converter from loans', (
     tester,
   ) async {
@@ -88,6 +125,8 @@ void main() {
 
     await tester.tap(find.text('Chị Mai'));
     await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -320));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('50,000,000 VND'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ghi nhận thu'));
@@ -109,7 +148,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Thu lãi · 2 ngày · 100,000 VND'), findsOneWidget);
-    expect(repository.paymentHistoryReads, 1);
+    // The borrower overview loads two histories for its aggregate; the detail
+    // then loads its own timeline once and keeps the saved receipt locally.
+    expect(repository.paymentHistoryReads, 3);
   });
 }
 
@@ -167,7 +208,7 @@ class _LoanRepository implements LoanRepository {
       borrower: 'Chị Mai',
       principalBalance: '25000000',
       dailyRatePerMillion: '1000',
-      status: 'active',
+      status: 'closed',
     ),
   ]);
 
@@ -196,4 +237,50 @@ class _LoanRepository implements LoanRepository {
       paidInterest: '0',
     ),
   );
+}
+
+class _MetricsLoanRepository extends _LoanRepository {
+  @override
+  Future<List<Loan>> list() => Future.value(const [
+    Loan(
+      id: 'active-loan',
+      borrower: 'Chị Mai',
+      principalInitial: '100000000',
+      principalBalance: '60000000',
+      dailyRatePerMillion: '1000',
+      status: 'active',
+    ),
+    Loan(
+      id: 'settled-loan',
+      borrower: 'Chị Mai',
+      principalInitial: '50000000',
+      principalBalance: '0',
+      dailyRatePerMillion: '1000',
+      status: 'closed',
+    ),
+  ]);
+
+  @override
+  Future<List<LoanPaymentRecord>> payments(String loanId) {
+    if (loanId == 'active-loan') {
+      return Future.value(const [
+        LoanPaymentRecord(
+          id: 'active-payment',
+          principal: '40000000',
+          interest: '4000000',
+          fee: '0',
+          occurredAt: '2026-07-01T00:00:00.000Z',
+        ),
+      ]);
+    }
+    return Future.value(const [
+      LoanPaymentRecord(
+        id: 'settled-payment',
+        principal: '50000000',
+        interest: '5000000',
+        fee: '0',
+        occurredAt: '2026-07-15T00:00:00.000Z',
+      ),
+    ]);
+  }
 }
