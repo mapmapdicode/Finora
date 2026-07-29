@@ -22,7 +22,10 @@ export class PortfolioListComponent implements OnInit {
   nextCursor = '';
   snapshotLoading = false;
   createInProgress = false;
+  portfoliosLoading = true;
+  showCreate = false;
   error = '';
+  notice = '';
   baseCurrencies = ['VND', 'USD', 'EUR'];
 
   constructor(
@@ -41,9 +44,12 @@ export class PortfolioListComponent implements OnInit {
   }
 
   reloadPortfolios() {
+    this.portfoliosLoading = true;
+    this.error = '';
     this.api.getPortfolios().subscribe({
       next: (items) => {
         this.portfolios = items;
+        this.portfoliosLoading = false;
         if (!this.selectedPortfolioId && items.length > 0) {
           this.selectPortfolio(items[0].id);
         } else if (this.selectedPortfolioId && !items.some((p) => p.id === this.selectedPortfolioId)) {
@@ -54,6 +60,7 @@ export class PortfolioListComponent implements OnInit {
         }
       },
       error: () => {
+        this.portfoliosLoading = false;
         this.error = 'Không thể tải danh mục.';
       },
     });
@@ -80,6 +87,8 @@ export class PortfolioListComponent implements OnInit {
     this.api.createPortfolio(payload).subscribe({
       next: () => {
         this.form.reset({ name: '', baseCurrency: 'VND' });
+        this.showCreate = false;
+        this.notice = 'Đã tạo danh mục.';
         this.reloadPortfolios();
         this.createInProgress = false;
       },
@@ -88,6 +97,16 @@ export class PortfolioListComponent implements OnInit {
         this.createInProgress = false;
       },
     });
+  }
+
+  openCreate() {
+    if (!this.auth.canMutate) return;
+    this.showCreate = true;
+    this.notice = '';
+  }
+
+  closeCreate() {
+    if (!this.createInProgress) this.showCreate = false;
   }
 
   loadSnapshots(portfolioId: string, cursor = '', replace = true) {
@@ -134,7 +153,7 @@ export class PortfolioListComponent implements OnInit {
 
   getSelectedPortfolioName(): string {
     const found = this.portfolios.find((item) => item.id === this.selectedPortfolioId);
-    return found ? found.name : 'Selected Portfolio';
+    return found ? found.name : 'Danh mục đã chọn';
   }
 
   formatChange(value?: string) {

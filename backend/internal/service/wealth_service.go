@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/mail"
 	"regexp"
 	"sort"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 
 	"wealthos-backend/internal/cache"
 	"wealthos-backend/internal/domain"
@@ -274,30 +276,52 @@ func (s *WealthService) UpdateUserSettings(ctx context.Context, userID domain.ID
 	return updated, nil
 }
 
-func (s *WealthService) RegisterUser(email, password, name string) (domain.User, error) {
+func (s *WealthService) RegisterUser(email, password, confirmation, name string) (domain.User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	name = strings.TrimSpace(name)
 	if email == "" || password == "" || name == "" {
 		return domain.User{}, errors.New("email, password, name are required")
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		return domain.User{}, errors.New("email is invalid")
+	}
+	if len(password) < 8 {
+		return domain.User{}, errors.New("password must contain at least 8 characters")
+	}
+	if password != confirmation {
+		return domain.User{}, errors.New("password confirmation does not match")
 	}
 	if _, exists := s.store.GetUserByEmail(email); exists {
 		return domain.User{}, errors.New("email already exists")
 	}
-	id := s.store.SeedDemoUser(email, name, password)
-	user, ok := s.store.GetUser(id)
-	if !ok {
-		return domain.User{}, errors.New("cannot create user")
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return domain.User{}, errors.New("cannot securely store password")
 	}
-	return *user, nil
+	return s.store.CreateUser(domain.User{Email: email, Name: name, Password: string(hash)})
 }
 
 func (s *WealthService) Authenticate(email, password string) (LoginResult, error) {
 	email = strings.TrimSpace(email)
 	password = strings.TrimSpace(password)
 	u, ok := s.store.GetUserByEmail(email)
-	if !ok || strings.TrimSpace(u.Password) != password {
+	if !ok || !matchesPassword(u.Password, password) {
 		return LoginResult{}, errors.New("invalid credentials")
+	}
+	if !u.IsEmailVerified() {
+		return LoginResult{}, errors.New("email verification required")
 	}
 	token := "token-" + string(u.ID)
 	return LoginResult{User: *u, Token: token}, nil
+}
+
+func matchesPassword(stored, provided string) bool {
+	if strings.HasPrefix(stored, "$2") {
+		return bcrypt.CompareHashAndPassword([]byte(stored), []byte(provided)) == nil
+	}
+	// Existing demo and legacy records predate password hashing. New accounts
+	// are always stored as bcrypt hashes.
+	return stored == provided
 }
 
 func (s *WealthService) CurrentNetWorth(userID string) (NetWorthResult, error) {
@@ -798,6 +822,14 @@ func nextMonthlyPaymentDate(start, after time.Time) time.Time {
 	return time.Time{}
 }
 
+func previousMonthlyPaymentDate(start, due time.Time) time.Time {
+	previous := start
+	for candidate := nextMonthlyPaymentDate(start, previous); !candidate.IsZero() && !candidate.After(due); candidate = nextMonthlyPaymentDate(start, candidate) {
+		previous = candidate
+	}
+	return previous
+}
+
 func (s *WealthService) LoanPortfolioSummary(userID domain.ID) LoanPortfolioSummary {
 	var principal, daily, accrued, paid float64
 	for _, loan := range s.store.ListLoans(userID) {
@@ -828,7 +860,7 @@ func (s *WealthService) LoanSchedule(userID domain.ID, months int) []LoanSchedul
 			continue
 		}
 		for due := nextMonthlyPaymentDate(loan.StartAt, now.Add(-time.Nanosecond)); !due.IsZero() && !due.After(end); due = nextMonthlyPaymentDate(loan.StartAt, due) {
-			prev := due.AddDate(0, -1, 0)
+			prev := previousMonthlyPaymentDate(loan.StartAt, due)
 			days := elapsedDays(prev, due)
 			status := "upcoming"
 			if due.Before(now) {
@@ -1135,33 +1167,6 @@ func (s *WealthService) CreateTransfer(input domain.Transfer) (domain.Transfer, 
 	if err != nil {
 		return domain.Transfer{}, err
 	}
-
-	// Create two opposite transactions for transfer impact. Net-worth remains unchanged.
-	_, _ = s.CreateTransaction(domain.Transaction{
-		UserID:      input.UserID,
-		AccountID:   from.ID,
-		Type:        domain.TransactionTypeTransfer,
-		Amount:      input.Amount,
-		Currency:    input.Currency,
-		Note:        "internal transfer - out: " + input.Note,
-		OccurredAt:  input.OccurredAt,
-		PortfolioID: from.PortfolioID,
-		Status:      domain.TransactionStatusPosted,
-		Source:      "transfer",
-	})
-	_, _ = s.CreateTransaction(domain.Transaction{
-		UserID:      input.UserID,
-		AccountID:   to.ID,
-		Type:        domain.TransactionTypeTransfer,
-		Amount:      input.Amount,
-		Currency:    input.Currency,
-		Note:        "internal transfer - in: " + input.Note,
-		OccurredAt:  input.OccurredAt,
-		PortfolioID: to.PortfolioID,
-		Status:      domain.TransactionStatusPosted,
-		Source:      "transfer",
-	})
-
 	return transfer, nil
 }
 
@@ -1181,6 +1186,9 @@ func (s *WealthService) CreateLoanPayment(loanID string, payment domain.LoanPaym
 
 	if principal < 0 || interest < 0 || fee < 0 || waived < 0 {
 		return domain.LoanPayment{}, errors.New("payment amounts cannot be negative")
+	}
+	if payment.InterestDays < 0 {
+		return domain.LoanPayment{}, errors.New("interest days cannot be negative")
 	}
 
 	balance, err := parseAmount(loan.PrincipalBalance)
@@ -1219,36 +1227,26 @@ func (s *WealthService) CreateLoanPayment(loanID string, payment domain.LoanPaym
 		}
 	}
 
-	if postingAccountID != "" {
-		if acc, ok := s.store.GetAccount(postingAccountID); ok {
-			t, err := s.store.CreateTransaction(domain.Transaction{
-				UserID:      loan.UserID,
-				AccountID:   acc.ID,
-				PortfolioID: acc.PortfolioID,
-				Type:        domain.TransactionTypeLoanPayment,
-				Amount:      formatMoney(totalAmount),
-				Currency:    currencyOrDefault(acc.Currency, loan.Direction),
-				Note:        fmt.Sprintf("loan payment for %s", loanID),
-				OccurredAt:  payment.OccurredAt,
-				CategoryID:  "",
-				Status:      domain.TransactionStatusPosted,
-				Source:      "loan_payment",
-			})
-			if err == nil {
-				payment.TransactionID = t.ID
-			}
-		}
+	if postingAccountID == "" {
+		return domain.LoanPayment{}, errors.New("a settlement account is required for loan payment")
 	}
-
-	s.store.UpdateLoan(loan.ID, func(l *domain.Loan) {
-		l.PrincipalBalance = formatMoney(nextBalance)
-		if nextBalance <= 0 && l.Status != domain.LoanStatusCancelled {
-			l.Status = domain.LoanStatusClosed
-		}
-		l.UpdatedAt = nowUTC()
-	})
-
-	return s.store.CreateLoanPayment(payment)
+	acc, ok := s.store.GetAccount(postingAccountID)
+	if !ok || acc.UserID != loan.UserID {
+		return domain.LoanPayment{}, errors.New("settlement account does not belong to loan owner")
+	}
+	payment.AccountID = acc.ID
+	nextStatus := loan.Status
+	if nextBalance <= 0 && nextStatus != domain.LoanStatusCancelled {
+		nextStatus = domain.LoanStatusClosed
+	}
+	ledger := domain.Transaction{
+		UserID: loan.UserID, AccountID: acc.ID, PortfolioID: acc.PortfolioID,
+		Type: domain.TransactionTypeLoanPayment, Amount: formatMoney(totalAmount),
+		Currency: currencyOrDefault(acc.Currency, loan.Direction),
+		Note:     fmt.Sprintf("loan payment for %s", loanID), OccurredAt: payment.OccurredAt,
+		Status: domain.TransactionStatusPosted, Source: "loan_payment",
+	}
+	return s.store.SettleLoanPayment(loan.ID, loan.PrincipalBalance, formatMoney(nextBalance), nextStatus, payment, ledger)
 }
 
 func (s *WealthService) CreateLoanPaymentRequest(userID domain.ID, loanID domain.ID, req PaymentRequestCreate) (domain.BankPaymentRequest, error) {

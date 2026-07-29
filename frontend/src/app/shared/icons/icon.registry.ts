@@ -9,6 +9,9 @@ const icon = (...paths: string[]): readonly string[] => paths;
 
 const baseIcons = {
   add: icon('M12 5v14', 'M5 12h14'),
+  arrowDown: icon('M12 4v16', 'm6 14 6 6 6-6'),
+  arrowForward: icon('M4 12h16', 'm13 5 7 7-7 7'),
+  arrowUp: icon('M12 20V4', 'm6 10 6-6 6 6'),
   bank: icon('M3 9l9-5 9 5', 'M5 10v8', 'M9.5 10v8', 'M14.5 10v8', 'M19 10v8', 'M3 20h18'),
   wallet: icon('M4 7.5V6a2 2 0 0 1 2-2h12', 'M4 7h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.5A1.5 1.5 0 0 1 4.5 7', 'M16 12h5v4h-5a2 2 0 0 1 0-4Z', 'M17.5 14h.01'),
   card: icon('M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5Z', 'M3 9h18', 'M7 15h4'),
@@ -63,6 +66,8 @@ const baseIcons = {
   preview: icon('M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z'),
   receipt: icon('M6 3h12v18l-3-2-3 2-3-2-3 2Z', 'M9 8h6', 'M9 12h6', 'M9 16h3'),
   refresh: icon('M20 6v5h-5', 'M4 18v-5h5', 'M6.1 8.5A7 7 0 0 1 18 7l2 4', 'm4 13 2 4a7 7 0 0 0 11.9-1.5'),
+  progressActivity: icon('M12 3a9 9 0 1 0 9 9', 'M12 3v3', 'M12 21a9 9 0 0 0 9-9'),
+  cloudOff: icon('M4 19h13a4 4 0 0 0 .8-7.9A6 6 0 0 0 6.5 9.5', 'M3 3l18 18'),
   save: icon('M5 3h12l3 3v15H4V4a1 1 0 0 1 1-1Z', 'M8 3v6h8V3', 'M8 21v-7h8v7'),
   schedule: icon('M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z', 'M12 7v5l3 2'),
   send: icon('m3 4 18 8-18 8 3-8Z', 'M6 12h15'),
@@ -106,6 +111,8 @@ export const ICON_PATHS: Readonly<Record<string, readonly string[]>> = {
   open_in_new: baseIcons.external,
   payments: baseIcons.money,
   pending_actions: baseIcons.pending,
+  progress_activity: baseIcons.progressActivity,
+  cloud_off: baseIcons.cloudOff,
   person_add: baseIcons.personAdd,
   pie_chart: baseIcons.pie,
   play_arrow: baseIcons.play,
@@ -113,6 +120,10 @@ export const ICON_PATHS: Readonly<Record<string, readonly string[]>> = {
   receipt_long: baseIcons.receipt,
   request_quote: baseIcons.quote,
   savings: baseIcons.piggy,
+  arrow_downward: baseIcons.arrowDown,
+  arrow_forward: baseIcons.arrowForward,
+  arrow_upward: baseIcons.arrowUp,
+  smart_toy: baseIcons.robot,
   show_chart: baseIcons.chart,
   swap_horiz: baseIcons.swap,
   swap_horizontal_circle: baseIcons.swapCircle,
@@ -130,4 +141,3 @@ export const ICON_PATHS: Readonly<Record<string, readonly string[]>> = {
 };
 
 export const FALLBACK_ICON_PATHS = baseIcons.fallback;
-

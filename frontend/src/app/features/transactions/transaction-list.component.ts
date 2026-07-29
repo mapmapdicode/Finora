@@ -1,12 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, takeUntil } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { Account, Transaction, TransactionListPage } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { normalizeVndAmount } from '../../shared/money-input';
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 
@@ -24,7 +25,7 @@ type TransactionFilters = {
 @Component({
   selector: 'app-transaction-list',
   standalone: true,
-  imports: [ReactiveFormsModule, CommonModule, IconComponent, TranslatePipe],
+  imports: [ReactiveFormsModule, CommonModule, IconComponent, TranslatePipe, RouterLink],
   templateUrl: './transaction-list.component.html'
 })
 export class TransactionListComponent implements OnInit, OnDestroy {
@@ -32,6 +33,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   filterForm!: FormGroup;
   items: Transaction[] = [];
   accounts: Account[] = [];
+  accountsLoading = true;
   mode: 'transaction' | 'transfer' = 'transaction';
   statusMessage = '';
   nextCursor = '';
@@ -39,6 +41,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   pageLimit = 25;
   totalFiltered = 0;
   submitInFlight = false;
+  entryOpen = false;
   selectedTransactionIds = new Set<string>();
   accountNameById = new Map<string, string>();
 
@@ -56,6 +59,28 @@ export class TransactionListComponent implements OnInit, OnDestroy {
 
   get netCashFlow(): number {
     return this.totalIncome - this.totalExpense;
+  }
+
+  get currencies(): string[] {
+    return Array.from(new Set(this.items.map((item) => item.currency || 'VND')));
+  }
+
+  get hasMultipleCurrencies(): boolean {
+    return this.currencies.length > 1;
+  }
+
+  get incomeTotalText(): string {
+    return this.totalTextFor('income', '+');
+  }
+
+  get expenseTotalText(): string {
+    return this.totalTextFor('expense', '-');
+  }
+
+  get netCashFlowText(): string {
+    if (this.hasMultipleCurrencies) return 'Đa tiền tệ';
+    const currency = this.currencies[0] || 'VND';
+    return `${this.netCashFlow >= 0 ? '+' : ''}${this.netCashFlow.toLocaleString('vi-VN', { maximumFractionDigits: 0 })} ${currency}`;
   }
 
   private readonly destroy$ = new Subject<void>();
@@ -96,17 +121,25 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    this.api.getAccounts().subscribe((items) => {
-      this.accounts = items;
-      this.accountNameById = new Map(items.map((item) => [item.id, item.name]));
+    this.api.getAccounts().subscribe({
+      next: (items) => {
+        this.accounts = items;
+        this.accountNameById = new Map(items.map((item) => [item.id, item.name]));
 
-      if (!this.filterForm.value.accountId && items.length) {
-        const defaultAccountId = items[0]?.id || '';
-        this.form.patchValue({ accountId: defaultAccountId, fromAccountId: defaultAccountId });
-      }
+        if (!this.filterForm.value.accountId && items.length) {
+          const defaultAccountId = items[0]?.id || '';
+          this.form.patchValue({ accountId: defaultAccountId, fromAccountId: defaultAccountId });
+        }
+        this.accountsLoading = false;
+      },
+      error: () => {
+        this.accounts = [];
+        this.accountsLoading = false;
+      },
     });
 
     this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe((params) => {
+      this.entryOpen = params.get('entry') === '1';
       const state = this.readFiltersFromQuery(params);
       this.filterForm.patchValue(state, { emitEvent: false });
       this.reload();
@@ -179,7 +212,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
       error: () => {
-        this.statusMessage = 'Unable to load transactions.';
+        this.statusMessage = 'Không thể tải giao dịch.';
         this.loading = false;
       },
     });
@@ -203,7 +236,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
       error: () => {
-        this.statusMessage = 'Unable to load next page.';
+        this.statusMessage = 'Không thể tải thêm giao dịch.';
         this.loading = false;
       },
     });
@@ -239,20 +272,21 @@ export class TransactionListComponent implements OnInit, OnDestroy {
       const payload = {
         fromAccountId: this.form.value.fromAccountId || '',
         toAccountId: this.form.value.toAccountId || '',
-        amount: this.form.value.amount || '',
+        amount: normalizeVndAmount(this.form.value.amount),
         currency: this.form.value.currency || 'VND',
         note: this.form.value.note || '',
         occurredAt: this.form.value.occurredAt || undefined,
       };
       this.api.createTransfer(payload).subscribe({
-        next: () => {
-          this.statusMessage = 'Transfer request created.';
+      next: () => {
+          this.statusMessage = 'Đã tạo yêu cầu chuyển tiền.';
           this.resetForm();
+          this.entryOpen = false;
           this.applyFilters();
           this.submitInFlight = false;
         },
         error: () => {
-          this.statusMessage = 'Unable to create transfer.';
+          this.statusMessage = 'Không thể tạo yêu cầu chuyển tiền.';
           this.submitInFlight = false;
         },
       });
@@ -264,7 +298,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
       portfolioId: this.form.value.portfolioId || '',
       categoryId: this.form.value.categoryId || '',
       type: this.form.value.type || 'expense',
-      amount: this.form.value.amount || '',
+      amount: normalizeVndAmount(this.form.value.amount),
       currency: this.form.value.currency || 'VND',
       status: this.form.value.status || 'posted',
       note: this.form.value.note || '',
@@ -273,13 +307,14 @@ export class TransactionListComponent implements OnInit, OnDestroy {
 
     this.api.createTransaction(payload).subscribe({
       next: () => {
-        this.statusMessage = 'Transaction added.';
+        this.statusMessage = 'Đã ghi nhận giao dịch.';
         this.resetForm();
+        this.entryOpen = false;
         this.applyFilters();
         this.submitInFlight = false;
       },
       error: () => {
-        this.statusMessage = 'Unable to add transaction.';
+        this.statusMessage = 'Không thể ghi nhận giao dịch.';
         this.submitInFlight = false;
       },
     });
@@ -288,6 +323,23 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   setMode(mode: 'transaction' | 'transfer') {
     this.mode = mode;
     this.form.patchValue({ mode });
+  }
+
+  openEntry(mode: 'transaction' | 'transfer' = 'transaction') {
+    if (!this.auth.canMutate) return;
+    if (!this.accounts.length) {
+      this.statusMessage = 'Hãy thêm ít nhất một tài khoản trước khi ghi giao dịch.';
+      return;
+    }
+    this.entryOpen = true;
+    this.setMode(mode);
+    this.statusMessage = '';
+  }
+
+  closeEntry() {
+    if (!this.submitInFlight) {
+      this.entryOpen = false;
+    }
   }
 
   isSelected(txId: string) {
@@ -378,5 +430,40 @@ export class TransactionListComponent implements OnInit, OnDestroy {
       to: this.filterForm.value.to || undefined,
       limit,
     };
+  }
+
+  private totalTextFor(type: 'income' | 'expense', sign: '+' | '-'): string {
+    const totals = new Map<string, number>();
+    for (const item of this.items) {
+      if (item.type !== type) continue;
+      const amount = Number.parseFloat(item.amount);
+      if (!Number.isFinite(amount)) continue;
+      const currency = item.currency || 'VND';
+      totals.set(currency, (totals.get(currency) || 0) + amount);
+    }
+    if (!totals.size) return `0 ${this.currencies[0] || 'VND'}`;
+    return Array.from(totals.entries())
+      .map(([currency, amount]) => `${sign}${amount.toLocaleString('vi-VN', { maximumFractionDigits: 0 })} ${currency}`)
+      .join(' · ');
+  }
+
+  typeLabel(type: string | undefined) {
+    const labels: Record<string, string> = {
+      income: 'Thu nhập',
+      expense: 'Chi phí',
+      transfer: 'Chuyển khoản',
+      valuation_adjustment: 'Điều chỉnh định giá',
+    };
+    return labels[type || ''] || type || 'Khác';
+  }
+
+  statusLabel(status: string | undefined) {
+    const labels: Record<string, string> = {
+      posted: 'Đã ghi nhận',
+      pending: 'Đang chờ',
+      voided: 'Đã huỷ',
+      rejected: 'Đã từ chối',
+    };
+    return labels[status || ''] || status || 'Chưa xác định';
   }
 }

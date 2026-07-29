@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mobile/app/app.dart';
+import 'package:mobile/features/finora/presentation/finora_pages.dart';
 
 void main() {
   testWidgets('renders sign in form', (WidgetTester tester) async {
@@ -17,5 +18,16 @@ void main() {
 
     await tester.pumpWidget(const FinoraApp());
     expect(find.text('Đăng nhập'), findsOneWidget);
+  });
+
+  test('normalizes technical and network errors for users', () {
+    expect(
+      presentableError('ApiException: Không thể lưu dữ liệu'),
+      'Không thể lưu dữ liệu',
+    );
+    expect(
+      presentableError('SocketException: Failed host lookup'),
+      'Không thể kết nối máy chủ. Kiểm tra mạng rồi thử lại.',
+    );
   });
 }

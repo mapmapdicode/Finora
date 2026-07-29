@@ -1,0 +1,935 @@
+# ROLE — FINORA WEALTH OS UI/UX AUDIT & REFACTOR
+
+Bạn đang đóng vai trò đồng thời là:
+
+- Senior Product Designer
+- Senior Mobile UI/UX Designer
+- Design System Architect
+- Senior Frontend/Mobile Engineer
+- Fintech Product Designer
+
+Nhiệm vụ của bạn là **đọc và rà soát TOÀN BỘ source code hiện tại của ứng dụng Finora**, xác định tất cả screen, component, navigation, modal, bottom sheet, form và user flow đang tồn tại; sau đó chuẩn hóa và refactor UI/UX thành một hệ thống thiết kế thống nhất.
+
+KHÔNG redesign tùy hứng từng màn hình.
+KHÔNG phá business logic hiện tại.
+KHÔNG thay đổi API contract nếu không thực sự cần thiết.
+KHÔNG xóa functionality chỉ vì thiết kế mới không đề cập tới.
+
+---
+
+# 1. PRODUCT IDENTITY
+
+Tên sản phẩm:
+
+**Finora — Wealth OS**
+
+Đây không phải app ghi chép chi tiêu thông thường.
+
+Finora là hệ điều hành quản lý tài chính cá nhân, tập trung vào:
+
+- Net Worth
+- Cash Flow
+- Accounts
+- Transactions
+- Lending / Loans
+- Interest Collection
+- Assets
+- Real Estate
+- Investments
+- Financial Planning
+- Automation
+- AI Assistant
+
+Cảm giác sản phẩm cần mang lại:
+
+> Premium Personal Wealth Management  
+> Calm + Intelligent + Trustworthy + Modern
+
+Ứng dụng phải có cảm giác giống một sản phẩm quản lý tài sản thực sự, không giống template admin hoặc app ngân hàng clone.
+
+---
+
+# 2. VISUAL DIRECTION
+
+Giữ DNA hiện tại của Finora:
+
+- Purple / deep violet là màu thương hiệu chính
+- Gold / amber dùng làm accent
+- Background sáng, hơi translucent
+- Autumn maple leaves chỉ đóng vai trò decorative
+- Card trắng / glass nhẹ
+- Border radius lớn
+- Shadow rất nhẹ
+- Typography rõ ràng
+- Khoảng trắng rộng
+- Financial number là thành phần thị giác quan trọng nhất
+
+Phong cách:
+
+Premium Fintech
++ Wealth Management
++ Modern iOS
++ subtle Glassmorphism
++ clean data visualization
+
+Không lạm dụng gradient.
+
+Không biến tất cả thành card.
+
+Không dùng quá nhiều màu.
+
+Không để background lá phong làm giảm readability.
+
+Decorative elements phải đứng sau information hierarchy.
+
+---
+
+# 3. DESIGN TOKENS
+
+Hãy kiểm tra design system hiện tại và gom toàn bộ hard-coded style về token/theme.
+
+Tạo hoặc chuẩn hóa:
+
+## Colors
+
+Primary Deep Purple
+Primary Purple
+Secondary Purple
+Gold Accent
+Amber Accent
+
+Success
+Warning
+Danger
+Info
+
+Surface
+Surface Elevated
+Surface Glass
+Background
+
+Text Primary
+Text Secondary
+Text Tertiary
+Border
+
+Không hard-code màu rải rác trong component.
+
+---
+
+## Radius
+
+Chỉ sử dụng một tập radius thống nhất:
+
+- xs
+- sm
+- md
+- lg
+- xl
+- full
+
+Card chính nên khoảng 16–24px tùy component.
+
+---
+
+## Spacing
+
+Dùng spacing system nhất quán.
+
+Ưu tiên:
+
+4 / 8 / 12 / 16 / 20 / 24 / 32
+
+Không xuất hiện padding/margin ngẫu nhiên như:
+
+13px
+17px
+21px
+27px
+
+trừ trường hợp thực sự cần thiết.
+
+---
+
+# 4. TYPOGRAPHY
+
+Audit toàn bộ typography.
+
+Phải có hierarchy rõ:
+
+Display
+H1
+H2
+H3
+Title
+Body
+Body Small
+Caption
+Label
+
+Financial values cần dùng tabular numbers nếu framework/font hỗ trợ.
+
+Ví dụ:
+
+2,703,587,945 VND
+
+phải nổi bật hơn label:
+
+Tổng tài sản ròng
+
+Không để label cạnh tranh visual hierarchy với financial value.
+
+---
+
+# 5. GLOBAL APP SHELL
+
+Chuẩn hóa toàn bộ application shell.
+
+Header:
+- logo Finora
+- WEALTH OS badge khi phù hợp
+- notification
+- contextual actions
+
+Bottom navigation:
+
+Trang chủ
+Tài khoản
+[+] Quick Action
+Giao dịch
+Cá nhân
+
+Nút [+] ở giữa là Global Quick Action.
+
+Khi click mở Bottom Sheet:
+
+Tạo giao dịch
+Cho vay mới
+Thu lãi / gốc
+Chuyển tiền
+Thêm tài sản
+
+Không để mỗi màn hình implement một kiểu FAB khác nhau.
+
+---
+
+# 6. INFORMATION ARCHITECTURE
+
+Rà soát navigation và đảm bảo các module được tổ chức theo cấu trúc:
+
+## Xác thực
+
+Đăng nhập
+Đăng ký
+Quên mật khẩu
+
+## Cá nhân
+
+Hồ sơ cá nhân
+Cài đặt
+Security
+Notification settings
+
+## Tổng quan
+
+Dashboard tài sản ròng
+Cash flow
+Recent transactions
+Alerts
+Quick actions
+
+## Tài khoản & giao dịch
+
+Danh sách tài khoản
+Chi tiết tài khoản
+Lịch sử giao dịch
+Tạo giao dịch
+Sửa giao dịch
+Thu
+Chi
+Chuyển tiền
+Đối soát ngân hàng
+
+## Khoản vay
+
+Đầu mối
+Danh sách khoản vay
+Chi tiết đầu mối
+Chi tiết khoản vay
+Thu lãi
+Thu gốc
+Lịch sử thu
+Lịch tiền về
+Khoản đến hạn
+Khoản quá hạn
+Tạo khoản vay / giải ngân
+
+## Tài sản
+
+Danh sách tài sản
+Chi tiết tài sản
+Định giá
+Bất động sản
+Lịch sử định giá
+
+## Đầu tư
+
+Danh mục đầu tư
+Allocation
+Performance
+
+## Kế hoạch
+
+Ngân sách tháng
+Dự báo tài sản
+Financial scenarios
+
+## Automation
+
+Kết nối ngân hàng
+Auto categorization rules
+
+## AI
+
+Finora AI Assistant
+
+## System
+
+Notifications
+Audit log
+
+---
+
+# 7. DASHBOARD
+
+Dashboard phải trả lời được trong vài giây:
+
+1. Tôi đang có bao nhiêu tài sản?
+2. Tiền của tôi đang nằm ở đâu?
+3. Tháng này tiền vào/ra thế nào?
+4. Có việc gì cần xử lý ngay?
+5. Có khoản tiền nào sắp về?
+
+Hero:
+
+TỔNG TÀI SẢN RÒNG
+
+2,703,587,945 VND
+
+Bên dưới có thể hiển thị:
+
+Cash
+Bank
+Loans Receivable
+Investments
+Real Estate
+Liabilities
+
+Sau hero:
+
+Cash Flow
+Alerts
+Upcoming Money
+Recent Transactions
+Quick Insights
+
+Không nhồi tất cả module vào dashboard.
+
+Dashboard là executive overview.
+
+---
+
+# 8. LOAN UX — MODULE QUAN TRỌNG
+
+Đây là module quan trọng của Finora.
+
+Flow chuẩn:
+
+Đầu mối
+→ Chi tiết đầu mối
+→ Khoản vay
+→ Chi tiết khoản vay
+→ Ghi nhận thu
+→ Lịch sử
+
+## Đầu mối
+
+Group khoản vay theo borrower/contact.
+
+Card đầu mối hiển thị:
+
+Avatar
+Tên
+Số khoản đang vay
+Tổng gốc
+Lãi đang phát sinh / lãi dự kiến
+Status
+
+Ví dụ:
+
+Anh Minh
+
+4 khoản vay
+
+Tổng gốc
+480,000,000
+
+Lãi cộng dồn
+8,880,000
+
+Không hiển thị quá nhiều metadata ở màn này.
+
+---
+
+# 9. LOAN DETAIL
+
+Chi tiết khoản vay cần ưu tiên:
+
+Gốc
+Lãi/ngày
+Ngày bắt đầu
+Số ngày đang vay
+Lãi cộng dồn
+Tổng phải thu
+
+Ví dụ:
+
+Gốc
+80,000,000
+
+Lãi/ngày
+240,000
+
+37 ngày
+
+Lãi cộng dồn
+8,880,000
+
+Tổng phải thu
+88,880,000
+
+Primary CTA:
+
+Ghi nhận thu
+
+Secondary:
+
+Lịch sử thu
+
+---
+
+# 10. INTEREST / PRINCIPAL COLLECTION UX
+
+Khi người dùng click:
+
+Ghi nhận thu lãi / gốc
+
+mở Bottom Sheet hoặc dedicated screen.
+
+Có 2 mode:
+
+Thu lãi
+Thu gốc
+
+## Ngày nhận
+
+Default:
+
+Today
+
+Người dùng có thể thay đổi.
+
+## Số ngày nhận lãi
+
+Cho phép:
+
+[-] 10 ngày [+]
+
+và quick selection khi phù hợp:
+
+1 ngày
+3 ngày
+7 ngày
+30 ngày
+Tất cả ngày chưa thu
+
+Hệ thống phải tự tính:
+
+suggestedAmount =
+dailyInterest × numberOfDays
+
+Ví dụ:
+
+Lãi/ngày
+
+240,000
+
+Số ngày
+
+10
+
+Số tiền gợi ý
+
+2,400,000 VND
+
+---
+
+# 11. SUGGESTED AMOUNT ≠ FINAL AMOUNT
+
+Đây là rule UX quan trọng.
+
+Số tiền hệ thống tính chỉ là:
+
+"Số tiền gợi ý"
+
+Không phải giá trị bắt buộc.
+
+Field:
+
+Số tiền thực nhận
+
+được prefill bằng suggested amount.
+
+Người dùng được phép chỉnh sửa.
+
+Ví dụ:
+
+Gợi ý
+2,400,000
+
+Thực nhận
+2,350,000
+
+Ngày nhận
+28/07/2026
+
+Ghi chú
+Khách chuyển thiếu 50k
+
+CTA:
+
+Lưu khoản thu
+
+---
+
+# 12. LOAN COLLECTION HISTORY
+
+History cần thể hiện timeline tài chính rõ ràng.
+
+Ví dụ:
+
+28/07/2026
+
++2,400,000
+
+Thu lãi
+10 ngày
+
+----------------
+
+18/07/2026
+
++1,680,000
+
+Thu lãi
+7 ngày
+
+----------------
+
+10/07/2026
+
++10,000,000
+
+Thu gốc
+
+Không hiển thị history như bảng database.
+
+---
+
+# 13. ACCOUNTS
+
+Danh sách account cần dễ scan.
+
+Ví dụ:
+
+VPBank
+
+160,000,000
+
+Bank account
+
+----------------
+
+Tiền mặt
+
+28,500,000
+
+Cash
+
+----------------
+
+MB Bank
+
+13,000,000
+
+Không hiển thị những metadata không cần thiết ngay trên list.
+
+---
+
+# 14. TRANSACTIONS
+
+Transaction phải có visual semantic rõ.
+
+Income:
++22,000,000
+
+Expense:
+-5,300,000
+
+Transfer:
+neutral
+
+Loan collection:
++1,760,000
+
+Loan disbursement:
+-80,000,000
+
+Nhưng KHÔNG chỉ dựa vào màu để truyền đạt ý nghĩa.
+
+Phải có icon / label tương ứng.
+
+---
+
+# 15. FORMS
+
+Audit toàn bộ form.
+
+Mỗi field cần:
+
+Label
+Input
+Helper text khi cần
+Validation
+Error state
+Disabled state
+Focus state
+
+Không dùng placeholder thay cho label.
+
+Money input phải format khi nhập.
+
+Ví dụ:
+
+1760000
+
+→
+
+1,760,000
+
+Date dùng date picker.
+
+Các form dài nên chia section.
+
+Primary CTA phải rõ ràng.
+
+---
+
+# 16. EMPTY / LOADING / ERROR STATES
+
+Tìm tất cả screen/component chưa xử lý:
+
+Empty
+Loading
+Skeleton
+Error
+Offline
+Retry
+No search result
+
+và bổ sung.
+
+Không để màn hình trắng khi không có dữ liệu.
+
+---
+
+# 17. INTERACTION
+
+Chuẩn hóa:
+
+tap
+long press
+swipe
+modal
+bottom sheet
+confirmation
+toast/snackbar
+
+Destructive actions phải confirm.
+
+Ví dụ:
+
+Xóa giao dịch
+Xóa tài khoản
+Hủy khoản vay
+
+không được thực hiện ngay bằng một tap.
+
+---
+
+# 18. ACCESSIBILITY
+
+Kiểm tra:
+
+Touch target >= 44x44
+Contrast
+Dynamic text
+Keyboard avoidance
+Safe area
+Screen reader semantics
+Number readability
+
+Không dùng font quá nhỏ để nhét thêm thông tin.
+
+---
+
+# 19. RESPONSIVE
+
+UI phải hoạt động tốt trên nhiều kích thước điện thoại.
+
+Không thiết kế cứng chỉ cho một iPhone mockup.
+
+Kiểm tra:
+
+small phones
+standard phones
+large phones
+
+Không overflow khi số tiền lớn như:
+
+2,703,587,945.21 VND
+
+hoặc:
+
+15,000,000,000 VND
+
+---
+
+# 20. UX AUDIT TRƯỚC KHI CODE
+
+BƯỚC ĐẦU TIÊN:
+
+KHÔNG CODE.
+
+Hãy scan toàn bộ project.
+
+Liệt kê:
+
+- tất cả screens
+- routes
+- reusable components
+- dialogs
+- bottom sheets
+- forms
+- navigation
+- design tokens
+- duplicated components
+- inconsistent styles
+- UX problems
+
+Sau đó tạo:
+
+UI_UX_AUDIT.md
+
+Format:
+
+Screen
+Current problem
+Severity
+Proposed solution
+Reusable component affected
+Priority
+
+Severity:
+
+Critical
+High
+Medium
+Low
+
+---
+
+# 21. DESIGN SYSTEM PLAN
+
+Sau audit tạo:
+
+FINORA_DESIGN_SYSTEM.md
+
+Bao gồm:
+
+Colors
+Typography
+Spacing
+Radius
+Elevation
+Iconography
+Buttons
+Inputs
+Cards
+List items
+Financial values
+Status badges
+Tabs
+Bottom sheets
+Dialogs
+Navigation
+Charts
+Empty states
+Skeletons
+
+---
+
+# 22. COMPONENT REUSE
+
+Trước khi tạo component mới:
+
+SEARCH project xem component tương tự đã tồn tại chưa.
+
+Ưu tiên refactor thành reusable component.
+
+Các component nên chuẩn hóa:
+
+FinoraScaffold
+FinoraHeader
+FinoraCard
+FinoraSection
+FinoraMoney
+FinoraButton
+FinoraIconButton
+FinoraTextField
+FinoraMoneyInput
+FinoraDatePicker
+FinoraStatusBadge
+FinoraListTile
+FinoraTransactionTile
+FinoraLoanCard
+FinoraContactCard
+FinoraBottomSheet
+FinoraEmptyState
+FinoraSkeleton
+
+Tên cụ thể có thể thay đổi theo framework hiện tại.
+
+---
+
+# 23. REFACTOR STRATEGY
+
+Không rewrite toàn bộ project một lần.
+
+Thực hiện theo phase.
+
+Phase 1
+Design tokens + typography + core components
+
+Phase 2
+Global shell + navigation + quick actions
+
+Phase 3
+Dashboard
+
+Phase 4
+Accounts + Transactions
+
+Phase 5
+Loans
+
+Phase 6
+Assets + Investments
+
+Phase 7
+Planning
+
+Phase 8
+Automation + AI + Profile
+
+Phase 9
+Polish + accessibility + animations
+
+Sau mỗi phase:
+
+- build project
+- chạy lint
+- chạy test hiện có
+- kiểm tra compile error
+- kiểm tra navigation
+- kiểm tra regression
+
+Không chuyển phase nếu project đang broken.
+
+---
+
+# 24. BUSINESS LOGIC SAFETY
+
+Đây là refactor UI/UX.
+
+Không tự ý:
+
+- đổi database model
+- đổi API
+- đổi calculation
+- đổi business rule
+- đổi authentication
+- xóa feature
+- mock dữ liệu thay dữ liệu thật
+
+Nếu UI mới cần data backend chưa có:
+
+ghi TODO rõ ràng.
+
+Không fake business functionality.
+
+---
+
+# 25. FINAL QUALITY BAR
+
+Mỗi màn hình sau refactor phải đạt:
+
+Clear hierarchy
+Consistent spacing
+Consistent typography
+One obvious primary action
+Low cognitive load
+Financial numbers easy to scan
+Reusable components
+No duplicated styling
+No overflow
+No broken navigation
+
+Quan trọng nhất:
+
+Finora phải nhìn như **một sản phẩm duy nhất**.
+
+Không được có cảm giác:
+
+"mỗi màn hình do một AI khác nhau code."
+
+---
+
+# EXECUTION
+
+Bây giờ hãy:
+
+1. Scan toàn bộ repository.
+2. Xác định framework và architecture.
+3. Inventory toàn bộ UI.
+4. Tạo UI_UX_AUDIT.md.
+5. Tạo FINORA_DESIGN_SYSTEM.md.
+6. Tạo UI_REFACTOR_PLAN.md.
+7. Chỉ ra 10 vấn đề UI/UX nghiêm trọng nhất.
+8. Xác định các component cần chuẩn hóa trước.
+9. Đề xuất thứ tự refactor.
+10. Sau khi hoàn thành audit, bắt đầu Phase 1.
+
+Không hỏi tôi từng màn hình phải sửa thế nào.
+
+Hãy tự phân tích project hiện tại, giữ nguyên nghiệp vụ và chủ động đưa toàn bộ ứng dụng về cùng một Finora Wealth OS Design System.

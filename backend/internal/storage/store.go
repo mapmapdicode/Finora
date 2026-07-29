@@ -15,82 +15,92 @@ import (
 )
 
 type InMemoryStore struct {
-	mu                sync.RWMutex
-	users             map[domain.ID]*domain.User
-	portfolios        map[domain.ID]*domain.Portfolio
-	accounts          map[domain.ID]*domain.Account
-	botAccountKeys    map[domain.ID]*domain.BotAccountKey
-	transactions      map[domain.ID]*domain.Transaction
-	transfers         map[domain.ID]*domain.Transfer
-	loans             map[domain.ID]*domain.Loan
-	loanPayments      map[domain.ID]*domain.LoanPayment
-	properties        map[domain.ID]*domain.Property
-	propertyValues    map[domain.ID]*domain.PropertyValuation
-	assets            map[domain.ID]*domain.Asset
-	assetValues       map[domain.ID]*domain.AssetValuation
-	budgets           map[domain.ID]*domain.Budget
-	budgetAllocs      map[domain.ID]*domain.BudgetAllocation
-	forecast          map[domain.ID]*domain.ForecastScenario
-	bankConnections   map[domain.ID]*domain.BankConnection
-	bankFeed          map[domain.ID]*domain.BankFeedTransaction
-	bankFeedKeys      map[string]domain.ID
-	bankFeedEvents    map[domain.ID]*domain.BankFeedEvent
-	bankFeedEventKeys map[string]domain.ID
-	bankRecon         map[domain.ID]*domain.BankReconciliation
-	automationRules   map[domain.ID]*domain.AutomationRule
-	bankPaymentReqs   map[domain.ID]*domain.BankPaymentRequest
-	assistantCmds     map[domain.ID]*domain.AssistantCommand
-	auditLogs         map[domain.ID]*domain.AuditLog
-	userSettings      map[domain.ID]*domain.UserSettings
-	sepayProfiles     map[domain.ID]*domain.SePayUserProfile
-	sepayAccounts     map[domain.ID]*domain.SePayBankAccount
-	sepayAccountXIDs  map[string]domain.ID
-	bankAccountMaps   map[domain.ID]*domain.BankAccountMapping
-	sepayLinkSessions map[string]sepayLinkSession
-	unmappedSePay     map[string]*domain.SePayUnmappedEvent
-	suggestions       map[domain.ID]*domain.TransactionSuggestion
-	feedback          map[domain.ID]*domain.ClassificationFeedback
+	mu                      sync.RWMutex
+	users                   map[domain.ID]*domain.User
+	emailVerificationTokens map[string]emailVerificationToken
+	portfolios              map[domain.ID]*domain.Portfolio
+	accounts                map[domain.ID]*domain.Account
+	botAccountKeys          map[domain.ID]*domain.BotAccountKey
+	transactions            map[domain.ID]*domain.Transaction
+	transfers               map[domain.ID]*domain.Transfer
+	customers               map[domain.ID]*domain.Customer
+	loans                   map[domain.ID]*domain.Loan
+	loanPayments            map[domain.ID]*domain.LoanPayment
+	properties              map[domain.ID]*domain.Property
+	propertyValues          map[domain.ID]*domain.PropertyValuation
+	assets                  map[domain.ID]*domain.Asset
+	assetValues             map[domain.ID]*domain.AssetValuation
+	budgets                 map[domain.ID]*domain.Budget
+	budgetAllocs            map[domain.ID]*domain.BudgetAllocation
+	forecast                map[domain.ID]*domain.ForecastScenario
+	bankConnections         map[domain.ID]*domain.BankConnection
+	bankFeed                map[domain.ID]*domain.BankFeedTransaction
+	bankFeedKeys            map[string]domain.ID
+	bankFeedEvents          map[domain.ID]*domain.BankFeedEvent
+	bankFeedEventKeys       map[string]domain.ID
+	bankRecon               map[domain.ID]*domain.BankReconciliation
+	automationRules         map[domain.ID]*domain.AutomationRule
+	bankPaymentReqs         map[domain.ID]*domain.BankPaymentRequest
+	assistantCmds           map[domain.ID]*domain.AssistantCommand
+	auditLogs               map[domain.ID]*domain.AuditLog
+	userSettings            map[domain.ID]*domain.UserSettings
+	sepayProfiles           map[domain.ID]*domain.SePayUserProfile
+	sepayAccounts           map[domain.ID]*domain.SePayBankAccount
+	sepayAccountXIDs        map[string]domain.ID
+	bankAccountMaps         map[domain.ID]*domain.BankAccountMapping
+	sepayLinkSessions       map[string]sepayLinkSession
+	unmappedSePay           map[string]*domain.SePayUnmappedEvent
+	suggestions             map[domain.ID]*domain.TransactionSuggestion
+	feedback                map[domain.ID]*domain.ClassificationFeedback
 	// idempotency keeps track of processed idempotency keys in-memory.
 	idempotencyKeys map[string]time.Time
 }
 
+type emailVerificationToken struct {
+	UserID    domain.ID
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
 func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{
-		users:             map[domain.ID]*domain.User{},
-		userSettings:      map[domain.ID]*domain.UserSettings{},
-		portfolios:        map[domain.ID]*domain.Portfolio{},
-		accounts:          map[domain.ID]*domain.Account{},
-		botAccountKeys:    map[domain.ID]*domain.BotAccountKey{},
-		transactions:      map[domain.ID]*domain.Transaction{},
-		transfers:         map[domain.ID]*domain.Transfer{},
-		loans:             map[domain.ID]*domain.Loan{},
-		loanPayments:      map[domain.ID]*domain.LoanPayment{},
-		properties:        map[domain.ID]*domain.Property{},
-		propertyValues:    map[domain.ID]*domain.PropertyValuation{},
-		assets:            map[domain.ID]*domain.Asset{},
-		assetValues:       map[domain.ID]*domain.AssetValuation{},
-		budgets:           map[domain.ID]*domain.Budget{},
-		budgetAllocs:      map[domain.ID]*domain.BudgetAllocation{},
-		forecast:          map[domain.ID]*domain.ForecastScenario{},
-		bankConnections:   map[domain.ID]*domain.BankConnection{},
-		bankFeed:          map[domain.ID]*domain.BankFeedTransaction{},
-		bankFeedKeys:      map[string]domain.ID{},
-		bankFeedEvents:    map[domain.ID]*domain.BankFeedEvent{},
-		bankFeedEventKeys: map[string]domain.ID{},
-		bankRecon:         map[domain.ID]*domain.BankReconciliation{},
-		automationRules:   map[domain.ID]*domain.AutomationRule{},
-		bankPaymentReqs:   map[domain.ID]*domain.BankPaymentRequest{},
-		assistantCmds:     map[domain.ID]*domain.AssistantCommand{},
-		auditLogs:         map[domain.ID]*domain.AuditLog{},
-		idempotencyKeys:   map[string]time.Time{},
-		sepayProfiles:     map[domain.ID]*domain.SePayUserProfile{},
-		sepayAccounts:     map[domain.ID]*domain.SePayBankAccount{},
-		sepayAccountXIDs:  map[string]domain.ID{},
-		bankAccountMaps:   map[domain.ID]*domain.BankAccountMapping{},
-		sepayLinkSessions: map[string]sepayLinkSession{},
-		unmappedSePay:     map[string]*domain.SePayUnmappedEvent{},
-		suggestions:       map[domain.ID]*domain.TransactionSuggestion{},
-		feedback:          map[domain.ID]*domain.ClassificationFeedback{},
+		users:                   map[domain.ID]*domain.User{},
+		emailVerificationTokens: map[string]emailVerificationToken{},
+		userSettings:            map[domain.ID]*domain.UserSettings{},
+		portfolios:              map[domain.ID]*domain.Portfolio{},
+		accounts:                map[domain.ID]*domain.Account{},
+		botAccountKeys:          map[domain.ID]*domain.BotAccountKey{},
+		transactions:            map[domain.ID]*domain.Transaction{},
+		transfers:               map[domain.ID]*domain.Transfer{},
+		customers:               map[domain.ID]*domain.Customer{},
+		loans:                   map[domain.ID]*domain.Loan{},
+		loanPayments:            map[domain.ID]*domain.LoanPayment{},
+		properties:              map[domain.ID]*domain.Property{},
+		propertyValues:          map[domain.ID]*domain.PropertyValuation{},
+		assets:                  map[domain.ID]*domain.Asset{},
+		assetValues:             map[domain.ID]*domain.AssetValuation{},
+		budgets:                 map[domain.ID]*domain.Budget{},
+		budgetAllocs:            map[domain.ID]*domain.BudgetAllocation{},
+		forecast:                map[domain.ID]*domain.ForecastScenario{},
+		bankConnections:         map[domain.ID]*domain.BankConnection{},
+		bankFeed:                map[domain.ID]*domain.BankFeedTransaction{},
+		bankFeedKeys:            map[string]domain.ID{},
+		bankFeedEvents:          map[domain.ID]*domain.BankFeedEvent{},
+		bankFeedEventKeys:       map[string]domain.ID{},
+		bankRecon:               map[domain.ID]*domain.BankReconciliation{},
+		automationRules:         map[domain.ID]*domain.AutomationRule{},
+		bankPaymentReqs:         map[domain.ID]*domain.BankPaymentRequest{},
+		assistantCmds:           map[domain.ID]*domain.AssistantCommand{},
+		auditLogs:               map[domain.ID]*domain.AuditLog{},
+		idempotencyKeys:         map[string]time.Time{},
+		sepayProfiles:           map[domain.ID]*domain.SePayUserProfile{},
+		sepayAccounts:           map[domain.ID]*domain.SePayBankAccount{},
+		sepayAccountXIDs:        map[string]domain.ID{},
+		bankAccountMaps:         map[domain.ID]*domain.BankAccountMapping{},
+		sepayLinkSessions:       map[string]sepayLinkSession{},
+		unmappedSePay:           map[string]*domain.SePayUnmappedEvent{},
+		suggestions:             map[domain.ID]*domain.TransactionSuggestion{},
+		feedback:                map[domain.ID]*domain.ClassificationFeedback{},
 	}
 }
 
@@ -106,6 +116,10 @@ func newID() domain.ID {
 
 func now() time.Time {
 	return time.Now().UTC()
+}
+
+func normalizeCustomerName(value string) string {
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(value))), " ")
 }
 
 func isValidTransactionStatus(status domain.TransactionStatus) bool {
@@ -138,17 +152,39 @@ func (s *InMemoryStore) SeedDemoUser(email, name string, password string) domain
 	if email != "demo@wealthos.vn" && email != "" {
 		id = newID()
 	}
+	verifiedAt := now()
 	s.users[id] = &domain.User{
 		Timestamped: domain.Timestamped{
 			ID:        id,
 			CreatedAt: now(),
 			UpdatedAt: now(),
 		},
-		Email:    email,
-		Name:     name,
-		Password: password,
+		Email:           email,
+		Name:            name,
+		Password:        password,
+		EmailVerifiedAt: &verifiedAt,
 	}
 	return id
+}
+
+func (s *InMemoryStore) CreateUser(input domain.User) (domain.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	if email == "" || strings.TrimSpace(input.Name) == "" || input.Password == "" {
+		return domain.User{}, errors.New("email, password, name are required")
+	}
+	for _, existing := range s.users {
+		if strings.EqualFold(strings.TrimSpace(existing.Email), email) {
+			return domain.User{}, errors.New("email already exists")
+		}
+	}
+	createdAt := now()
+	input.Timestamped = domain.Timestamped{ID: newID(), CreatedAt: createdAt, UpdatedAt: createdAt}
+	input.Email = email
+	input.EmailVerifiedAt = nil
+	s.users[input.ID] = &input
+	return input, nil
 }
 
 func (s *InMemoryStore) CreateAuditLog(input domain.AuditLog) (domain.AuditLog, error) {
@@ -249,6 +285,41 @@ func (s *InMemoryStore) GetUserByEmail(email string) (*domain.User, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (s *InMemoryStore) CreateEmailVerificationToken(userID domain.ID, tokenHash string, expiresAt time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.users[userID]; !ok {
+		return errors.New("user not found")
+	}
+	for hash, token := range s.emailVerificationTokens {
+		if token.UserID == userID && token.UsedAt == nil {
+			delete(s.emailVerificationTokens, hash)
+		}
+	}
+	s.emailVerificationTokens[tokenHash] = emailVerificationToken{UserID: userID, ExpiresAt: expiresAt}
+	return nil
+}
+
+func (s *InMemoryStore) VerifyEmail(email, tokenHash string, at time.Time) (*domain.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	token, ok := s.emailVerificationTokens[tokenHash]
+	if !ok || token.UsedAt != nil || !at.Before(token.ExpiresAt) {
+		return nil, errors.New("verification code is invalid or expired")
+	}
+	user, ok := s.users[token.UserID]
+	if !ok || !strings.EqualFold(strings.TrimSpace(user.Email), strings.TrimSpace(email)) {
+		return nil, errors.New("verification code is invalid or expired")
+	}
+	verifiedAt := at.UTC()
+	user.EmailVerifiedAt = &verifiedAt
+	user.UpdatedAt = verifiedAt
+	token.UsedAt = &verifiedAt
+	s.emailVerificationTokens[tokenHash] = token
+	copy := *user
+	return &copy, nil
 }
 
 func (s *InMemoryStore) GetPortfolio(id domain.ID) (*domain.Portfolio, bool) {
@@ -544,6 +615,11 @@ func (s *InMemoryStore) DeleteAccount(userID domain.ID, id domain.ID) error {
 	if !ok || a.UserID != userID {
 		return errors.New("account not found")
 	}
+	for _, tx := range s.transactions {
+		if tx.AccountID == id {
+			return errors.New("cannot delete account with transaction history")
+		}
+	}
 	delete(s.accounts, id)
 	return nil
 }
@@ -554,6 +630,31 @@ func (s *InMemoryStore) DeletePortfolio(userID domain.ID, id domain.ID) error {
 	p, ok := s.portfolios[id]
 	if !ok || p.UserID != userID {
 		return errors.New("portfolio not found")
+	}
+	for _, account := range s.accounts {
+		if account.PortfolioID == id {
+			return errors.New("cannot delete portfolio with financial history")
+		}
+	}
+	for _, loan := range s.loans {
+		if loan.PortfolioID == id {
+			return errors.New("cannot delete portfolio with financial history")
+		}
+	}
+	for _, property := range s.properties {
+		if property.PortfolioID == id {
+			return errors.New("cannot delete portfolio with financial history")
+		}
+	}
+	for _, asset := range s.assets {
+		if asset.PortfolioID == id {
+			return errors.New("cannot delete portfolio with financial history")
+		}
+	}
+	for _, tx := range s.transactions {
+		if tx.PortfolioID == id {
+			return errors.New("cannot delete portfolio with financial history")
+		}
 	}
 	delete(s.portfolios, id)
 	return nil
@@ -566,6 +667,11 @@ func (s *InMemoryStore) DeleteLoan(userID domain.ID, id domain.ID) error {
 	if !ok || l.UserID != userID {
 		return errors.New("loan not found")
 	}
+	for _, payment := range s.loanPayments {
+		if payment.LoanID == id {
+			return errors.New("cannot delete loan with payment history")
+		}
+	}
 	delete(s.loans, id)
 	return nil
 }
@@ -577,6 +683,11 @@ func (s *InMemoryStore) DeleteProperty(userID domain.ID, id domain.ID) error {
 	if !ok || pr.UserID != userID {
 		return errors.New("property not found")
 	}
+	for _, value := range s.propertyValues {
+		if value.PropertyID == id {
+			return errors.New("cannot delete property with valuation history")
+		}
+	}
 	delete(s.properties, id)
 	return nil
 }
@@ -587,6 +698,11 @@ func (s *InMemoryStore) DeleteAsset(userID domain.ID, id domain.ID) error {
 	ast, ok := s.assets[id]
 	if !ok || ast.UserID != userID {
 		return errors.New("asset not found")
+	}
+	for _, value := range s.assetValues {
+		if value.AssetID == id {
+			return errors.New("cannot delete asset with valuation history")
+		}
 	}
 	delete(s.assets, id)
 	return nil
@@ -648,7 +764,72 @@ func (s *InMemoryStore) CreateTransfer(input domain.Transfer) (domain.Transfer, 
 	input.CreatedAt = now()
 	input.UpdatedAt = now()
 	s.transfers[id] = &input
+	for _, entry := range []domain.Transaction{
+		{UserID: input.UserID, AccountID: input.FromAccountID, Type: domain.TransactionTypeTransfer, Amount: input.Amount, Currency: input.Currency, Note: "internal transfer - out: " + input.Note, OccurredAt: input.OccurredAt, Status: domain.TransactionStatusPosted, Source: "transfer"},
+		{UserID: input.UserID, AccountID: input.ToAccountID, Type: domain.TransactionTypeTransfer, Amount: input.Amount, Currency: input.Currency, Note: "internal transfer - in: " + input.Note, OccurredAt: input.OccurredAt, Status: domain.TransactionStatusPosted, Source: "transfer"},
+	} {
+		entry.ID, entry.CreatedAt, entry.UpdatedAt = newID(), now(), now()
+		s.transactions[entry.ID] = &entry
+	}
 	return input, nil
+}
+
+func (s *InMemoryStore) CreateCustomer(input domain.Customer) (domain.Customer, error) {
+	if input.UserID == "" || strings.TrimSpace(input.Name) == "" {
+		return domain.Customer{}, errors.New("customer name is required")
+	}
+	input.Name = strings.TrimSpace(input.Name)
+	input.NormalizedName = normalizeCustomerName(input.Name)
+	input.Phone = strings.TrimSpace(input.Phone)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.customers {
+		if existing.UserID == input.UserID && existing.NormalizedName == input.NormalizedName {
+			if input.Phone != "" {
+				existing.Phone = input.Phone
+				existing.UpdatedAt = now()
+			}
+			return *existing, nil
+		}
+	}
+	input.ID, input.CreatedAt, input.UpdatedAt = newID(), now(), now()
+	s.customers[input.ID] = &input
+	return input, nil
+}
+
+func (s *InMemoryStore) ListCustomers(userID domain.ID, query string, limit int) []domain.Customer {
+	needle := normalizeCustomerName(query)
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.Customer, 0)
+	for _, customer := range s.customers {
+		if customer.UserID != userID {
+			continue
+		}
+		if needle != "" && !strings.Contains(customer.NormalizedName, needle) && !strings.Contains(customer.Phone, strings.TrimSpace(query)) {
+			continue
+		}
+		out = append(out, *customer)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func (s *InMemoryStore) GetCustomer(id domain.ID) (*domain.Customer, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	customer, ok := s.customers[id]
+	if !ok {
+		return nil, false
+	}
+	copy := *customer
+	return &copy, true
 }
 
 func (s *InMemoryStore) CreateLoan(input domain.Loan) (domain.Loan, error) {
@@ -710,6 +891,25 @@ func (s *InMemoryStore) CreateLoanPayment(input domain.LoanPayment) (domain.Loan
 	input.UpdatedAt = now()
 	s.loanPayments[id] = &input
 	return input, nil
+}
+
+func (s *InMemoryStore) SettleLoanPayment(loanID domain.ID, expectedPrincipalBalance, nextPrincipalBalance string, nextStatus domain.LoanStatus, payment domain.LoanPayment, ledger domain.Transaction) (domain.LoanPayment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	loan, ok := s.loans[loanID]
+	if !ok || loan.PrincipalBalance != expectedPrincipalBalance {
+		return domain.LoanPayment{}, errors.New("loan balance changed; retry payment")
+	}
+	if payment.UserID == "" || payment.AccountID == "" || ledger.UserID == "" || ledger.AccountID == "" {
+		return domain.LoanPayment{}, errors.New("missing settlement data")
+	}
+	ledger.ID, ledger.CreatedAt, ledger.UpdatedAt = newID(), now(), now()
+	s.transactions[ledger.ID] = &ledger
+	payment.ID, payment.TransactionID = newID(), ledger.ID
+	payment.CreatedAt, payment.UpdatedAt = now(), now()
+	s.loanPayments[payment.ID] = &payment
+	loan.PrincipalBalance, loan.Status, loan.UpdatedAt = nextPrincipalBalance, nextStatus, now()
+	return payment, nil
 }
 
 func (s *InMemoryStore) CreateProperty(input domain.Property) (domain.Property, error) {

@@ -28,6 +28,55 @@ type fakeBankHub struct {
 	query    string
 }
 
+func waitForAuditLogs(t *testing.T, store storage.Store, userID domain.ID, minimum int) []domain.AuditLog {
+	t.Helper()
+	deadline := time.Now().Add(250 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		logs := store.ListAuditLogs(userID)
+		if len(logs) >= minimum {
+			return logs
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return store.ListAuditLogs(userID)
+}
+
+func TestEmailVerificationFlowRequiresConfirmationAndIssuesTokenAfterVerification(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), &config.Config{JWTSecret: "test-jwt-secret"})
+
+	registerW := httptest.NewRecorder()
+	registerC, _ := gin.CreateTestContext(registerW)
+	registerC.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"email":"new@example.test","name":"New User","password":"safe-password","confirmPassword":"safe-password"}`))
+	registerC.Request.Header.Set("Content-Type", "application/json")
+	h.Register(registerC)
+	if registerW.Code != http.StatusCreated || strings.Contains(registerW.Body.String(), `"token"`) {
+		t.Fatalf("register status=%d body=%s", registerW.Code, registerW.Body.String())
+	}
+
+	user, ok := store.GetUserByEmail("new@example.test")
+	if !ok || user.IsEmailVerified() {
+		t.Fatalf("new user should exist and await verification: %+v", user)
+	}
+	if err := store.CreateEmailVerificationToken(user.ID, h.verificationCodeHash("123456"), time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	verifyW := httptest.NewRecorder()
+	verifyC, _ := gin.CreateTestContext(verifyW)
+	verifyC.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify-email", strings.NewReader(`{"email":"new@example.test","code":"123456"}`))
+	verifyC.Request.Header.Set("Content-Type", "application/json")
+	h.VerifyEmail(verifyC)
+	if verifyW.Code != http.StatusOK || !strings.Contains(verifyW.Body.String(), `"token"`) {
+		t.Fatalf("verify status=%d body=%s", verifyW.Code, verifyW.Body.String())
+	}
+
+	updated, ok := store.GetUserByEmail("new@example.test")
+	if !ok || !updated.IsEmailVerified() {
+		t.Fatal("user should be marked as email-verified")
+	}
+}
+
 func TestParseStandardSePayWebhookPayload(t *testing.T) {
 	event, err := parseSePayWebhookPayload([]byte(`{"id":92704,"gateway":"Vietcombank","transactionDate":"2026-07-27 11:08:33","accountNumber":"1017588888","content":"chuyen tien","transferType":"in","description":"NGUYEN VAN A","transferAmount":5000000,"referenceCode":"FT24012345678"}`))
 	if err != nil {
@@ -1843,7 +1892,7 @@ func TestCreateAccountRecordsAuditLog(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	logs := store.ListAuditLogs(ws.ID)
+	logs := waitForAuditLogs(t, store, ws.ID, 1)
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 audit log, got %d", len(logs))
 	}
@@ -1859,6 +1908,35 @@ func TestCreateAccountRecordsAuditLog(t *testing.T) {
 	}
 	if log.CorrelationID != "corr-test-1" {
 		t.Fatalf("expected correlation id corr-test-1, got %q", log.CorrelationID)
+	}
+}
+
+func TestCreateAccountRecordsOpeningBalanceInNetWorth(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	uid := store.SeedDemoUser("opening@wealthos.vn", "Opening User", "pass")
+	if _, err := store.EnsureUserPortfolio("Opening", "VND", uid); err != nil {
+		t.Fatalf("create user portfolio: %v", err)
+	}
+	svc := service.NewWealthService(store, nil)
+	h := NewWealthHandler(store, svc, &config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts", strings.NewReader(`{"name":"Savings","type":"bank","currency":"VND","initialBalance":"180000000"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(resp)
+	c.Request = req
+	c.Set("user_id", string(uid))
+	c.Set("user_role", "owner")
+
+	h.CreateAccount(c)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", resp.Code, resp.Body.String())
+	}
+	netWorth, err := svc.CurrentNetWorth(string(uid))
+	if err != nil {
+		t.Fatalf("compute net worth: %v", err)
+	}
+	if netWorth.NetWorth != "180000000.00" {
+		t.Fatalf("expected opening balance in net worth, got %s", netWorth.NetWorth)
 	}
 }
 
@@ -1892,6 +1970,7 @@ func TestListAuditLogsRequiresUser(t *testing.T) {
 		t.Fatalf("seed account: expected 201, got %d", resp.Result().StatusCode)
 	}
 
+	_ = waitForAuditLogs(t, store, ws1.ID, 1)
 	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/audit-logs", nil)
 	respList := httptest.NewRecorder()
 	cList, _ := gin.CreateTestContext(respList)

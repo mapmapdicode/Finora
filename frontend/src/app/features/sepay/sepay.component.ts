@@ -7,6 +7,7 @@ import { Account, BankConnection, BankFeedTransaction, SePayConnectResponse } fr
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { finalize } from 'rxjs';
 
 type InboxTab = 'pending_review' | 'auto_ready' | 'posted' | 'ignored' | 'all';
 
@@ -19,8 +20,8 @@ type InboxTab = 'pending_review' | 'auto_ready' | 'posted' | 'ignored' | 'all';
 export class SePayComponent implements OnInit {
   readonly postingTabs: { key: InboxTab; label: string }[] = [
     { key: 'pending_review', label: 'Cần xem' },
-    { key: 'auto_ready', label: 'Đã tự ghi (đợi review)' },
-    { key: 'posted', label: 'Đã match' },
+    { key: 'auto_ready', label: 'Đã tự ghi (chờ xem xét)' },
+    { key: 'posted', label: 'Đã đối soát' },
     { key: 'ignored', label: 'Bỏ qua' },
     { key: 'all', label: 'Tất cả' },
   ];
@@ -35,6 +36,8 @@ export class SePayComponent implements OnInit {
   previewResult: unknown = null;
   isBusy = false;
   isActionBusy = false;
+  feedLoading = true;
+  feedLoadError = '';
 
   reclassifyForm: FormGroup;
 
@@ -47,7 +50,7 @@ export class SePayComponent implements OnInit {
       type: ['income', Validators.required],
       accountId: [''],
       categoryId: [''],
-      reason: ['Phan loai lai tu ngan hang', Validators.required],
+      reason: ['Phân loại lại từ ngân hàng', Validators.required],
     });
   }
 
@@ -101,9 +104,18 @@ export class SePayComponent implements OnInit {
       this.connections = items;
     });
     const state = this.activeTab === 'all' ? undefined : this.activeTab;
-    this.api.listBankFeedTransactions({ state, accountId: this.accountIdFilter || undefined }).subscribe((items) => {
-      this.feed = items;
-      this.selectedFeed = selectedId ? this.feed.find((item) => item.id === selectedId) : this.selectedFeed;
+    this.feedLoading = true;
+    this.feedLoadError = '';
+    this.api.listBankFeedTransactions({ state, accountId: this.accountIdFilter || undefined }).pipe(
+      finalize(() => (this.feedLoading = false)),
+    ).subscribe({
+      next: (items) => {
+        this.feed = items;
+        this.selectedFeed = selectedId ? this.feed.find((item) => item.id === selectedId) : this.selectedFeed;
+      },
+      error: () => {
+        this.feedLoadError = 'Không thể tải dòng giao dịch ngân hàng.';
+      },
     });
   }
 
@@ -173,13 +185,34 @@ export class SePayComponent implements OnInit {
     return connection.lastSyncRequestedAt ? new Date(connection.lastSyncRequestedAt).toLocaleString() : 'chưa đồng bộ';
   }
 
+  connectionStatusLabel(status: string | undefined) {
+    const labels: Record<string, string> = {
+      active: 'Đang kết nối',
+      pending: 'Đang chờ',
+      revoked: 'Đã ngắt kết nối',
+      error: 'Cần kiểm tra',
+    };
+    return labels[status || ''] || status || 'Chưa xác định';
+  }
+
+  syncStatusLabel(status: string | undefined) {
+    const labels: Record<string, string> = {
+      running: 'Đang đồng bộ',
+      success: 'Đã đồng bộ',
+      completed: 'Đã đồng bộ',
+      failed: 'Đồng bộ lỗi',
+      pending: 'Đang chờ',
+    };
+    return labels[status || ''] || status || 'Chưa chạy';
+  }
+
   callbackLabel(connection: BankConnection) {
     return connection.lastSyncedAt ? new Date(connection.lastSyncedAt).toLocaleString() : 'chưa nhận';
   }
 
   statusText(item: BankFeedTransaction) {
     if (item.postingState === 'auto_ready') return 'Sẵn sàng tự ghi';
-    if (item.postingState === 'posted') return 'Đã match';
+    if (item.postingState === 'posted') return 'Đã đối soát';
     if (item.postingState === 'ignored') return 'Bỏ qua';
     return 'Cần xem';
   }
@@ -267,7 +300,7 @@ export class SePayComponent implements OnInit {
       type: item.direction === 'out' ? 'expense' : 'income',
       accountId: item.accountId || '',
       categoryId: '',
-      reason: `Phe duyet thu cong: ${item.direction === 'out' ? 'chi' : 'thu'}`,
+      reason: `Phê duyệt thủ công: ${item.direction === 'out' ? 'chi' : 'thu'}`,
     });
   }
 
@@ -277,7 +310,7 @@ export class SePayComponent implements OnInit {
       type: 'income',
       accountId: '',
       categoryId: '',
-      reason: 'Phan loai lai tu ngan hang',
+      reason: 'Phân loại lại từ ngân hàng',
     });
     this.previewResult = null;
   }

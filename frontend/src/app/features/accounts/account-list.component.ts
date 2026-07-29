@@ -18,6 +18,11 @@ export class AccountListComponent implements OnInit {
   form!: FormGroup;
   accounts: any[] = [];
   portfolios: Portfolio[] = [];
+  isCreating = false;
+  saving = false;
+  loading = true;
+  accountLoadError = '';
+  statusMessage = '';
 
   constructor(private fb: FormBuilder, private api: ApiService, public auth: AuthService) {}
 
@@ -28,25 +33,73 @@ export class AccountListComponent implements OnInit {
       currency: ['VND', Validators.required],
       portfolioId: [''],
     });
-    this.api.getPortfolios().subscribe((items) => {
-      this.portfolios = items;
-      const defaultPortfolio = items[0]?.id || '';
-      this.form.patchValue({ portfolioId: defaultPortfolio });
+    this.api.getPortfolios().subscribe({
+      next: (items) => {
+        this.portfolios = items;
+        const defaultPortfolio = items[0]?.id || '';
+        this.form.patchValue({ portfolioId: defaultPortfolio });
+      },
+      error: () => {
+        this.portfolios = [];
+      },
     });
     this.reload();
   }
 
-  private reload() {
-    this.api.getAccounts().subscribe((items) => this.accounts = items);
+  reload() {
+    this.loading = true;
+    this.accountLoadError = '';
+    this.api.getAccounts().subscribe({
+      next: (items) => {
+        this.accounts = items;
+        this.loading = false;
+      },
+      error: () => {
+        this.accounts = [];
+        this.loading = false;
+        this.accountLoadError = 'Không thể tải danh sách tài khoản.';
+      },
+    });
+  }
+
+  openCreate() {
+    if (!this.auth.canMutate) return;
+    this.isCreating = true;
+    this.statusMessage = '';
+  }
+
+  closeCreate() {
+    if (this.saving) return;
+    this.isCreating = false;
   }
 
   submit() {
     if (!this.auth.canMutate) return;
     if (this.form.invalid) return;
-    this.api.createAccount(this.form.value as any).subscribe(() => {
-      const defaultPortfolio = this.portfolios[0]?.id || '';
-      this.form.reset({ type: 'cash', currency: 'VND', portfolioId: defaultPortfolio });
-      this.reload();
+    this.saving = true;
+    this.statusMessage = '';
+    this.api.createAccount(this.form.value as any).subscribe({
+      next: () => {
+        const defaultPortfolio = this.portfolios[0]?.id || '';
+        this.form.reset({ type: 'cash', currency: 'VND', portfolioId: defaultPortfolio });
+        this.saving = false;
+        this.isCreating = false;
+        this.statusMessage = 'Đã tạo tài khoản.';
+        this.reload();
+      },
+      error: () => {
+        this.saving = false;
+        this.statusMessage = 'Không thể tạo tài khoản. Kiểm tra lại thông tin rồi thử lại.';
+      },
     });
+  }
+
+  typeLabel(type: string | undefined) {
+    const labels: Record<string, string> = {
+      bank: 'Ngân hàng',
+      cash: 'Tiền mặt',
+      card: 'Thẻ',
+    };
+    return labels[type || ''] || type || 'Khác';
   }
 }

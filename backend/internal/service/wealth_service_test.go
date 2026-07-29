@@ -95,20 +95,140 @@ func TestProcessSePayIncoming_OutboundRequiresReview(t *testing.T) {
 func TestDailyRateLoanAccrualAndMonthEndSchedule(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ws, portfolioID, err := setupDemoUser(store)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	start := time.Date(2026, time.January, 31, 0, 0, 0, 0, time.UTC)
 	loan, err := store.CreateLoan(domain.Loan{
 		UserID: ws.ID, PortfolioID: portfolioID, Counterparty: "Anh Minh",
 		Direction: domain.LoanDirectionReceivable, PrincipalInitial: "100000000", PrincipalBalance: "100000000",
 		AnnualRate: "0", DailyRatePerMillion: "3000", StartAt: start, DueAt: start.AddDate(0, 1, 0), Status: domain.LoanStatusActive,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	svc := NewWealthService(store, nil)
 	rows, total := svc.loanAccrualsByLoan(loan, start.AddDate(0, 0, 10))
-	if len(rows) != 1 || total.TotalAccrued != 3000000 { t.Fatalf("expected 3,000,000 accrued after 10 days, got %#v / %v", rows, total.TotalAccrued) }
+	if len(rows) != 1 || total.TotalAccrued != 3000000 {
+		t.Fatalf("expected 3,000,000 accrued after 10 days, got %#v / %v", rows, total.TotalAccrued)
+	}
 	next := nextMonthlyPaymentDate(start, start)
-	if want := time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC); !next.Equal(want) { t.Fatalf("expected month-end payment %s, got %s", want, next) }
-	if got := loanDailyInterest(loan); got != 300000 { t.Fatalf("expected 300,000 daily interest, got %v", got) }
+	if want := time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC); !next.Equal(want) {
+		t.Fatalf("expected month-end payment %s, got %s", want, next)
+	}
+	if got := loanDailyInterest(loan); got != 300000 {
+		t.Fatalf("expected 300,000 daily interest, got %v", got)
+	}
+}
+
+func TestCreateTransferWritesBothLedgerEntries(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	user, portfolioID, err := setupDemoUser(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accounts := store.ListAccounts(user.ID)
+	if len(accounts) == 0 {
+		t.Fatal("missing source account")
+	}
+	from := accounts[0]
+	to, err := store.CreateAccount(domain.Account{UserID: user.ID, PortfolioID: portfolioID, Name: "Savings", Type: "bank", Currency: "VND"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	transfer, err := NewWealthService(store, nil).CreateTransfer(domain.Transfer{
+		UserID: user.ID, FromAccountID: from.ID, ToAccountID: to.ID, Amount: "250000", Currency: "VND", OccurredAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("create transfer: %v", err)
+	}
+	if transfer.ID == "" {
+		t.Fatal("expected persisted transfer")
+	}
+	if got := len(store.ListTransactions(user.ID, from.ID)); got != 1 {
+		t.Fatalf("expected one outgoing ledger transaction, got %d", got)
+	}
+	if got := len(store.ListTransactions(user.ID, to.ID)); got != 1 {
+		t.Fatalf("expected one incoming ledger transaction, got %d", got)
+	}
+}
+
+func TestCreateLoanPaymentAtomicallyWritesLedgerAndBalance(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	user, portfolioID, err := setupDemoUser(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := store.ListAccounts(user.ID)[0]
+	loan, err := store.CreateLoan(domain.Loan{
+		UserID: user.ID, PortfolioID: portfolioID, Counterparty: "Borrower", Direction: domain.LoanDirectionReceivable,
+		PrincipalInitial: "100000", PrincipalBalance: "100000", AnnualRate: "0", StartAt: time.Now().UTC(), DueAt: time.Now().UTC().AddDate(0, 1, 0), Status: domain.LoanStatusActive,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payment, err := NewWealthService(store, nil).CreateLoanPayment(string(loan.ID), domain.LoanPayment{
+		AccountID: account.ID, Principal: "40000", Interest: "1000", Fee: "0", Waived: "0", OccurredAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("create loan payment: %v", err)
+	}
+	if payment.TransactionID == "" {
+		t.Fatal("expected a linked ledger transaction")
+	}
+	updated, ok := store.GetLoan(loan.ID)
+	if !ok || updated.PrincipalBalance != "60000.00" {
+		t.Fatalf("expected principal balance 60000.00, got %#v", updated)
+	}
+	if got := len(store.ListLoanPayments(user.ID, loan.ID)); got != 1 {
+		t.Fatalf("expected one payment, got %d", got)
+	}
+	if got := len(store.ListTransactions(user.ID, account.ID)); got != 1 {
+		t.Fatalf("expected one ledger transaction, got %d", got)
+	}
+}
+
+func TestInterestReceiptStartsTheNextAccrualPeriodAndKeepsItsHistory(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	user, portfolioID, err := setupDemoUser(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := store.ListAccounts(user.ID)[0]
+	start := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	loan, err := store.CreateLoan(domain.Loan{
+		UserID: user.ID, PortfolioID: portfolioID, Counterparty: "Borrower", Direction: domain.LoanDirectionReceivable,
+		PrincipalInitial: "50000000", PrincipalBalance: "50000000", AnnualRate: "0", DailyRatePerMillion: "1000",
+		StartAt: start, DueAt: start.AddDate(0, 1, 0), Status: domain.LoanStatusActive,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewWealthService(store, nil)
+	receivedAt := start.AddDate(0, 0, 3)
+	payment, err := svc.CreateLoanPayment(string(loan.ID), domain.LoanPayment{
+		AccountID: account.ID, Principal: "0", Interest: "150000", InterestDays: 3, Fee: "0", Waived: "0", OccurredAt: receivedAt,
+	})
+	if err != nil {
+		t.Fatalf("record interest receipt: %v", err)
+	}
+	if payment.InterestDays != 3 {
+		t.Fatalf("expected history to preserve 3 interest days, got %d", payment.InterestDays)
+	}
+
+	rows, summary := svc.loanAccrualsByLoan(loan, start.AddDate(0, 0, 5))
+	if len(rows) != 2 || rows[0].Days != 3 || rows[1].Days != 2 {
+		t.Fatalf("expected accrual periods 3 days then 2 days, got %#v", rows)
+	}
+	if summary.TotalPaid != 150000 || summary.TotalAccrued != 250000 {
+		t.Fatalf("expected 150,000 paid and 250,000 accrued, got %#v", summary)
+	}
+	if last := lastInterestPaymentDate(store.ListLoanPayments(user.ID, loan.ID)); !last.Equal(receivedAt) {
+		t.Fatalf("expected last interest receipt on %s, got %s", receivedAt, last)
+	}
 }
 
 func TestEnqueueAndProcessSePayEvent(t *testing.T) {

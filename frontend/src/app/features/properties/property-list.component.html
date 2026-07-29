@@ -5,6 +5,7 @@
       <h1 class="m3-page-title">{{ 'properties.title' | translate }}</h1>
       <p class="m3-page-subtitle">{{ 'properties.subtitle' | translate }}</p>
     </div>
+    <button type="button" class="w-btn w-btn-primary" (click)="openCreate()" [disabled]="!auth.canMutate"><app-icon name="add"></app-icon> Thêm bất động sản</button>
   </div>
 
   <!-- Readonly Warning -->
@@ -13,8 +14,10 @@
     <span>{{ 'common.readonly_warning' | translate }}</span>
   </div>
 
-  <!-- Create Property Card Form (Full Screen Width) -->
-  <div class="w-card w-full">
+  <div *ngIf="statusMessage" class="p-3.5 rounded-xl bg-[var(--bg-subtle)] text-[var(--text-main)] text-xs flex items-center gap-2 border border-[var(--border-subtle)] font-medium" aria-live="polite"><app-icon name="info"></app-icon>{{ statusMessage }}</div>
+
+  <!-- Create Property Card Form -->
+  <div *ngIf="isCreating || !properties.length" class="w-card w-full">
     <div class="m3-card-header">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
@@ -22,82 +25,82 @@
         </div>
         <div>
           <h3 class="m3-card-title">{{ 'properties.add_title' | translate }}</h3>
-          <p class="m3-card-subtitle">Register real estate properties for portfolio valuation.</p>
+          <p class="m3-card-subtitle">Đăng ký bất động sản để theo dõi định giá danh mục.</p>
         </div>
       </div>
+      <button *ngIf="properties.length" type="button" class="app-icon-button" (click)="closeCreate()" aria-label="Đóng biểu mẫu tạo bất động sản"><app-icon name="close"></app-icon></button>
     </div>
 
     <form (ngSubmit)="submitProperty()" [formGroup]="propertyForm" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="w-label">Property Name</label>
-          <input formControlName="name" placeholder="e.g. Landmark 81 Apartment, Office Land" class="w-input" />
+          <label class="w-label" for="property-name">Tên bất động sản</label>
+          <input id="property-name" formControlName="name" placeholder="Ví dụ: Căn hộ, nhà đất" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">{{ 'properties.address' | translate }}</label>
-          <input formControlName="address" placeholder="Address..." class="w-input" />
+          <label class="w-label" for="property-address">{{ 'properties.address' | translate }}</label>
+          <input id="property-address" formControlName="address" placeholder="Địa chỉ hoặc khu vực" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">{{ 'properties.area' | translate }}</label>
-          <input formControlName="areaM2" placeholder="e.g. 85.5" class="w-input" />
+          <label class="w-label" for="property-area">{{ 'properties.area' | translate }}</label>
+          <input id="property-area" formControlName="areaM2" inputmode="decimal" placeholder="Ví dụ: 85,5" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">Portfolio ID (Optional)</label>
-          <input formControlName="portfolioId" placeholder="Portfolio ID" class="w-input" />
+          <label class="w-label" for="property-portfolio">Mã danh mục (không bắt buộc)</label>
+          <input id="property-portfolio" formControlName="portfolioId" placeholder="Để trống nếu chưa có danh mục" class="w-input" />
         </div>
       </div>
 
-      <div class="flex justify-end pt-1">
-        <button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
-          <app-icon name="add"></app-icon> {{ 'properties.create_button' | translate }}
+      <div class="flex flex-wrap justify-end gap-2 pt-1">
+        <button *ngIf="properties.length" type="button" class="w-btn w-btn-ghost" (click)="closeCreate()">Hủy</button>
+        <button class="w-btn w-btn-primary" [disabled]="propertySaving || !auth.canMutate || propertyForm.invalid">
+          <app-icon [name]="propertySaving ? 'progress_activity' : 'add'"></app-icon> {{ propertySaving ? 'Đang tạo' : ('properties.create_button' | translate) }}
         </button>
       </div>
     </form>
   </div>
-
-  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
 
   <!-- Property Valuation Card Form -->
   <div *ngIf="selectedPropertyId" class="w-card max-w-4xl border-2 border-[var(--accent-primary)]">
     <div class="m3-card-header">
       <div>
         <h4 class="m3-card-title flex items-center gap-2">
-          <app-icon name="home_work" class="text-[var(--accent-primary)]"></app-icon> Valuation for Property: {{ selectedPropertyId }}
+          <app-icon name="home_work" class="text-[var(--accent-primary)]"></app-icon> Ghi nhận định giá bất động sản
         </h4>
-        <p class="m3-card-subtitle">Update appraisal estimate for real estate balance sheet calculation.</p>
+        <p class="m3-card-subtitle">Cập nhật giá trị và nguồn tham chiếu cho bảng cân đối.</p>
       </div>
     </div>
 
     <form [formGroup]="valuationForm" (ngSubmit)="submitValuation()" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="w-label">Valuation Amount</label>
-          <input formControlName="valuationAmount" placeholder="0.00" class="w-input" />
+          <label class="w-label" for="property-valuation-amount">Giá trị định giá</label>
+          <input id="property-valuation-amount" formControlName="valuationAmount" inputmode="decimal" placeholder="0" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">{{ 'common.currency' | translate }}</label>
-          <input formControlName="currency" placeholder="VND" class="w-input" />
+          <label class="w-label" for="property-valuation-currency">{{ 'common.currency' | translate }}</label>
+          <input id="property-valuation-currency" formControlName="currency" placeholder="VND" class="w-input" />
         </div>
 
         <div class="md:col-span-2">
-          <label class="w-label">Appraisal Source / Agent</label>
-          <input formControlName="source" placeholder="e.g. Official Appraisal Report, Market Comparison" class="w-input" />
+          <label class="w-label" for="property-valuation-source">Nguồn định giá</label>
+          <input id="property-valuation-source" formControlName="source" placeholder="Ví dụ: Báo cáo thẩm định" class="w-input" />
         </div>
 
         <div class="md:col-span-2">
-          <label class="w-label">Effective Timestamp</label>
-          <input formControlName="effectiveAt" type="datetime-local" class="w-input" />
+          <label class="w-label" for="property-valuation-effective">Thời điểm áp dụng</label>
+          <input id="property-valuation-effective" formControlName="effectiveAt" type="datetime-local" class="w-input" />
         </div>
       </div>
 
       <div class="flex gap-3 justify-end pt-1">
         <button type="button" class="w-btn w-btn-ghost text-xs" (click)="closeValuation()">{{ 'common.cancel' | translate }}</button>
-        <button type="submit" class="w-btn w-btn-primary text-xs" [disabled]="!auth.canMutate">
-          <app-icon name="check"></app-icon> {{ 'common.save' | translate }}
+        <button type="submit" class="w-btn w-btn-primary text-xs" [disabled]="valuationSaving || !auth.canMutate || valuationForm.invalid">
+          <app-icon [name]="valuationSaving ? 'progress_activity' : 'check'"></app-icon> {{ valuationSaving ? 'Đang lưu' : ('common.save' | translate) }}
         </button>
       </div>
     </form>
@@ -108,31 +111,32 @@
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <app-icon name="building" class="text-[var(--accent-primary)]"></app-icon> Registered Property Portfolio
+          <app-icon name="building" class="text-[var(--accent-primary)]"></app-icon> Bất động sản đang theo dõi
         </h3>
-        <p class="m3-card-subtitle">Active real estate holdings.</p>
+        <p class="m3-card-subtitle">Các bất động sản đã đăng ký trong không gian làm việc.</p>
       </div>
-      <span class="w-badge w-badge-neutral">{{ properties.length }} Properties</span>
+      <span class="w-badge w-badge-neutral">{{ properties.length }} bất động sản</span>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="properties.length === 0" class="w-empty-state">
+    <div *ngIf="propertiesLoading" class="w-empty-state"><div class="w-empty-icon"><app-icon name="progress_activity"></app-icon></div><p class="w-empty-desc">Đang tải bất động sản…</p></div>
+    <div *ngIf="!propertiesLoading && properties.length === 0" class="w-empty-state">
       <div class="w-empty-icon">
         <app-icon name="home"></app-icon>
       </div>
-      <p class="w-empty-title">No Properties Yet</p>
-      <p class="w-empty-desc">Create your first real estate property listing above to start tracking asset value.</p>
+      <p class="w-empty-title">Chưa có bất động sản</p>
+      <p class="w-empty-desc">Thêm bất động sản đầu tiên để theo dõi giá trị tài sản ròng.</p>
     </div>
 
     <!-- Properties Table -->
-    <div *ngIf="properties.length > 0" class="w-table-container">
+    <div *ngIf="!propertiesLoading && properties.length > 0" class="w-table-container">
       <table class="w-table">
         <thead>
           <tr>
-            <th>Property Name</th>
+            <th>Tên bất động sản</th>
             <th>{{ 'properties.address' | translate }}</th>
             <th>{{ 'properties.area' | translate }}</th>
-            <th>Property ID</th>
+            <th>Mã bất động sản</th>
             <th class="text-right">{{ 'common.actions' | translate }}</th>
           </tr>
         </thead>
@@ -154,7 +158,7 @@
                 class="w-btn w-btn-outline text-xs h-8 px-3"
                 (click)="openValuation(item.id)"
               >
-                <app-icon name="add_chart" class="text-sm"></app-icon> Add Valuation
+                <app-icon name="add_chart" class="text-sm"></app-icon> Định giá
               </button>
             </td>
           </tr>

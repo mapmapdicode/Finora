@@ -59,6 +59,26 @@ triển khai gọi `AuthRemoteService`; service gọi `ApiClient`. Repository ki
 tra response, tạo `AuthSession` và cập nhật token/user cho networking.
 Điều này làm test ViewModel không cần Flutter widget hay backend thật.
 
+## Feature đã áp dụng: Loans
+
+Nghiệp vụ khoản cho vay được tách theo đúng tuyến phụ thuộc trên:
+
+```text
+features/loans/
+  domain/entities/loan.dart
+  domain/repositories/loan_repository.dart
+  data/services/loan_remote_service.dart
+  data/repositories/loan_repository_impl.dart
+  presentation/view_models/loan_view_model.dart
+  presentation/screens/loan_page.dart
+```
+
+`LoanPage` chỉ hiển thị tổng gốc đang chạy, lãi/ngày, lãi phát sinh, lịch thu
+và các thao tác giải ngân/thu hồi. `LoanViewModel` điều phối tải dữ liệu từ
+`/loans`, `/loans/summary`, `/loans/schedule` và ghi nhận thu lãi/gốc qua
+repository. Quy tắc tính lãi, kỳ cuối tháng và bút toán nằm ở backend; mobile
+không tự tính hoặc tự xác nhận lãi đã nhận.
+
 ## Lộ trình tách feature hiện hữu
 
 `features/finora/presentation/finora_pages.dart` vẫn giữ các widget giao diện

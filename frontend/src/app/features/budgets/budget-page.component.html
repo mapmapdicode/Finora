@@ -1,114 +1,21 @@
 <section class="space-y-6">
-  <!-- Page Header -->
-  <div class="m3-page-header">
-    <div>
-      <h1 class="m3-page-title">{{ 'budgets.title' | translate }}</h1>
-      <p class="m3-page-subtitle">{{ 'budgets.subtitle' | translate }}</p>
-    </div>
+  <header class="m3-page-header">
+    <div><h1 class="m3-page-title">{{ 'budgets.title' | translate }}</h1><p class="m3-page-subtitle">{{ 'budgets.subtitle' | translate }}</p></div>
+    <div class="flex flex-wrap gap-2"><button type="button" class="w-btn w-btn-outline" (click)="loadBudget()" [disabled]="loading"><app-icon name="refresh" [class.animate-spin]="loading"></app-icon>{{ loading ? 'Đang tải' : 'Làm mới' }}</button><button type="button" class="w-btn w-btn-primary" (click)="openCreate()" [disabled]="!auth.canMutate"><app-icon name="add"></app-icon> Đặt giới hạn</button></div>
+  </header>
 
-    <button
-      type="button"
-      class="w-btn w-btn-outline text-xs h-9"
-      (click)="loadBudget()"
-      [disabled]="loading"
-    >
-      <app-icon name="refresh" [class.animate-spin]="loading"></app-icon>
-      {{ loading ? ('common.loading' | translate) : ('common.refresh' | translate) }}
-    </button>
-  </div>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium"><app-icon name="lock"></app-icon><span>{{ 'common.readonly_warning' | translate }}</span></div>
+  <div *ngIf="loadError" class="p-3.5 rounded-xl bg-rose-50 text-rose-800 text-xs flex items-center gap-2 border border-rose-200 font-medium" role="alert"><app-icon name="error"></app-icon><span>{{ loadError }}</span><button type="button" class="ml-auto font-bold underline" (click)="loadBudget()">Thử lại</button></div>
+  <p *ngIf="statusMessage" class="text-xs font-semibold text-emerald-700" aria-live="polite">{{ statusMessage }}</p>
 
-  <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
-    <app-icon name="lock"></app-icon>
-    <span>{{ 'common.readonly_warning' | translate }}</span>
-  </div>
+  <article *ngIf="isCreating || !summary?.rows?.length" class="w-card">
+    <div class="m3-card-header"><div class="flex items-center gap-3"><span class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center"><app-icon name="pie_chart"></app-icon></span><div><h2 class="m3-card-title">Thiết lập giới hạn chi tiêu</h2><p class="m3-card-subtitle">Đặt mức trần cho một hạng mục trong kỳ ngân sách.</p></div></div><button *ngIf="summary?.rows?.length" type="button" class="app-icon-button" (click)="closeCreate()" aria-label="Đóng biểu mẫu thiết lập ngân sách"><app-icon name="close"></app-icon></button></div>
+    <form (ngSubmit)="submit()" [formGroup]="form" class="space-y-4"><div class="grid grid-cols-1 md:grid-cols-3 gap-4"><div><label class="w-label" for="budget-period">{{ 'budgets.period' | translate }}</label><input id="budget-period" type="month" formControlName="period" class="w-input" /></div><div><label class="w-label" for="budget-category">Hạng mục</label><input id="budget-category" formControlName="categoryId" placeholder="Ví dụ: ăn uống" class="w-input" /></div><div><label class="w-label" for="budget-limit">{{ 'budgets.spending_limit' | translate }}</label><input id="budget-limit" formControlName="limit" inputmode="decimal" placeholder="0" class="w-input" /></div></div><div class="flex flex-wrap justify-end gap-2 pt-1"><button *ngIf="summary?.rows?.length" type="button" class="w-btn w-btn-ghost" (click)="closeCreate()">Hủy</button><button class="w-btn w-btn-primary" [disabled]="saving || !auth.canMutate || form.invalid"><app-icon [name]="saving ? 'progress_activity' : 'save'"></app-icon>{{ saving ? 'Đang lưu' : ('budgets.save_button' | translate) }}</button></div></form>
+  </article>
 
-  <!-- Create Budget Form Card (Full Screen Width) -->
-  <div class="w-card w-full">
-    <div class="m3-card-header">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
-          <app-icon name="pie_chart"></app-icon>
-        </div>
-        <div>
-          <h3 class="m3-card-title">Budget Limit Configuration</h3>
-          <p class="m3-card-subtitle">Set category budget caps for a specific period (YYYY-MM).</p>
-        </div>
-      </div>
-    </div>
-
-    <form (ngSubmit)="submit()" [formGroup]="form" class="space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="w-label">{{ 'budgets.period' | translate }}</label>
-          <input formControlName="period" placeholder="e.g. 2026-07" class="w-input" />
-        </div>
-
-        <div>
-          <label class="w-label">Category (Optional)</label>
-          <input formControlName="categoryId" placeholder="Category ID or Name" class="w-input" />
-        </div>
-
-        <div>
-          <label class="w-label">{{ 'budgets.spending_limit' | translate }}</label>
-          <input formControlName="limit" placeholder="e.g. 5000000" class="w-input" />
-        </div>
-      </div>
-
-      <div class="flex justify-end pt-1">
-        <button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
-          <app-icon name="save"></app-icon> {{ 'budgets.save_button' | translate }}
-        </button>
-      </div>
-    </form>
-  </div>
-
-  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
-
-  <!-- Budget Breakdown Card -->
-  <div class="w-card">
-    <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <app-icon name="bar_chart" class="text-[var(--accent-primary)]"></app-icon> Budget Overview: {{ summary?.period || form.value.period }}
-        </h3>
-        <p class="m3-card-subtitle">Category breakdown vs actual expenditures.</p>
-      </div>
-      <span class="w-badge w-badge-indigo">{{ summary?.rows?.length || 0 }} Categories</span>
-    </div>
-
-    <!-- Empty State -->
-    <div *ngIf="!summary?.rows?.length" class="w-empty-state">
-      <div class="w-empty-icon">
-        <app-icon name="pie_chart"></app-icon>
-      </div>
-      <p class="w-empty-title">No Budget Items</p>
-      <p class="w-empty-desc">No category budget limits have been created for {{ summary?.period || form.value.period }}.</p>
-    </div>
-
-    <!-- Budget Table -->
-    <div *ngIf="summary?.rows?.length" class="w-table-container">
-      <table class="w-table">
-        <thead>
-          <tr>
-            <th>{{ 'common.category' | translate }}</th>
-            <th>{{ 'budgets.spending_limit' | translate }}</th>
-            <th>Spent</th>
-            <th>{{ 'common.currency' | translate }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let row of summary?.rows || []">
-            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
-              <app-icon name="folder" class="text-[var(--accent-primary)]"></app-icon>
-              #{{ row.categoryId || 'uncategorized' }}
-            </td>
-            <td class="font-bold text-[var(--text-main)]">{{ row.limit }}</td>
-            <td class="font-bold text-rose-600">{{ row.spent }}</td>
-            <td class="font-mono text-xs">{{ row.currency || 'VND' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+  <article class="w-card"><div class="m3-card-header"><div><h2 class="m3-card-title flex items-center gap-2"><app-icon name="bar_chart" class="text-[var(--accent-primary)]"></app-icon> Tổng quan ngân sách: {{ summary?.period || form.value.period }}</h2><p class="m3-card-subtitle">So sánh giới hạn theo hạng mục với mức chi đã ghi nhận.</p></div><span class="w-badge w-badge-indigo">{{ summary?.rows?.length || 0 }} hạng mục</span></div>
+    <div *ngIf="loading" class="w-empty-state"><div class="w-empty-icon"><app-icon name="progress_activity"></app-icon></div><p class="w-empty-desc">Đang tải ngân sách…</p></div>
+    <div *ngIf="!loading && !summary?.rows?.length" class="w-empty-state"><div class="w-empty-icon"><app-icon name="pie_chart"></app-icon></div><p class="w-empty-title">Chưa có giới hạn chi tiêu</p><p class="w-empty-desc">Đặt giới hạn cho hạng mục đầu tiên để theo dõi tiến độ chi tiêu.</p><button type="button" class="w-btn w-btn-primary mt-5" (click)="openCreate()" [disabled]="!auth.canMutate"><app-icon name="add"></app-icon> Đặt giới hạn</button></div>
+    <div *ngIf="!loading && summary?.rows?.length" class="w-table-container"><table class="w-table"><thead><tr><th>{{ 'common.category' | translate }}</th><th>{{ 'budgets.spending_limit' | translate }}</th><th>Đã chi</th><th>{{ 'common.currency' | translate }}</th></tr></thead><tbody><tr *ngFor="let row of summary?.rows || []"><td class="font-bold text-[var(--text-main)]"><app-icon name="folder" class="text-[var(--accent-primary)] mr-2"></app-icon>{{ row.categoryId || 'Chưa phân loại' }}</td><td class="font-bold text-[var(--text-main)]">{{ row.limit }}</td><td class="font-bold text-rose-600">{{ row.spent }}</td><td class="font-mono text-xs">{{ row.currency || 'VND' }}</td></tr></tbody></table></div>
+  </article>
 </section>

@@ -5,6 +5,7 @@ import { ApiService } from '../../core/services/api.service';
 import { Asset, AssetValuation } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { normalizeVndAmount } from '../../shared/money-input';
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 
@@ -19,6 +20,10 @@ export class AssetListComponent implements OnInit {
   valuations: Record<string, AssetValuation[]> = {};
   selectedAssetId: string | null = null;
   statusMessage = '';
+  assetsLoading = true;
+  isCreating = false;
+  assetSaving = false;
+  valuationSaving = false;
   assetForm: FormGroup;
   valuationForm: FormGroup;
 
@@ -41,9 +46,15 @@ export class AssetListComponent implements OnInit {
   }
 
   reload() {
+    this.assetsLoading = true;
+    this.statusMessage = '';
     this.api.getAssets().subscribe({
-      next: (items) => (this.assets = items),
+      next: (items) => {
+        this.assets = items;
+        this.assetsLoading = false;
+      },
       error: () => {
+        this.assetsLoading = false;
         this.statusMessage = 'Không lấy được danh sách tài sản.';
       },
     });
@@ -52,6 +63,7 @@ export class AssetListComponent implements OnInit {
   submitAsset() {
     if (!this.auth.canMutate) return;
     if (this.assetForm.invalid) return;
+    this.assetSaving = true;
     this.api.createAsset({
       name: this.assetForm.value.name,
       assetType: this.assetForm.value.assetType,
@@ -60,12 +72,25 @@ export class AssetListComponent implements OnInit {
       next: () => {
         this.statusMessage = 'Đã tạo tài sản.';
         this.assetForm.reset({ name: '', assetType: 'investment', portfolioId: '' });
+        this.assetSaving = false;
+        this.isCreating = false;
         this.reload();
       },
       error: () => {
+        this.assetSaving = false;
         this.statusMessage = 'Không thể tạo tài sản.';
       },
     });
+  }
+
+  openCreate() {
+    if (!this.auth.canMutate) return;
+    this.isCreating = true;
+    this.statusMessage = '';
+  }
+
+  closeCreate() {
+    if (!this.assetSaving) this.isCreating = false;
   }
 
   openValuation(assetId: string) {
@@ -83,9 +108,10 @@ export class AssetListComponent implements OnInit {
   submitValuation() {
     if (!this.auth.canMutate) return;
     if (!this.selectedAssetId || this.valuationForm.invalid) return;
+    this.valuationSaving = true;
     this.api
       .addAssetValuation(this.selectedAssetId, {
-        valuationAmount: this.valuationForm.value.valuationAmount || '',
+        valuationAmount: normalizeVndAmount(this.valuationForm.value.valuationAmount),
         currency: this.valuationForm.value.currency || 'VND',
         source: this.valuationForm.value.source || 'self_declared',
         effectiveAt: this.valuationForm.value.effectiveAt || undefined,
@@ -94,8 +120,10 @@ export class AssetListComponent implements OnInit {
         next: () => {
           this.statusMessage = 'Đã thêm định giá tài sản.';
           this.selectedAssetId = null;
+          this.valuationSaving = false;
         },
         error: () => {
+          this.valuationSaving = false;
           this.statusMessage = 'Không thể thêm định giá.';
         },
       });
@@ -104,5 +132,15 @@ export class AssetListComponent implements OnInit {
   closeValuation() {
     this.selectedAssetId = null;
     this.statusMessage = '';
+  }
+
+  assetTypeLabel(assetType: string | undefined) {
+    const labels: Record<string, string> = {
+      investment: 'Đầu tư',
+      vehicle: 'Phương tiện',
+      collectible: 'Đồ sưu tầm',
+      other: 'Tài sản khác',
+    };
+    return labels[assetType || ''] || assetType || 'Chưa xác định';
   }
 }

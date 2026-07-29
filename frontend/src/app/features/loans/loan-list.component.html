@@ -14,7 +14,7 @@
   <!-- Readonly Warning -->
   <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
     <app-icon name="lock"></app-icon>
-    <span>This workspace is read-only. Loan creation is disabled.</span>
+    <span>Không gian làm việc chỉ đọc. Bạn không thể tạo khoản vay.</span>
   </div>
 
   <!-- Create Loan Agreement Card Form (Full Screen Width) -->
@@ -26,7 +26,7 @@
         </div>
         <div>
           <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'loans.create_title' | translate }}</h3>
-          <p class="text-xs text-[var(--text-muted)]">Record a debt contract with initial principal balance & interest parameters.</p>
+          <p class="text-xs text-[var(--text-muted)]">Ghi hợp đồng vay cùng số dư gốc và thông số lãi ban đầu.</p>
         </div>
       </div>
     </div>
@@ -34,39 +34,39 @@
     <form (ngSubmit)="submitLoan()" [formGroup]="creationForm" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="w-label">{{ 'loans.counterparty' | translate }}</label>
-          <input formControlName="counterparty" placeholder="Counterparty Name / Lender / Borrower" class="w-input" />
+          <label class="w-label" for="loan-counterparty">{{ 'loans.counterparty' | translate }}</label>
+          <input id="loan-counterparty" formControlName="counterparty" placeholder="Tên bên cho vay / đi vay" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">{{ 'loans.principal' | translate }}</label>
-          <input formControlName="principalInitial" placeholder="0.00" class="w-input" />
+          <label class="w-label" for="loan-principal">{{ 'loans.principal' | translate }}</label>
+          <input id="loan-principal" formControlName="principalInitial" placeholder="0.00" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">Lãi / 1 triệu / ngày (VND)</label>
-          <input formControlName="dailyRatePerMillion" placeholder="Ví dụ: 3000" class="w-input" />
+          <label class="w-label" for="loan-daily-rate">Lãi / 1 triệu / ngày (VND)</label>
+          <input id="loan-daily-rate" formControlName="dailyRatePerMillion" placeholder="Ví dụ: 3000" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">{{ 'loans.direction' | translate }}</label>
-          <select formControlName="direction" class="w-select">
+          <label class="w-label" for="loan-direction">{{ 'loans.direction' | translate }}</label>
+          <select id="loan-direction" formControlName="direction" class="w-select">
             <option value="receivable">Cho vay (phải thu)</option>
             <option value="payable">Đi vay (phải trả)</option>
           </select>
         </div>
 
         <div>
-          <label class="w-label">Tài khoản giải ngân / nhận tiền</label>
-          <select formControlName="settlementAccountId" class="w-select">
-            <option value="">-- Linked Account --</option>
+          <label class="w-label" for="loan-settlement-account">Tài khoản giải ngân / nhận tiền</label>
+          <select id="loan-settlement-account" formControlName="settlementAccountId" class="w-select">
+            <option value="">-- Chọn tài khoản --</option>
             <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
           </select>
         </div>
 
         <div>
-          <label class="w-label">Disbursement Date</label>
-          <input formControlName="startAt" type="date" class="w-input" />
+          <label class="w-label" for="loan-start-at">Ngày giải ngân</label>
+          <input id="loan-start-at" formControlName="startAt" type="date" class="w-input" />
         </div>
       </div>
 
@@ -78,7 +78,7 @@
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
+  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium" aria-live="polite">{{ statusMessage }}</p>
 
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
     <div class="w-card"><p class="text-xs text-[var(--text-muted)]">Gốc đang cho vay</p><p class="font-bold">{{ summary.activePrincipal }}</p></div>
@@ -88,9 +88,9 @@
   </div>
 
   <form *ngIf="selectedLoanForPayment" (ngSubmit)="submitPayment()" [formGroup]="paymentForm" class="w-card grid grid-cols-1 md:grid-cols-4 gap-3">
-    <div><label class="w-label">Tiền lãi đã nhận</label><input class="w-input" formControlName="interestAmount" /></div>
-    <div><label class="w-label">Gốc thu hồi</label><input class="w-input" formControlName="principalAmount" /></div>
-    <div><label class="w-label">Tài khoản nhận</label><select class="w-select" formControlName="accountId"><option value="">-- Chọn tài khoản --</option><option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option></select></div>
+    <div><label class="w-label" for="loan-payment-interest">Tiền lãi đã nhận</label><input id="loan-payment-interest" class="w-input" formControlName="interestAmount" /></div>
+    <div><label class="w-label" for="loan-payment-principal">Gốc thu hồi</label><input id="loan-payment-principal" class="w-input" formControlName="principalAmount" /></div>
+    <div><label class="w-label" for="loan-payment-account">Tài khoản nhận</label><select id="loan-payment-account" class="w-select" formControlName="accountId"><option value="">-- Chọn tài khoản --</option><option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option></select></div>
     <div class="flex gap-2 items-end"><button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">Xác nhận thu</button><button type="button" class="w-btn w-btn-outline" (click)="closePayment()">Hủy</button></div>
   </form>
 
@@ -99,9 +99,9 @@
     <div class="flex items-center justify-between mb-4">
       <div>
         <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'loans.title' | translate }}</h3>
-        <p class="text-xs text-[var(--text-muted)]">Active loan contracts in portfolio.</p>
+        <p class="text-xs text-[var(--text-muted)]">Các hợp đồng vay đang theo dõi trong danh mục.</p>
       </div>
-      <span class="w-badge w-badge-neutral">{{ loans.length }} Contracts</span>
+      <span class="w-badge w-badge-neutral">{{ loans.length }} hợp đồng</span>
     </div>
 
     <!-- Empty State -->
@@ -109,8 +109,8 @@
       <div class="w-empty-icon">
         <app-icon name="request_quote"></app-icon>
       </div>
-      <p class="w-empty-title">No Loans Recorded</p>
-      <p class="w-empty-desc">Create your first loan contract above to start tracking interest accruals and principal balances.</p>
+      <p class="w-empty-title">Chưa có khoản vay</p>
+      <p class="w-empty-desc">Tạo hợp đồng đầu tiên để theo dõi lãi phát sinh và số dư gốc.</p>
     </div>
 
     <!-- Loans Table -->
@@ -121,10 +121,10 @@
             <th>{{ 'loans.counterparty' | translate }}</th>
             <th>{{ 'loans.direction' | translate }}</th>
             <th>{{ 'loans.principal' | translate }}</th>
-            <th>Remaining Balance</th>
+            <th>Số dư còn lại</th>
             <th>Lãi/ngày</th>
 			<th>Kỳ thu kế tiếp</th>
-            <th>Accrued Interest</th>
+            <th>Lãi đã phát sinh</th>
             <th>{{ 'common.status' | translate }}</th>
             <th class="text-right">{{ 'common.actions' | translate }}</th>
           </tr>
@@ -139,7 +139,7 @@
             </td>
             <td>
               <span class="w-badge uppercase text-[10px]" [ngClass]="item.direction === 'payable' ? 'w-badge-danger' : 'w-badge-success'">
-                {{ item.direction }}
+                {{ statusText(item) }}
               </span>
             </td>
             <td class="font-bold text-xs">{{ item.principalInitial }}</td>
@@ -151,7 +151,7 @@
             </td>
             <td>
               <span class="w-badge w-badge-indigo uppercase text-[10px]">
-                {{ item.status || 'active' }}
+                {{ loanStatusLabel(item.status || 'active') }}
               </span>
             </td>
             <td class="text-right">

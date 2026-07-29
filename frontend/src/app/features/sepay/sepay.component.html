@@ -16,7 +16,7 @@
         {{ isBusy ? ('common.loading' | translate) : ('sepay.connect_button' | translate) }}
       </button>
       <button (click)="preview()" class="w-btn w-btn-outline">
-        <app-icon name="preview"></app-icon> Preview Rule Engine
+        <app-icon name="preview"></app-icon> Kiểm tra quy tắc
       </button>
     </div>
   </div>
@@ -31,7 +31,7 @@
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
     <div class="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl flex items-center justify-between shadow-xs">
       <div>
-        <span class="text-xs text-[var(--text-muted)] font-medium block">Pending Inbox</span>
+        <span class="text-xs text-[var(--text-muted)] font-medium block">Chờ xem</span>
         <span class="text-xl font-bold text-amber-700 font-display">{{ pendingCount }}</span>
       </div>
       <app-icon name="pending_actions" class="text-amber-600 text-2xl"></app-icon>
@@ -39,7 +39,7 @@
 
     <div class="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl flex items-center justify-between shadow-xs">
       <div>
-        <span class="text-xs text-[var(--text-muted)] font-medium block">Auto Ready</span>
+        <span class="text-xs text-[var(--text-muted)] font-medium block">Sẵn sàng tự ghi</span>
         <span class="text-xl font-bold text-[var(--accent-primary)] font-display">{{ autoReadyCount }}</span>
       </div>
       <app-icon name="auto_awesome" class="text-[var(--accent-primary)] text-2xl"></app-icon>
@@ -47,7 +47,7 @@
 
     <div class="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl flex items-center justify-between shadow-xs">
       <div>
-        <span class="text-xs text-[var(--text-muted)] font-medium block">Posted Ledger</span>
+        <span class="text-xs text-[var(--text-muted)] font-medium block">Đã ghi sổ</span>
         <span class="text-xl font-bold text-emerald-700 font-display">{{ postedCount }}</span>
       </div>
       <app-icon name="check_circle" class="text-emerald-600 text-2xl"></app-icon>
@@ -55,7 +55,7 @@
 
     <div class="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl flex items-center justify-between shadow-xs">
       <div>
-        <span class="text-xs text-[var(--text-muted)] font-medium block">Skipped / Ignored</span>
+        <span class="text-xs text-[var(--text-muted)] font-medium block">Bỏ qua</span>
         <span class="text-xl font-bold text-[var(--text-muted)] font-display">{{ ignoredCount }}</span>
       </div>
       <app-icon name="do_not_disturb_on" class="text-[var(--text-muted)] text-2xl"></app-icon>
@@ -65,17 +65,17 @@
   <!-- Connect Session Info Box -->
   <div *ngIf="lastConnect" class="p-4 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200 text-xs space-y-1 font-medium">
     <p class="font-bold flex items-center gap-1.5 text-sm">
-      <app-icon name="link" class="text-base text-emerald-700"></app-icon> Latest SePay Connection Session
+      <app-icon name="link" class="text-base text-emerald-700"></app-icon> Phiên kết nối SePay gần nhất
     </p>
-    <p>Connection ID: <strong class="font-mono">{{ lastConnect.connectionId }}</strong></p>
-    <p>Callback State: <strong class="font-mono">{{ lastConnect.callbackState }}</strong></p>
+    <p>Mã kết nối: <strong class="font-mono">{{ lastConnect.connectionId }}</strong></p>
+    <p>Trạng thái callback: <strong class="font-mono">{{ lastConnect.callbackState }}</strong></p>
     <a
       class="w-btn w-btn-primary text-xs h-8 px-3 mt-2 inline-flex items-center gap-1"
       [href]="lastConnect.connectUrl"
       target="_blank"
       rel="noopener noreferrer"
     >
-      <app-icon name="open_in_new" class="text-sm"></app-icon> Open SePay OAuth Consent Page
+      <app-icon name="open_in_new" class="text-sm"></app-icon> Mở trang cấp quyền SePay
     </a>
   </div>
 
@@ -84,9 +84,9 @@
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <app-icon name="account_balance" class="text-[var(--accent-primary)]"></app-icon> Bank Feed Connections
+          <app-icon name="account_balance" class="text-[var(--accent-primary)]"></app-icon> Kết nối nguồn ngân hàng
         </h3>
-        <p class="m3-card-subtitle">Active OAuth / API integrations with SePay Provider.</p>
+        <p class="m3-card-subtitle">Các kết nối OAuth/API đang hoạt động với SePay.</p>
       </div>
     </div>
 
@@ -96,11 +96,11 @@
           <span class="font-bold text-sm text-[var(--text-main)] flex items-center gap-1.5">
             <app-icon name="hub" class="text-base text-[var(--accent-primary)]"></app-icon> {{ connection.provider }}
           </span>
-          <span class="w-badge w-badge-indigo uppercase text-[10px]">{{ connection.status }}</span>
+          <span class="w-badge w-badge-indigo uppercase text-[10px]">{{ connectionStatusLabel(connection.status) }}</span>
         </div>
-        <p class="text-[var(--text-muted)]">ID: <span class="font-mono">{{ connection.id }}</span></p>
+        <p class="text-[var(--text-muted)]">Mã kết nối: <span class="font-mono">{{ connection.id }}</span></p>
         <p class="text-[var(--text-muted)]">
-          Sync Status: <strong>{{ connection.syncStatus || 'idle' }}</strong> | Last Sync: {{ syncLabel(connection) }}
+            Trạng thái đồng bộ: <strong>{{ syncStatusLabel(connection.syncStatus) }}</strong> · Lần cuối: {{ syncLabel(connection) }}
         </p>
 
         <div class="flex gap-2 pt-1">
@@ -109,14 +109,14 @@
             class="w-btn w-btn-outline text-xs h-8 px-3"
             (click)="sync(connection.id)"
           >
-            <app-icon name="refresh" class="text-sm"></app-icon> Sync
+            <app-icon name="refresh" class="text-sm"></app-icon> Đồng bộ
           </button>
           <button
             *ngIf="auth.canMutate"
             class="w-btn w-btn-outline text-xs h-8 px-3 text-rose-700 border-rose-300 hover:bg-rose-50"
             (click)="revoke(connection.id)"
           >
-            <app-icon name="link_off" class="text-sm"></app-icon> Revoke
+            <app-icon name="link_off" class="text-sm"></app-icon> Thu hồi
           </button>
         </div>
       </div>
@@ -139,6 +139,8 @@
       <div class="flex items-center gap-2">
         <span class="text-xs text-[var(--text-muted)] font-semibold">{{ 'common.account' | translate }}:</span>
         <select
+          id="sepay-account-filter"
+          aria-label="Lọc theo tài khoản"
           class="w-select w-select-sm text-xs w-44"
           [value]="accountIdFilter"
           (change)="setAccountFilter(($any($event.target).value))"
@@ -162,35 +164,45 @@
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <app-icon name="inbox" class="text-[var(--accent-primary)]"></app-icon> Bank Feed Stream
+          <app-icon name="inbox" class="text-[var(--accent-primary)]"></app-icon> Dòng giao dịch ngân hàng
         </h3>
-        <p class="m3-card-subtitle">Transactions received via bank webhook integrations.</p>
+        <p class="m3-card-subtitle">Các giao dịch nhận qua kết nối webhook ngân hàng.</p>
       </div>
     </div>
 
-    <!-- Empty State -->
-    <div *ngIf="!filteredFeed.length" class="w-empty-state">
+    <!-- Loading / Error / Empty State -->
+    <div *ngIf="feedLoading" class="w-empty-state">
+      <div class="w-empty-icon"><app-icon name="progress_activity"></app-icon></div>
+      <p class="w-empty-desc">Đang tải dòng giao dịch…</p>
+    </div>
+    <div *ngIf="!feedLoading && feedLoadError" class="w-empty-state">
+      <div class="w-empty-icon"><app-icon name="cloud_off"></app-icon></div>
+      <p class="w-empty-title">Chưa thể tải giao dịch</p>
+      <p class="w-empty-desc" role="alert">{{ feedLoadError }}</p>
+      <button type="button" class="w-btn w-btn-primary mt-5" (click)="refresh()"><app-icon name="refresh"></app-icon> Thử lại</button>
+    </div>
+    <div *ngIf="!feedLoading && !feedLoadError && !filteredFeed.length" class="w-empty-state">
       <div class="w-empty-icon">
         <app-icon name="move_to_inbox"></app-icon>
       </div>
-      <p class="w-empty-title">Inbox Empty</p>
-      <p class="w-empty-desc">No bank feed items match your active tab or filter selection.</p>
+      <p class="w-empty-title">Chưa có giao dịch cần xử lý</p>
+      <p class="w-empty-desc">Không có giao dịch nào phù hợp với bộ lọc hiện tại.</p>
     </div>
 
     <!-- Feed Items List -->
-    <div *ngIf="filteredFeed.length" class="space-y-3">
+    <div *ngIf="!feedLoading && !feedLoadError && filteredFeed.length" class="space-y-3">
       <div *ngFor="let item of filteredFeed; trackBy: trackByFeedId" class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:shadow-xs transition-all flex flex-wrap items-center justify-between gap-4">
         <div class="space-y-1 max-w-xl">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="font-bold text-sm text-[var(--text-main)]">{{ item.occurredAt | date: 'medium' }}</span>
             <span class="w-badge uppercase text-[10px]" [ngClass]="item.direction === 'out' ? 'w-badge-danger' : 'w-badge-success'">
-              {{ item.direction === 'out' ? 'Expense' : 'Income' }}
+              {{ item.direction === 'out' ? 'Chi' : 'Thu' }}
             </span>
             <span class="w-badge uppercase text-[10px]" [ngClass]="statusClass(item)">
               {{ statusText(item) }}
             </span>
-            <span *ngIf="isTransferLike(item)" class="w-badge w-badge-warning text-[10px]">Transfer-like</span>
-            <span *ngIf="item.autoClassified" class="w-badge w-badge-indigo text-[10px]">Auto Classified</span>
+            <span *ngIf="isTransferLike(item)" class="w-badge w-badge-warning text-[10px]">Có thể là chuyển khoản</span>
+            <span *ngIf="item.autoClassified" class="w-badge w-badge-indigo text-[10px]">Đã tự phân loại</span>
           </div>
 
           <p class="text-xs font-bold text-[var(--text-main)]">
@@ -200,8 +212,8 @@
 
           <p class="text-[11px] text-[var(--text-muted)] font-medium">
             {{ sourceLabel(item) }}
-            <span *ngIf="item.classificationConfidence !== undefined"> · Confidence: {{ confidence(item) }}</span>
-            · Hint: {{ actionHint(item) }}
+            <span *ngIf="item.classificationConfidence !== undefined"> · Độ tin cậy: {{ confidence(item) }}</span>
+            · Gợi ý: {{ actionHint(item) }}
           </p>
         </div>
 
@@ -216,7 +228,7 @@
               (click)="openReclassify(item)"
               *ngIf="canMutate && canApprove(item)"
             >
-              Reclassify
+              Phân loại lại
             </button>
             <button
               class="w-btn w-btn-primary text-xs h-8 px-3"
@@ -232,7 +244,7 @@
               [disabled]="isActionBusy"
               *ngIf="canMutate && item.postingState !== 'ignored' && item.postingState !== 'posted'"
             >
-              Skip
+              Bỏ qua
             </button>
           </div>
         </div>
@@ -245,7 +257,7 @@
     <div class="m3-card-header">
       <div>
         <h4 class="m3-card-title flex items-center gap-2">
-          <app-icon name="edit_note" class="text-[var(--accent-primary)]"></app-icon> Reclassify Bank Item: {{ selectedFeed.description || selectedFeed.id }}
+          <app-icon name="edit_note" class="text-[var(--accent-primary)]"></app-icon> Phân loại lại giao dịch: {{ selectedFeed.description || selectedFeed.id }}
         </h4>
       </div>
     </div>
@@ -253,29 +265,29 @@
     <form [formGroup]="reclassifyForm" (ngSubmit)="submitReclassify()" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="w-label">Target Type</label>
-          <select class="w-select" formControlName="type">
-            <option value="income">Income</option>
-            <option value="expense">Expense</option>
-            <option value="loan_payment">Loan Payment</option>
-            <option value="investment_funding">Investment Funding</option>
-            <option value="loan_disbursement">Loan Disbursement</option>
+          <label class="w-label" for="sepay-reclassify-type">Loại giao dịch</label>
+          <select id="sepay-reclassify-type" class="w-select" formControlName="type">
+            <option value="income">Thu nhập</option>
+            <option value="expense">Chi phí</option>
+            <option value="loan_payment">Trả khoản vay</option>
+            <option value="investment_funding">Nạp đầu tư</option>
+            <option value="loan_disbursement">Giải ngân khoản vay</option>
           </select>
         </div>
 
         <div>
-          <label class="w-label">Account ID (Optional)</label>
-          <input formControlName="accountId" placeholder="Account ID" class="w-input" />
+          <label class="w-label" for="sepay-reclassify-account">Tài khoản (không bắt buộc)</label>
+          <input id="sepay-reclassify-account" formControlName="accountId" placeholder="Mã tài khoản" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">Category ID</label>
-          <input formControlName="categoryId" placeholder="Category ID" class="w-input" />
+          <label class="w-label" for="sepay-reclassify-category">Danh mục (không bắt buộc)</label>
+          <input id="sepay-reclassify-category" formControlName="categoryId" placeholder="Mã danh mục" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">Reclassification Reason</label>
-          <input formControlName="reason" placeholder="Reason for manual override" class="w-input" />
+          <label class="w-label" for="sepay-reclassify-reason">Lý do phân loại lại (bắt buộc)</label>
+          <input id="sepay-reclassify-reason" formControlName="reason" required aria-required="true" placeholder="Vì sao cần điều chỉnh thủ công" class="w-input" />
         </div>
       </div>
 

@@ -6,9 +6,7 @@
       <p class="m3-page-subtitle">{{ 'automation.subtitle' | translate }}</p>
     </div>
 
-    <button class="w-btn w-btn-outline text-xs h-9" (click)="preview()">
-      <app-icon name="preview"></app-icon> Preview Rule Engine
-    </button>
+    <div class="flex flex-wrap gap-2"><button class="w-btn w-btn-outline text-xs h-9" (click)="preview()" [disabled]="previewLoading"><app-icon name="preview" [class.animate-spin]="previewLoading"></app-icon>{{ previewLoading ? 'Đang kiểm tra' : 'Kiểm tra quy tắc' }}</button><button class="w-btn w-btn-primary" (click)="openCreate()" [disabled]="!auth.canMutate"><app-icon name="add"></app-icon> Tạo quy tắc</button></div>
   </div>
 
   <!-- Readonly Warning -->
@@ -17,8 +15,10 @@
     <span>{{ 'common.readonly_warning' | translate }}</span>
   </div>
 
-  <!-- Create/Edit Rule Form Card (Full Screen Width) -->
-  <div class="w-card w-full">
+  <p *ngIf="statusMessage" class="text-xs font-semibold text-[var(--text-main)] bg-[var(--bg-subtle)] p-3 rounded-xl border border-[var(--border-subtle)]" aria-live="polite">{{ statusMessage }}</p>
+
+  <!-- Create/Edit Rule Form -->
+  <div *ngIf="isCreating || !rules.length" class="w-card w-full">
     <div class="m3-card-header">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
@@ -26,95 +26,96 @@
         </div>
         <div>
           <h3 class="m3-card-title">
-            {{ editingId ? 'Edit Automation Rule' : 'Create Automation Rule' }}
+            {{ editingId ? 'Chỉnh sửa quy tắc tự động' : 'Tạo quy tắc tự động' }}
           </h3>
-          <p class="m3-card-subtitle">Set up pattern matching, direction, priority, and target action.</p>
+          <p class="m3-card-subtitle">Thiết lập điều kiện khớp, hướng giao dịch và hành động sẽ áp dụng.</p>
         </div>
       </div>
+      <button *ngIf="rules.length" type="button" class="app-icon-button" (click)="cancelEdit()" aria-label="Đóng biểu mẫu quy tắc"><app-icon name="close"></app-icon></button>
     </div>
 
     <form (ngSubmit)="submitRule()" [formGroup]="form" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="w-label">Rule Name</label>
-          <input formControlName="name" placeholder="e.g. Auto-Categorize Salary Income" class="w-input" />
+          <label class="w-label" for="rule-name">Tên quy tắc</label>
+          <input id="rule-name" formControlName="name" placeholder="Ví dụ: Phân loại lương tự động" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">Target Account ID (Optional)</label>
-          <input formControlName="accountId" placeholder="Account ID" class="w-input" />
+          <label class="w-label" for="rule-account">Mã tài khoản áp dụng (không bắt buộc)</label>
+          <input id="rule-account" formControlName="accountId" placeholder="Để trống để áp dụng mọi tài khoản" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">Flow Direction</label>
-          <select formControlName="direction" class="w-select">
-            <option value="in">Inflow (Income)</option>
-            <option value="out">Outflow (Expense)</option>
+          <label class="w-label" for="rule-direction">Hướng dòng tiền</label>
+          <select id="rule-direction" formControlName="direction" class="w-select">
+            <option value="in">Tiền vào (thu)</option>
+            <option value="out">Tiền ra (chi)</option>
           </select>
         </div>
 
         <div>
-          <label class="w-label">Automation Action</label>
-          <select formControlName="actionType" class="w-select">
-            <option value="categorize">Categorize</option>
-            <option value="ignore">Skip / Ignore</option>
-            <option value="transfer">Transfer</option>
-            <option value="loan_match">Loan Repayment Match</option>
-            <option value="investment_funding">Investment Funding</option>
+          <label class="w-label" for="rule-action">Hành động tự động</label>
+          <select id="rule-action" formControlName="actionType" class="w-select">
+            <option value="categorize">Phân loại</option>
+            <option value="ignore">Bỏ qua</option>
+            <option value="transfer">Chuyển khoản</option>
+            <option value="loan_match">Khớp trả khoản vay</option>
+            <option value="investment_funding">Nạp đầu tư</option>
           </select>
         </div>
 
         <div>
-          <label class="w-label">Transaction Classification Type</label>
-          <select formControlName="type" class="w-select">
-            <option value="expense">Expense</option>
-            <option value="income">Income</option>
-            <option value="loan_payment">Loan Payment</option>
-            <option value="loan_disbursement">Loan Disbursement</option>
-            <option value="investment_funding">Investment Funding</option>
-            <option value="valuation_adjustment">Valuation Adjustment</option>
+          <label class="w-label" for="rule-type">Loại phân loại giao dịch</label>
+          <select id="rule-type" formControlName="type" class="w-select">
+            <option value="expense">Chi phí</option>
+            <option value="income">Thu nhập</option>
+            <option value="loan_payment">Trả khoản vay</option>
+            <option value="loan_disbursement">Giải ngân khoản vay</option>
+            <option value="investment_funding">Nạp đầu tư</option>
+            <option value="valuation_adjustment">Điều chỉnh định giá</option>
           </select>
         </div>
 
         <div>
-          <label class="w-label">Execution Priority (Higher numbers run first)</label>
-          <input formControlName="priority" type="number" class="w-input" />
+          <label class="w-label" for="rule-priority">Độ ưu tiên (số lớn chạy trước)</label>
+          <input id="rule-priority" formControlName="priority" type="number" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">Category ID (Optional)</label>
-          <input formControlName="categoryId" placeholder="Category ID" class="w-input" />
+          <label class="w-label" for="rule-category">Danh mục (không bắt buộc)</label>
+          <input id="rule-category" formControlName="categoryId" placeholder="Mã danh mục" class="w-input" />
         </div>
 
         <div>
-          <label class="w-label">Content Regex Pattern</label>
-          <input formControlName="contentPattern" placeholder="Regex (e.g. SALARY|LUONG)" class="w-input font-mono text-xs" />
+          <label class="w-label" for="rule-content-pattern">Mẫu Regex nội dung</label>
+          <input id="rule-content-pattern" formControlName="contentPattern" placeholder="Regex (ví dụ: SALARY|LUONG)" class="w-input font-mono text-xs" />
         </div>
 
         <div>
-          <label class="w-label">Reference Regex Pattern</label>
-          <input formControlName="referencePattern" placeholder="Reference regex..." class="w-input font-mono text-xs" />
+          <label class="w-label" for="rule-reference-pattern">Mẫu Regex tham chiếu</label>
+          <input id="rule-reference-pattern" formControlName="referencePattern" placeholder="Regex tham chiếu..." class="w-input font-mono text-xs" />
         </div>
 
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="w-label">Min Amount</label>
-            <input formControlName="minAmount" placeholder="0.00" class="w-input" />
+            <label class="w-label" for="rule-min-amount">Số tiền tối thiểu</label>
+            <input id="rule-min-amount" formControlName="minAmount" placeholder="0.00" class="w-input" />
           </div>
           <div>
-            <label class="w-label">Max Amount</label>
-            <input formControlName="maxAmount" placeholder="0.00" class="w-input" />
+            <label class="w-label" for="rule-max-amount">Số tiền tối đa</label>
+            <input id="rule-max-amount" formControlName="maxAmount" placeholder="0.00" class="w-input" />
           </div>
         </div>
 
         <div class="md:col-span-2">
-          <label class="w-label">Custom Predicate Expression</label>
-          <input formControlName="predicate" placeholder="Optional evaluation predicate..." class="w-input font-mono text-xs" />
+          <label class="w-label" for="rule-predicate">Biểu thức điều kiện riêng</label>
+          <input id="rule-predicate" formControlName="predicate" placeholder="Biểu thức điều kiện nếu có..." class="w-input font-mono text-xs" />
         </div>
 
         <div class="md:col-span-2 flex items-center gap-2">
-          <input type="checkbox" formControlName="enabled" class="w-4 h-4 rounded text-[var(--accent-primary)] cursor-pointer" />
-          <span class="text-xs font-bold text-[var(--text-main)]">Enable Rule Immediately</span>
+          <input id="rule-enabled" type="checkbox" formControlName="enabled" class="w-4 h-4 rounded text-[var(--accent-primary)] cursor-pointer" />
+          <label for="rule-enabled" class="text-xs font-bold text-[var(--text-main)] cursor-pointer">Bật quy tắc ngay</label>
         </div>
       </div>
 
@@ -127,21 +128,19 @@
         >
           {{ 'common.cancel' | translate }}
         </button>
-        <button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
-          <app-icon name="save"></app-icon>
-          {{ editingId ? 'Update Rule' : ('common.save' | translate) }}
+        <button class="w-btn w-btn-primary" [disabled]="saving || !auth.canMutate || form.invalid">
+          <app-icon [name]="saving ? 'progress_activity' : 'save'"></app-icon>
+          {{ saving ? 'Đang lưu' : (editingId ? 'Cập nhật quy tắc' : ('common.save' | translate)) }}
         </button>
       </div>
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
-
   <!-- Preview Output Console -->
   <div *ngIf="previewResult" class="w-card bg-slate-900 border-slate-800 text-emerald-400">
     <div class="m3-card-header text-white mb-2">
       <h4 class="m3-card-title text-white flex items-center gap-2">
-        <app-icon name="terminal" class="text-emerald-400"></app-icon> Rule Engine Evaluation Preview
+          <app-icon name="terminal" class="text-emerald-400"></app-icon> Kết quả kiểm tra quy tắc
       </h4>
     </div>
     <pre class="p-4 rounded-xl bg-slate-950 font-mono text-xs text-emerald-300 overflow-x-auto leading-relaxed border border-slate-800">{{ previewResult | json }}</pre>
@@ -152,34 +151,35 @@
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <app-icon name="tune" class="text-[var(--accent-primary)]"></app-icon> Active Automation Rule Registry
+          <app-icon name="tune" class="text-[var(--accent-primary)]"></app-icon> Quy tắc tự động
         </h3>
-        <p class="m3-card-subtitle">Rules evaluated sequentially by priority for incoming webhooks.</p>
+        <p class="m3-card-subtitle">Các quy tắc được xét theo độ ưu tiên khi có giao dịch mới.</p>
       </div>
-      <span class="w-badge w-badge-neutral">{{ rules.length }} Rules</span>
+      <span class="w-badge w-badge-neutral">{{ rules.length }} quy tắc</span>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="!rules.length" class="w-empty-state">
+    <div *ngIf="rulesLoading" class="w-empty-state"><div class="w-empty-icon"><app-icon name="progress_activity"></app-icon></div><p class="w-empty-desc">Đang tải quy tắc…</p></div>
+    <div *ngIf="!rulesLoading && !rules.length" class="w-empty-state">
       <div class="w-empty-icon">
         <app-icon name="auto_awesome"></app-icon>
       </div>
-      <p class="w-empty-title">No Automation Rules Configured</p>
-      <p class="w-empty-desc">Create automation rules above to automatically categorize imported bank feeds.</p>
+      <p class="w-empty-title">Chưa có quy tắc tự động</p>
+      <p class="w-empty-desc">Tạo quy tắc đầu tiên để phân loại giao dịch nhập về một cách nhất quán.</p>
     </div>
 
     <!-- Rules Table -->
-    <div *ngIf="rules.length" class="w-table-container">
+    <div *ngIf="!rulesLoading && rules.length" class="w-table-container">
       <table class="w-table">
         <thead>
           <tr>
-            <th>Rule Name</th>
-            <th>Direction</th>
-            <th>Action & Type</th>
-            <th>Priority</th>
-            <th>Status</th>
-            <th>Content Regex</th>
-            <th class="text-right">Actions</th>
+            <th>Tên quy tắc</th>
+            <th>Hướng</th>
+            <th>Hành động & loại</th>
+            <th>Ưu tiên</th>
+            <th>Trạng thái</th>
+            <th>Regex nội dung</th>
+            <th class="text-right">Thao tác</th>
           </tr>
         </thead>
         <tbody>
@@ -194,20 +194,20 @@
               </span>
             </td>
             <td>
-              <p class="text-xs font-bold text-[var(--text-main)]">{{ item.actionType || '-' }}</p>
-              <p class="text-[10px] text-[var(--text-muted)] uppercase font-semibold">{{ item.type || '-' }}</p>
+              <p class="text-xs font-bold text-[var(--text-main)]">{{ actionLabel(item.actionType) }}</p>
+              <p class="text-[10px] text-[var(--text-muted)] uppercase font-semibold">{{ typeLabel(item.type) }}</p>
             </td>
             <td class="font-mono text-xs font-bold">{{ item.priority }}</td>
             <td>
               <span class="w-badge uppercase text-[10px]" [ngClass]="item.enabled ? 'w-badge-indigo' : 'w-badge-neutral'">
-                {{ item.enabled ? 'Active' : 'Disabled' }}
+                {{ item.enabled ? 'Đang bật' : 'Đã tắt' }}
               </span>
             </td>
             <td class="font-mono text-xs text-[var(--text-muted)] font-medium">{{ item.contentPattern || '-' }}</td>
             <td class="text-right whitespace-nowrap space-x-1">
               <button class="w-btn w-btn-outline text-xs h-8 px-2.5" *ngIf="auth.canMutate" (click)="beginEdit(item)">{{ 'common.edit' | translate }}</button>
               <button class="w-btn w-btn-outline text-xs h-8 px-2.5" *ngIf="auth.canMutate" (click)="toggleEnabled(item)">
-                {{ item.enabled ? 'Disable' : 'Enable' }}
+                {{ item.enabled ? 'Tắt' : 'Bật' }}
               </button>
               <button class="w-btn w-btn-ghost text-xs h-8 px-2 text-rose-600" *ngIf="auth.canMutate" (click)="remove(item.id)">{{ 'common.delete' | translate }}</button>
             </td>

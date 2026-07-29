@@ -59,11 +59,23 @@ function resolveErrorMessage(error: HttpErrorResponse): string {
   }
 
   if (error.status === 0) {
-    return 'Network error: unable to reach the backend service.';
+    return 'Không thể kết nối máy chủ. Kiểm tra mạng rồi thử lại.';
   }
 
-  const statusText = error.message || 'Request failed';
-  return statusText || `Request failed (HTTP ${error.status})`;
+  const statusMessages: Record<number, string> = {
+    400: 'Yêu cầu không hợp lệ.',
+    401: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+    403: 'Bạn không có quyền thực hiện thao tác này.',
+    404: 'Không tìm thấy dữ liệu yêu cầu.',
+    409: 'Dữ liệu đang xung đột. Vui lòng kiểm tra lại.',
+    422: 'Dữ liệu chưa hợp lệ. Vui lòng kiểm tra lại.',
+    500: 'Hệ thống đang gặp sự cố. Vui lòng thử lại sau.',
+  };
+  const rawMessage = error.message?.trim();
+  if (rawMessage && !/^Http failure response/i.test(rawMessage)) {
+    return rawMessage;
+  }
+  return statusMessages[error.status] || `Yêu cầu không thành công (HTTP ${error.status}).`;
 }
 
 function readMessageFromPayload(payload: Record<string, unknown>): string {
@@ -76,7 +88,7 @@ function readMessageFromPayload(payload: Record<string, unknown>): string {
   const details = extractAny(payload);
 
   if (!details && code) {
-    return `Error ${code}`;
+    return `Lỗi hệ thống (mã ${code}).`;
   }
 
   if (details && code) {

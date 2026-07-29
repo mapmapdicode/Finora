@@ -1,124 +1,30 @@
 <section class="space-y-6">
-  <!-- Page Header -->
-  <div class="m3-page-header">
-    <div>
-      <h1 class="m3-page-title">{{ 'forecast.title' | translate }}</h1>
-      <p class="m3-page-subtitle">{{ 'forecast.subtitle' | translate }}</p>
-    </div>
-  </div>
+  <header class="m3-page-header">
+    <div><h1 class="m3-page-title">{{ 'forecast.title' | translate }}</h1><p class="m3-page-subtitle">{{ 'forecast.subtitle' | translate }}</p></div>
+    <button type="button" class="w-btn w-btn-primary" (click)="openCreate()" [disabled]="!auth.canMutate"><app-icon name="add"></app-icon> Tạo kịch bản</button>
+  </header>
 
-  <!-- Readonly Warning -->
-  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
-    <app-icon name="lock"></app-icon>
-    <span>{{ 'common.readonly_warning' | translate }}</span>
-  </div>
+  <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium"><app-icon name="lock"></app-icon><span>{{ 'common.readonly_warning' | translate }}</span></div>
+  <p *ngIf="statusMessage" class="text-xs font-semibold text-[var(--text-main)] bg-[var(--bg-subtle)] p-3 rounded-xl border border-[var(--border-subtle)]" aria-live="polite">{{ statusMessage }}</p>
 
-  <!-- Create Scenario Card Form (Full Screen Width) -->
-  <div class="w-card w-full">
+  <article *ngIf="isCreating || !scenarios.length" class="w-card">
     <div class="m3-card-header">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
-          <app-icon name="analytics"></app-icon>
-        </div>
-        <div>
-          <h3 class="m3-card-title">{{ 'forecast.create_title' | translate }}</h3>
-          <p class="m3-card-subtitle">Define simulation assumptions (JSON schema) for future wealth modeling.</p>
-        </div>
-      </div>
+      <div class="flex items-center gap-3"><span class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center"><app-icon name="analytics"></app-icon></span><div><h2 class="m3-card-title">{{ 'forecast.create_title' | translate }}</h2><p class="m3-card-subtitle">Thiết lập giả định JSON để mô phỏng tác động lên tài sản tương lai.</p></div></div>
+      <button *ngIf="scenarios.length" type="button" class="app-icon-button" (click)="closeCreate()" aria-label="Đóng biểu mẫu tạo kịch bản"><app-icon name="close"></app-icon></button>
     </div>
-
     <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
-      <div>
-        <label class="w-label">Scenario Name</label>
-        <input formControlName="name" class="w-input" placeholder="e.g. Bull Market 10% Annual Growth" />
-      </div>
-
-      <div>
-        <label class="w-label">{{ 'forecast.assumptions' | translate }}</label>
-        <textarea formControlName="assumptions" class="w-textarea font-mono text-xs" placeholder='{"growthRate": 0.08, "horizonMonths": 60}'></textarea>
-      </div>
-
-      <div class="flex justify-end pt-1">
-        <button class="w-btn w-btn-primary" type="submit" [disabled]="!auth.canMutate">
-          <app-icon name="add"></app-icon> {{ 'common.create' | translate }}
-        </button>
-      </div>
+      <div><label class="w-label" for="scenario-name">Tên kịch bản</label><input id="scenario-name" formControlName="name" class="w-input" placeholder="Ví dụ: Tăng trưởng 8% mỗi năm" /></div>
+      <div><label class="w-label" for="scenario-assumptions">{{ 'forecast.assumptions' | translate }}</label><textarea id="scenario-assumptions" formControlName="assumptions" class="w-textarea font-mono text-xs" placeholder='{"growthRate": 0.08, "horizonMonths": 60}'></textarea></div>
+      <div class="flex flex-wrap justify-end gap-2 pt-1"><button *ngIf="scenarios.length" type="button" class="w-btn w-btn-ghost" (click)="closeCreate()">Hủy</button><button class="w-btn w-btn-primary" type="submit" [disabled]="createInProgress || !auth.canMutate || form.invalid"><app-icon [name]="createInProgress ? 'progress_activity' : 'add'"></app-icon>{{ createInProgress ? 'Đang tạo' : ('common.create' | translate) }}</button></div>
     </form>
-  </div>
+  </article>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
+  <article class="w-card">
+    <div class="m3-card-header"><div><h2 class="m3-card-title flex items-center gap-2"><app-icon name="tune" class="text-[var(--accent-primary)]"></app-icon> Kịch bản đã lưu</h2><p class="m3-card-subtitle">Chạy mô phỏng và xem kết quả của từng phương án.</p></div><span class="w-badge w-badge-neutral">{{ scenarios.length }} kịch bản</span></div>
+    <div *ngIf="scenariosLoading" class="w-empty-state"><div class="w-empty-icon"><app-icon name="progress_activity"></app-icon></div><p class="w-empty-desc">Đang tải kịch bản…</p></div>
+    <div *ngIf="!scenariosLoading && !scenarios.length" class="w-empty-state"><div class="w-empty-icon"><app-icon name="analytics"></app-icon></div><p class="w-empty-title">Chưa có kịch bản dự báo</p><p class="w-empty-desc">Tạo kịch bản để thử nghiệm giả định trước khi dùng chúng cho kế hoạch tài chính.</p></div>
+    <div *ngIf="!scenariosLoading && scenarios.length" class="w-table-container"><table class="w-table"><thead><tr><th>Tên kịch bản</th><th>Trạng thái</th><th>Mã kịch bản</th><th class="text-right">Thao tác</th></tr></thead><tbody><tr *ngFor="let item of scenarios"><td class="font-bold text-[var(--text-main)]"><app-icon name="query_stats" class="text-[var(--accent-primary)] mr-2"></app-icon>{{ item.name }}</td><td><span class="w-badge uppercase text-[10px]" [ngClass]="{'w-badge-success': item.status === 'done','w-badge-warning': item.status === 'running','w-badge-neutral': !item.status || item.status === 'pending'}">{{ statusLabel(item.status) }}</span></td><td class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td><td class="text-right"><button class="w-btn w-btn-outline text-xs h-8 px-3" [disabled]="activeScenarioId === item.id || !auth.canMutate" (click)="runScenario(item)"><app-icon name="play_arrow" [class.animate-spin]="activeScenarioId === item.id"></app-icon>{{ activeScenarioId === item.id ? ('common.loading' | translate) : ('forecast.run_button' | translate) }}</button></td></tr></tbody></table></div>
+  </article>
 
-  <!-- Saved Scenarios Card -->
-  <div class="w-card">
-    <div class="m3-card-header">
-      <div>
-        <h3 class="m3-card-title flex items-center gap-2">
-          <app-icon name="tune" class="text-[var(--accent-primary)]"></app-icon> Saved Scenarios
-        </h3>
-        <p class="m3-card-subtitle">Execute simulations and inspect projection engines.</p>
-      </div>
-      <span class="w-badge w-badge-neutral">{{ scenarios.length }} Scenarios</span>
-    </div>
-
-    <!-- Empty State -->
-    <div *ngIf="!scenarios.length" class="w-empty-state">
-      <div class="w-empty-icon">
-        <app-icon name="analytics"></app-icon>
-      </div>
-      <p class="w-empty-title">No Forecast Scenarios</p>
-      <p class="w-empty-desc">Create your first forecast scenario using the form above to model future net worth.</p>
-    </div>
-
-    <!-- Scenarios Table -->
-    <div *ngIf="scenarios.length" class="w-table-container">
-      <table class="w-table">
-        <thead>
-          <tr>
-            <th>Scenario Name</th>
-            <th>Status</th>
-            <th>Scenario ID</th>
-            <th class="text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let item of scenarios">
-            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
-              <app-icon name="query_stats" class="text-[var(--accent-primary)]"></app-icon>
-              {{ item.name }}
-            </td>
-            <td>
-              <span class="w-badge uppercase text-[10px]" [ngClass]="{
-                'w-badge-success': item.status === 'done',
-                'w-badge-warning': item.status === 'running',
-                'w-badge-neutral': !item.status || item.status === 'pending'
-              }">
-                {{ item.status || 'pending' }}
-              </span>
-            </td>
-            <td class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td>
-            <td class="text-right">
-              <button
-                class="w-btn w-btn-outline text-xs h-8 px-3"
-                [disabled]="activeScenarioId === item.id || !auth.canMutate"
-                (click)="runScenario(item)"
-              >
-                <app-icon name="play_arrow" [class.animate-spin]="activeScenarioId === item.id"></app-icon>
-                {{ activeScenarioId === item.id ? ('common.loading' | translate) : ('forecast.run_button' | translate) }}
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Simulation Result Viewer -->
-  <div *ngIf="lastResult" class="w-card bg-slate-900 border-slate-800 text-emerald-400">
-    <div class="m3-card-header text-white mb-2">
-      <h4 class="m3-card-title text-white flex items-center gap-2">
-        <app-icon name="terminal" class="text-emerald-400"></app-icon> Simulation Output Log
-      </h4>
-    </div>
-    <pre class="p-4 rounded-xl bg-slate-950 font-mono text-xs text-emerald-300 overflow-x-auto leading-relaxed border border-slate-800">{{ lastResult | json }}</pre>
-  </div>
+  <article *ngIf="lastResult" class="w-card bg-slate-900 border-slate-800 text-emerald-400"><div class="m3-card-header text-white mb-2"><h2 class="m3-card-title text-white flex items-center gap-2"><app-icon name="terminal" class="text-emerald-400"></app-icon> Chi tiết kết quả mô phỏng</h2></div><pre class="p-4 rounded-xl bg-slate-950 font-mono text-xs text-emerald-300 overflow-x-auto leading-relaxed border border-slate-800">{{ lastResult | json }}</pre></article>
 </section>

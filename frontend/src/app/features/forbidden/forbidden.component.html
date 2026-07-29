@@ -1,19 +1,20 @@
 <section class="max-w-lg mx-auto my-16">
   <div class="m3-card p-8 text-center space-y-4">
-    <div class="m3-empty-icon mx-auto bg-[var(--m3-warning-container)] text-[var(--m3-on-warning-container)]">
+    <div class="m3-empty-icon mx-auto bg-amber-100 text-amber-800">
       <app-icon name="block"></app-icon>
     </div>
-    <h2 class="text-2xl font-bold text-[var(--m3-on-surface)]">Access Denied (403)</h2>
-    <p class="text-xs text-[var(--m3-on-surface-variant)] leading-relaxed">
-      This workspace is read-only for your current role. You can browse data, but modification actions are restricted.
+    <h2 class="text-2xl font-bold text-[var(--text-main)]">Không có quyền truy cập</h2>
+    <p class="text-xs text-[var(--text-muted)] leading-relaxed">
+      Không gian làm việc này đang ở chế độ chỉ đọc. Bạn vẫn có thể xem dữ liệu,
+      nhưng các thao tác thay đổi đã bị giới hạn theo vai trò.
     </p>
 
     <div class="flex flex-wrap justify-center gap-3 pt-2">
       <a routerLink="/dashboard" class="m3-btn m3-btn-primary">
-        <app-icon name="dashboard"></app-icon> Go to Dashboard
+        <app-icon name="dashboard"></app-icon> Về trang tổng quan
       </a>
       <a routerLink="/transactions" class="m3-btn m3-btn-outlined">
-        <app-icon name="payments"></app-icon> View Transactions
+        <app-icon name="payments"></app-icon> Xem giao dịch
       </a>
     </div>
   </div>

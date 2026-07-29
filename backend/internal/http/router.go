@@ -69,6 +69,8 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 	{
 		api.POST("/auth/register", h.Register)
 		api.POST("/auth/login", middleware.LoginRateLimit(12), h.Login)
+		api.POST("/auth/verify-email", middleware.LoginRateLimit(12), h.VerifyEmail)
+		api.POST("/auth/resend-verification-email", middleware.LoginRateLimit(4), h.ResendVerificationEmail)
 		api.GET("/integrations/sepay/callback", h.SePayCallback)
 		api.POST("/webhooks/sepay", h.WebhookSePay)
 		api.POST("/webhooks/sepay/bankhub/ipn", h.BankHubIPN)
@@ -97,6 +99,7 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 		userRequired.DELETE("/portfolios/:id", h.DeletePortfolio)
 		userRequired.GET("/portfolios/:id/net-worth", h.GetPortfolioNetWorth)
 		userRequired.GET("/portfolios/:id/snapshots", h.ListPortfolioSnapshots)
+		userRequired.GET("/net-worth", h.GetCurrentNetWorth)
 
 		userRequired.GET("/accounts", h.ListAccounts)
 		userRequired.POST("/accounts", middleware.IdempotencyGuard(store), h.CreateAccount)
@@ -108,12 +111,16 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 
 		userRequired.POST("/transfers", middleware.IdempotencyGuard(store), h.CreateTransfer)
 
+		userRequired.GET("/customers", h.ListCustomers)
+		userRequired.POST("/customers", middleware.IdempotencyGuard(store), h.CreateCustomer)
+
 		userRequired.GET("/loans", h.ListLoans)
 		userRequired.GET("/loans/summary", h.GetLoanPortfolioSummary)
 		userRequired.GET("/loans/schedule", h.GetLoanSchedule)
 		userRequired.POST("/loans", middleware.IdempotencyGuard(store), h.CreateLoan)
 		userRequired.DELETE("/loans/:id", h.DeleteLoan)
 		userRequired.GET("/loans/:id/accruals", h.GetLoanAccruals)
+		userRequired.GET("/loans/:id/payments", h.ListLoanPayments)
 		userRequired.POST("/loans/:id/payments", middleware.IdempotencyGuard(store), h.CreateLoanPayment)
 
 		userRequired.GET("/properties", h.ListProperties)

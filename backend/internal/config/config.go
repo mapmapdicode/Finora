@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -28,7 +29,14 @@ type Config struct {
 	SePayBankHubPilotBanks []string
 	TelegramWebhookSecret  string
 	HermesExecutorSecret   string
+	SMTPHost               string
+	SMTPPort               string
+	SMTPUsername           string
+	SMTPPassword           string
+	SMTPFrom               string
+	SMTPFromName           string
 	RedisURL               string
+	SeedDemoData           bool
 }
 
 func Load() (*Config, error) {
@@ -42,6 +50,7 @@ func Load() (*Config, error) {
 		JWTSecret:              os.Getenv("APP_JWT_SECRET"),
 		DatabaseURL:            os.Getenv("DATABASE_URL"),
 		RedisURL:               os.Getenv("REDIS_URL"),
+		SeedDemoData:           strings.ToLower(strings.TrimSpace(os.Getenv("APP_SEED_DEMO"))) != "false",
 		RequestIDHeader:        os.Getenv("REQUEST_ID_HEADER"),
 		LogLevel:               os.Getenv("LOG_LEVEL"),
 		SePayWebhookSecret:     os.Getenv("SEPAY_WEBHOOK_SECRET"),
@@ -53,6 +62,12 @@ func Load() (*Config, error) {
 		SePayBankHubPilotBanks: splitCSV(os.Getenv("SEPAY_BANKHUB_PILOT_BANK_CODES")),
 		TelegramWebhookSecret:  os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
 		HermesExecutorSecret:   os.Getenv("HERMES_EXECUTOR_SECRET"),
+		SMTPHost:               os.Getenv("SMTP_HOST"),
+		SMTPPort:               os.Getenv("SMTP_PORT"),
+		SMTPUsername:           os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:           os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:               os.Getenv("SMTP_FROM"),
+		SMTPFromName:           os.Getenv("SMTP_FROM_NAME"),
 		JWTTTL:                 24 * time.Hour,
 	}
 
@@ -76,6 +91,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.SePayBankHubBaseURL == "" {
 		cfg.SePayBankHubBaseURL = "https://bankhub-api.sepay.vn"
+	}
+	if strings.EqualFold(cfg.Env, "production") && (strings.TrimSpace(cfg.SMTPHost) == "" || strings.TrimSpace(cfg.SMTPFrom) == "") {
+		return nil, fmt.Errorf("SMTP_HOST and SMTP_FROM are required in production for email verification")
 	}
 
 	if ttlEnv := os.Getenv("APP_JWT_TTL_HOURS"); ttlEnv != "" {

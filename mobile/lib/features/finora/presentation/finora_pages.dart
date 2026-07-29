@@ -1,9 +1,19 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile/core/network/api_client.dart';
+import 'package:mobile/core/utils/vietnamese_money_input.dart';
 import 'package:mobile/core/theme/finora_colors.dart';
+import 'package:mobile/core/theme/finora_tokens.dart';
+import 'package:mobile/core/theme/finora_typography.dart';
+import 'package:mobile/core/widgets/finora_core_widgets.dart';
 import 'package:mobile/features/auth/presentation/view_models/login_view_model.dart';
+import 'package:mobile/features/loans/data/repositories/loan_repository_impl.dart';
+import 'package:mobile/features/loans/data/services/loan_remote_service.dart';
+import 'package:mobile/features/loans/presentation/screens/loan_page.dart';
+import 'package:mobile/features/loans/presentation/view_models/loan_view_model.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 part 'screens/scenario_pages.dart';
@@ -22,6 +32,7 @@ abstract final class _I18n {
       'registerBtn': 'Tạo tài khoản',
       'emailLabel': 'Email đăng nhập',
       'passLabel': 'Mật khẩu',
+      'confirmPassLabel': 'Nhập lại mật khẩu',
       'nameLabel': 'Họ và tên',
       'switchRegister': 'Chưa có tài khoản? Tạo tài khoản',
       'switchLogin': 'Đã có tài khoản? Đăng nhập',
@@ -46,6 +57,7 @@ abstract final class _I18n {
       'registerBtn': 'Create Account',
       'emailLabel': 'Email Address',
       'passLabel': 'Password',
+      'confirmPassLabel': 'Confirm password',
       'nameLabel': 'Full Name',
       'switchRegister': "Don't have an account? Sign Up",
       'switchLogin': 'Already have an account? Sign In',
@@ -70,6 +82,7 @@ abstract final class _I18n {
       'registerBtn': 'アカウント作成',
       'emailLabel': 'メールアドレス',
       'passLabel': 'パスワード',
+      'confirmPassLabel': 'パスワードを再入力',
       'nameLabel': '氏名',
       'switchRegister': 'アカウントをお持ちでない方',
       'switchLogin': '既にアカウントをお持ちの方',
@@ -94,6 +107,7 @@ abstract final class _I18n {
       'registerBtn': '계정 만들기',
       'emailLabel': '이메일 주소',
       'passLabel': '비밀번호',
+      'confirmPassLabel': '비밀번호 확인',
       'nameLabel': '이름',
       'switchRegister': '계정이 없으신가요? 가입하기',
       'switchLogin': '이미 계정이 있으신가요? 로그인',
@@ -143,13 +157,21 @@ class LoginPage extends StatefulWidget {
 String appAmountDisplayMode = 'full';
 
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
+  // Local development account seeded by APP_SEED_DEMO for fast UI testing.
   final email = TextEditingController(text: 'thanhoangz');
   final password = TextEditingController(text: 'HoangThanZ6^');
-  final name = TextEditingController(text: 'Than Hoang Z');
+  final confirmPassword = TextEditingController();
+  final verificationCode = TextEditingController();
+  final name = TextEditingController();
   bool registering = false;
+  bool showingEmailVerification = false;
   bool obscurePassword = true;
+  bool obscureConfirmPassword = true;
+  String? registrationMessage;
   String currentLang = 'VN';
-  bool hasUnreadNotifications = true;
+  // Notifications are not backed by a feed yet; never signal unread data
+  // until the API supplies a real notification state.
+  bool hasUnreadNotifications = false;
 
   late final AnimationController _entranceController;
   late final AnimationController _pulseController;
@@ -227,13 +249,41 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Future<void> submit() async {
+    final wasRegistering = registering;
     final authenticated = await widget.viewModel.authenticate(
       registering: registering,
       email: email.text,
       password: password.text,
+      confirmPassword: confirmPassword.text,
       name: name.text,
     );
+    if (!authenticated &&
+        widget.viewModel.pendingVerificationEmail != null &&
+        mounted) {
+      setState(() {
+        showingEmailVerification = true;
+        if (wasRegistering) {
+          registering = false;
+          password.clear();
+          confirmPassword.clear();
+          name.clear();
+          obscurePassword = true;
+          obscureConfirmPassword = true;
+        }
+        registrationMessage = null;
+      });
+      return;
+    }
     if (authenticated && mounted) {
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: widget.homeBuilder));
+    }
+  }
+
+  Future<void> verifyEmail() async {
+    final verified = await widget.viewModel.verifyEmail(verificationCode.text);
+    if (verified && mounted) {
       Navigator.of(
         context,
       ).pushReplacement(MaterialPageRoute(builder: widget.homeBuilder));
@@ -243,9 +293,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   void _showAppSettingsSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xff200733),
+      backgroundColor: FinoraColors.surfaceElevated,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
         return StatefulBuilder(
@@ -260,34 +310,29 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     children: [
                       const Icon(
                         Icons.settings_rounded,
-                        color: Color(0xfffbbf24),
+                        color: FinoraColors.primary,
                         size: 22,
                       ),
                       const SizedBox(width: 10),
                       const Text(
-                        'Cấu Hình Chế Độ Số Tiền',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        'Cách hiển thị số tiền',
+                        style: FinoraTypography.h3,
                       ),
                       const Spacer(),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(
                           Icons.close_rounded,
-                          color: Colors.white70,
+                          color: FinoraColors.textSecondary,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Chọn cách hiển thị số tiền trên toàn bộ ứng dụng:',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 13,
+                    'Chọn cách hiển thị số tiền trên toàn bộ ứng dụng.',
+                    style: FinoraTypography.bodySmall.copyWith(
+                      color: FinoraColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -333,14 +378,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0x33fbbf24)
-              : Colors.white.withValues(alpha: 0.08),
+          color: isSelected ? FinoraColors.primarySoft : FinoraColors.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected
-                ? const Color(0xfffbbf24)
-                : Colors.white.withValues(alpha: 0.12),
+            color: isSelected ? FinoraColors.primary : FinoraColors.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -352,22 +393,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
+                    style: FinoraTypography.title.copyWith(
                       color: isSelected
-                          ? const Color(0xfffbbf24)
-                          : Colors.white,
-                      fontSize: 15,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.w600,
+                          ? FinoraColors.primaryDeep
+                          : FinoraColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 12,
+                    style: FinoraTypography.caption.copyWith(
+                      color: FinoraColors.textSecondary,
                     ),
                   ),
                 ],
@@ -376,7 +412,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             if (isSelected)
               const Icon(
                 Icons.check_circle_rounded,
-                color: Color(0xfffbbf24),
+                color: FinoraColors.primary,
                 size: 22,
               ),
           ],
@@ -504,196 +540,52 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xff200733),
+      backgroundColor: FinoraColors.surfaceElevated,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final notifications = [
-              {
-                'icon': Icons.security_rounded,
-                'color': const Color(0xff38bdf8),
-                'title': 'Bảo mật tài khoản',
-                'desc': 'Phát hiện đăng nhập mới từ macOS (Mac Mini).',
-                'time': '10 phút trước',
-                'unread': true,
-              },
-              {
-                'icon': Icons.trending_up_rounded,
-                'color': const Color(0xff4ade80),
-                'title': 'Danh mục đầu tư',
-                'desc': 'Tổng tài sản ròng tăng +2.4% trong tuần này.',
-                'time': '2 giờ trước',
-                'unread': true,
-              },
-              {
-                'icon': Icons.pie_chart_rounded,
-                'color': const Color(0xfffacc15),
-                'title': 'Cảnh báo Ngân sách',
-                'desc': 'Bạn đã sử dụng 75% ngân sách ăn uống tháng 7.',
-                'time': 'Hôm qua',
-                'unread': false,
-              },
-              {
-                'icon': Icons.smart_toy_rounded,
-                'color': const Color(0xffc084fc),
-                'title': 'Trợ lý AI Finora',
-                'desc': 'Đã hoàn tất phân tích báo cáo tài chính định kỳ.',
-                'time': '2 ngày trước',
-                'unread': false,
-              },
-            ];
-
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.65,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.notifications_active_rounded,
-                        color: Color(0xfffbbf24),
-                        size: 22,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        _I18n.t(currentLang, 'notifications'),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () {
-                          setState(() => hasUnreadNotifications = false);
-                          setModalState(() {});
-                        },
-                        child: Text(
-                          _I18n.t(currentLang, 'markAllRead'),
-                          style: const TextStyle(
-                            color: Color(0xfffbbf24),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: notifications.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) {
-                        final item = notifications[i];
-                        final isUnread =
-                            hasUnreadNotifications && (item['unread'] as bool);
-                        return Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: isUnread
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : Colors.white.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: isUnread
-                                  ? const Color(
-                                      0xfffbbf24,
-                                    ).withValues(alpha: 0.3)
-                                  : Colors.white.withValues(alpha: 0.1),
-                            ),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: (item['color'] as Color).withValues(
-                                    alpha: 0.15,
-                                  ),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  item['icon'] as IconData,
-                                  color: item['color'] as Color,
-                                  size: 20,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            item['title'] as String,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                        if (isUnread)
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xffef4444),
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      item['desc'] as String,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.85,
-                                        ),
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      item['time'] as String,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.5,
-                                        ),
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.notifications_none_rounded,
+                      color: FinoraColors.primary,
+                      size: 22,
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _I18n.t(currentLang, 'notifications'),
+                        style: FinoraTypography.h3,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Đóng thông báo',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: FinoraColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                const FinoraEmptyState(
+                  icon: Icons.notifications_none_rounded,
+                  title: 'Chưa có thông báo',
+                  message:
+                      'Thông báo bảo mật và hoạt động sẽ xuất hiện ở đây khi được đồng bộ.',
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -706,12 +598,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     widget.viewModel.removeListener(_onViewModelChanged);
     email.dispose();
     password.dispose();
+    confirmPassword.dispose();
+    verificationCode.dispose();
     name.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    backgroundColor: FinoraColors.background,
     body: Stack(
       children: [
         Positioned.fill(
@@ -731,40 +626,70 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         ),
         Positioned.fill(
           child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0x220f172a),
-                  Color(0x331a052e),
-                  Color(0x55000000),
-                ],
-              ),
-            ),
+            decoration: const BoxDecoration(gradient: FinoraColors.bgGradient),
           ),
         ),
         SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth >= 760;
-              final form = _LoginForm(
-                registering: registering,
-                busy: widget.viewModel.isBusy,
-                error: widget.viewModel.error,
-                email: email,
-                password: password,
-                name: name,
-                obscurePassword: obscurePassword,
-                lang: currentLang,
-                onTogglePassword: () =>
-                    setState(() => obscurePassword = !obscurePassword),
-                onSubmit: submit,
-                onSwitch: () {
-                  setState(() => registering = !registering);
-                  widget.viewModel.clearError();
-                },
-              );
+              final Widget form = showingEmailVerification
+                  ? _EmailVerificationForm(
+                      key: ValueKey(
+                        widget.viewModel.pendingVerificationEmail ?? email.text,
+                      ),
+                      email:
+                          widget.viewModel.pendingVerificationEmail ??
+                          email.text,
+                      code: verificationCode,
+                      busy: widget.viewModel.isBusy,
+                      error: widget.viewModel.error,
+                      onVerify: verifyEmail,
+                      onResend: widget.viewModel.resendVerificationEmail,
+                      onBack: () {
+                        setState(() {
+                          showingEmailVerification = false;
+                          verificationCode.clear();
+                        });
+                        widget.viewModel.cancelEmailVerification();
+                      },
+                    )
+                  : _LoginForm(
+                      registering: registering,
+                      busy: widget.viewModel.isBusy,
+                      error: widget.viewModel.error,
+                      message: registrationMessage,
+                      email: email,
+                      password: password,
+                      confirmPassword: confirmPassword,
+                      name: name,
+                      obscurePassword: obscurePassword,
+                      obscureConfirmPassword: obscureConfirmPassword,
+                      lang: currentLang,
+                      onTogglePassword: () =>
+                          setState(() => obscurePassword = !obscurePassword),
+                      onToggleConfirmPassword: () => setState(
+                        () => obscureConfirmPassword = !obscureConfirmPassword,
+                      ),
+                      onSubmit: submit,
+                      onOpenEmailVerification:
+                          widget.viewModel.pendingVerificationEmail == null
+                          ? null
+                          : () => setState(() {
+                              showingEmailVerification = true;
+                              registrationMessage = null;
+                            }),
+                      onSwitch: () {
+                        setState(() {
+                          registering = !registering;
+                          showingEmailVerification = false;
+                          confirmPassword.clear();
+                          obscureConfirmPassword = true;
+                          registrationMessage = null;
+                        });
+                        widget.viewModel.clearError();
+                      },
+                    );
 
               if (wide) {
                 return Center(
@@ -898,12 +823,12 @@ class _LoginHeader extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.25),
+          color: Colors.white.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+          border: Border.all(color: FinoraColors.border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
+              color: FinoraColors.primary.withValues(alpha: 0.10),
               blurRadius: 14,
             ),
           ],
@@ -921,7 +846,7 @@ class _LoginHeader extends StatelessWidget {
                     const Text(
                       'Finora',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: FinoraColors.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.5,
@@ -934,15 +859,13 @@ class _LoginHeader extends StatelessWidget {
                         vertical: 1.5,
                       ),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xfffbbf24), Color(0xffd97706)],
-                        ),
+                        color: FinoraColors.primarySoft,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text(
                         'WEALTH OS',
                         style: TextStyle(
-                          color: Color(0xff1c1917),
+                          color: FinoraColors.primary,
                           fontSize: 8,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.6,
@@ -954,7 +877,7 @@ class _LoginHeader extends StatelessWidget {
                 Text(
                   _I18n.t(lang, 'subtitle'),
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
+                    color: FinoraColors.textSecondary,
                     fontSize: 9,
                     fontWeight: FontWeight.w600,
                   ),
@@ -963,100 +886,109 @@ class _LoginHeader extends StatelessWidget {
             ),
             const Spacer(),
             // Interactive Language Selector
-            InkWell(
-              onTap: onSelectLang,
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.35),
+            Semantics(
+              button: true,
+              label: 'Chọn ngôn ngữ, hiện tại $lang',
+              child: InkWell(
+                onTap: onSelectLang,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _I18n.getFlag(lang),
-                      style: const TextStyle(fontSize: 11.5),
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      lang,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                  decoration: BoxDecoration(
+                    color: FinoraColors.primarySoft,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: FinoraColors.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _I18n.getFlag(lang),
+                        style: const TextStyle(fontSize: 11.5),
                       ),
-                    ),
-                    const SizedBox(width: 2),
-                    const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: Colors.white,
-                      size: 14,
-                    ),
-                  ],
+                      const SizedBox(width: 3),
+                      Text(
+                        lang,
+                        style: const TextStyle(
+                          color: FinoraColors.textPrimary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: FinoraColors.textSecondary,
+                        size: 14,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 6),
             // Interactive Notification Bell
-            InkWell(
-              onTap: onOpenNotifications,
-              borderRadius: BorderRadius.circular(99),
-              child: Stack(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.35),
+            Semantics(
+              button: true,
+              label: hasUnread ? 'Thông báo, có thông báo mới' : 'Thông báo',
+              child: InkWell(
+                onTap: onOpenNotifications,
+                borderRadius: BorderRadius.circular(99),
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: FinoraColors.primarySoft,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: FinoraColors.border),
+                      ),
+                      child: const Icon(
+                        Icons.notifications_none_rounded,
+                        color: FinoraColors.textPrimary,
+                        size: 15,
                       ),
                     ),
-                    child: const Icon(
-                      Icons.notifications_none_rounded,
-                      color: Colors.white,
-                      size: 15,
-                    ),
-                  ),
-                  if (hasUnread)
-                    Positioned(
-                      right: 2,
-                      top: 2,
-                      child: Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                          color: Color(0xffef4444),
-                          shape: BoxShape.circle,
+                    if (hasUnread)
+                      Positioned(
+                        right: 2,
+                        top: 2,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: Color(0xffef4444),
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
             if (onOpenSettings != null) ...[
               const SizedBox(width: 6),
-              InkWell(
-                onTap: onOpenSettings,
-                borderRadius: BorderRadius.circular(99),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.35),
+              Semantics(
+                button: true,
+                label: 'Mở cài đặt',
+                child: InkWell(
+                  onTap: onOpenSettings,
+                  borderRadius: BorderRadius.circular(99),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: FinoraColors.primarySoft,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: FinoraColors.border),
                     ),
-                  ),
-                  child: const Icon(
-                    Icons.settings_rounded,
-                    color: Colors.white,
-                    size: 15,
+                    child: const Icon(
+                      Icons.settings_rounded,
+                      color: FinoraColors.textPrimary,
+                      size: 15,
+                    ),
                   ),
                 ),
               ),
@@ -1073,21 +1005,31 @@ class _LoginForm extends StatelessWidget {
     required this.registering,
     required this.busy,
     required this.error,
+    required this.message,
     required this.email,
     required this.password,
+    required this.confirmPassword,
     required this.name,
     required this.obscurePassword,
+    required this.obscureConfirmPassword,
     required this.lang,
     required this.onTogglePassword,
+    required this.onToggleConfirmPassword,
     required this.onSubmit,
+    this.onOpenEmailVerification,
     required this.onSwitch,
   });
 
-  final bool registering, busy, obscurePassword;
+  final bool registering, busy, obscurePassword, obscureConfirmPassword;
   final String? error;
-  final TextEditingController email, password, name;
+  final String? message;
+  final TextEditingController email, password, confirmPassword, name;
   final String lang;
-  final VoidCallback onTogglePassword, onSubmit, onSwitch;
+  final VoidCallback onTogglePassword,
+      onToggleConfirmPassword,
+      onSubmit,
+      onSwitch;
+  final VoidCallback? onOpenEmailVerification;
 
   @override
   Widget build(BuildContext context) {
@@ -1095,15 +1037,12 @@ class _LoginForm extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.32),
+        color: Colors.white.withValues(alpha: 0.94),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.32),
-          width: 1.2,
-        ),
+        border: Border.all(color: FinoraColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
+            color: FinoraColors.primary.withValues(alpha: 0.12),
             blurRadius: 24,
             spreadRadius: 0,
           ),
@@ -1127,7 +1066,7 @@ class _LoginForm extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.9),
+                              color: FinoraColors.textSecondary,
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1140,16 +1079,16 @@ class _LoginForm extends StatelessWidget {
                     const SizedBox(height: 1),
                     ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Colors.white, Color(0xfffbbf24)],
+                        colors: [FinoraColors.primary, FinoraColors.purple],
                       ).createShader(bounds),
                       child: Text(
                         registering
                             ? _I18n.t(lang, 'newAccount')
                             : (email.text.isNotEmpty
                                   ? email.text.split('@').first.toUpperCase()
-                                  : 'THAN HOANG Z'),
+                                  : 'FINORA'),
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: FinoraColors.primary,
                           fontSize: 17,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.4,
@@ -1163,11 +1102,9 @@ class _LoginForm extends StatelessWidget {
               ),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
+                  color: FinoraColors.primarySoft,
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.3),
-                  ),
+                  border: Border.all(color: FinoraColors.border),
                 ),
                 child: IconButton(
                   constraints: const BoxConstraints(
@@ -1181,7 +1118,7 @@ class _LoginForm extends StatelessWidget {
                     registering
                         ? Icons.login_rounded
                         : Icons.account_circle_outlined,
-                    color: const Color(0xfffbbf24),
+                    color: FinoraColors.primary,
                     size: 18,
                   ),
                 ),
@@ -1219,18 +1156,88 @@ class _LoginForm extends StatelessWidget {
                   obscureText: obscurePassword,
                   suffixIcon: IconButton(
                     onPressed: onTogglePassword,
+                    tooltip: obscurePassword ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
                     icon: Icon(
                       obscurePassword
                           ? Icons.visibility_outlined
                           : Icons.visibility_off_outlined,
-                      color: Colors.white.withValues(alpha: 0.85),
+                      color: FinoraColors.textSecondary,
                       size: 18,
                     ),
                   ),
                 ),
+                if (registering) ...[
+                  const SizedBox(height: 8),
+                  _CustomGlassTextField(
+                    controller: confirmPassword,
+                    labelText: _I18n.t(lang, 'confirmPassLabel'),
+                    icon: Icons.lock_reset_outlined,
+                    obscureText: obscureConfirmPassword,
+                    suffixIcon: IconButton(
+                      onPressed: onToggleConfirmPassword,
+                      tooltip: obscureConfirmPassword
+                          ? 'Hiện mật khẩu nhập lại'
+                          : 'Ẩn mật khẩu nhập lại',
+                      icon: Icon(
+                        obscureConfirmPassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: FinoraColors.textSecondary,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
+
+          if (message != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: FinoraColors.primarySoft,
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: FinoraColors.primary),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.mark_email_read_outlined,
+                          color: FinoraColors.primary,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            message!,
+                            style: const TextStyle(
+                              color: FinoraColors.textPrimary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (onOpenEmailVerification != null)
+                      TextButton.icon(
+                        onPressed: onOpenEmailVerification,
+                        icon: const Icon(Icons.verified_outlined, size: 16),
+                        label: const Text('Xác thực email'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
 
           if (error != null)
             Padding(
@@ -1241,15 +1248,15 @@ class _LoginForm extends StatelessWidget {
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0x66ef4444),
+                  color: const Color(0x1af04438),
                   borderRadius: BorderRadius.circular(11),
-                  border: Border.all(color: const Color(0xfffca5a5)),
+                  border: Border.all(color: FinoraColors.danger),
                 ),
                 child: Row(
                   children: [
                     const Icon(
                       Icons.error_outline_rounded,
-                      color: Color(0xfffca5a5),
+                      color: FinoraColors.danger,
                       size: 16,
                     ),
                     const SizedBox(width: 6),
@@ -1257,7 +1264,7 @@ class _LoginForm extends StatelessWidget {
                       child: Text(
                         error!,
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: FinoraColors.textPrimary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1304,7 +1311,7 @@ class _LoginForm extends StatelessWidget {
             ),
           ),
 
-          const Divider(color: Colors.white24, height: 14),
+          const Divider(color: FinoraColors.border, height: 20),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1322,6 +1329,286 @@ class _LoginForm extends StatelessWidget {
                 label: _I18n.t(lang, 'security'),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmailVerificationForm extends StatefulWidget {
+  const _EmailVerificationForm({
+    super.key,
+    required this.email,
+    required this.code,
+    required this.busy,
+    required this.error,
+    required this.onVerify,
+    required this.onResend,
+    required this.onBack,
+  });
+
+  final String email;
+  final TextEditingController code;
+  final bool busy;
+  final String? error;
+  final VoidCallback onVerify;
+  final Future<bool> Function() onResend;
+  final VoidCallback onBack;
+
+  @override
+  State<_EmailVerificationForm> createState() => _EmailVerificationFormState();
+}
+
+class _EmailVerificationFormState extends State<_EmailVerificationForm> {
+  static const _resendCooldown = 60;
+  late int _secondsRemaining;
+  Timer? _cooldownTimer;
+  bool _isResending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _secondsRemaining = _resendCooldown;
+    _startCooldown();
+  }
+
+  void _startCooldown() {
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_secondsRemaining <= 1) {
+        timer.cancel();
+        if (mounted) setState(() => _secondsRemaining = 0);
+        return;
+      }
+      if (mounted) setState(() => _secondsRemaining--);
+    });
+  }
+
+  Future<void> _resendCode() async {
+    if (_secondsRemaining > 0 || _isResending || widget.busy) return;
+    setState(() => _isResending = true);
+    final sent = await widget.onResend();
+    if (!mounted) return;
+    setState(() => _isResending = false);
+    if (sent) {
+      setState(() => _secondsRemaining = _resendCooldown);
+      _startCooldown();
+    }
+  }
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: FinoraColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: FinoraColors.primary.withValues(alpha: 0.12),
+            blurRadius: 24,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [FinoraColors.primary, FinoraColors.purple],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: FinoraColors.primary.withValues(alpha: 0.28),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.mark_email_read_rounded,
+              color: Colors.white,
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Kiểm tra hộp thư của bạn',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: FinoraColors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Chúng tôi đã gửi mã xác thực gồm 6 chữ số tới',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: FinoraColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.email,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: FinoraColors.primary,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: const Color(0xffecfdf5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xffa7f3d0)),
+            ),
+            child: const Row(
+              children: [
+                Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xff059669),
+                  size: 17,
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Mã xác thực đã được gửi thành công',
+                    style: TextStyle(
+                      color: Color(0xff047857),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'NHẬP MÃ XÁC THỰC',
+              style: TextStyle(
+                color: FinoraColors.textSecondary,
+                fontSize: 10,
+                letterSpacing: 0.8,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 7),
+          TextField(
+            controller: widget.code,
+            autofocus: true,
+            textAlign: TextAlign.center,
+            keyboardType: TextInputType.number,
+            autofillHints: const [AutofillHints.oneTimeCode],
+            maxLength: 6,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: const TextStyle(
+              color: FinoraColors.textPrimary,
+              fontSize: 24,
+              letterSpacing: 10,
+              fontWeight: FontWeight.w800,
+            ),
+            decoration: InputDecoration(
+              counterText: '',
+              hintText: '000000',
+              hintStyle: TextStyle(
+                color: FinoraColors.textTertiary.withValues(alpha: 0.55),
+                fontSize: 23,
+                letterSpacing: 8,
+                fontWeight: FontWeight.w700,
+              ),
+              filled: true,
+              fillColor: const Color(0xfffaf9ff),
+              contentPadding: const EdgeInsets.symmetric(vertical: 13),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: FinoraColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: FinoraColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                  color: FinoraColors.primary,
+                  width: 1.8,
+                ),
+              ),
+            ),
+          ),
+          if (widget.error != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0x1af04438),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                widget.error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: FinoraColors.danger,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          _AnimatedGoldButton(
+            busy: widget.busy,
+            label: 'Xác thực và vào Finora',
+            onTap: widget.onVerify,
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: widget.busy || _isResending || _secondsRemaining > 0
+                ? null
+                : _resendCode,
+            icon: _isResending
+                ? const SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded, size: 17),
+            label: Text(
+              _secondsRemaining > 0
+                  ? 'Gửi lại mã sau ${_secondsRemaining}s'
+                  : 'Gửi lại mã xác thực',
+            ),
+          ),
+          TextButton(
+            onPressed: widget.busy ? null : widget.onBack,
+            child: const Text('Quay lại đăng nhập'),
           ),
         ],
       ),
@@ -1361,7 +1648,7 @@ class _CustomGlassTextField extends StatelessWidget {
           child: Text(
             labelText,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
+              color: FinoraColors.textSecondary,
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.2,
@@ -1374,44 +1661,47 @@ class _CustomGlassTextField extends StatelessWidget {
           keyboardType: keyboardType,
           textCapitalization: textCapitalization,
           onChanged: onChanged,
+          inputFormatters: keyboardType == TextInputType.number
+              ? [FilteringTextInputFormatter.digitsOnly]
+              : null,
           style: const TextStyle(
-            color: Color(0xff0f172a),
+            color: FinoraColors.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w700,
           ),
           decoration: InputDecoration(
             hintText: labelText,
             hintStyle: const TextStyle(
-              color: Color(0xff94a3b8),
+              color: FinoraColors.textTertiary,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
             filled: true,
-            fillColor: const Color(0xfff8fafc),
+            fillColor: const Color(0xfffaf9ff),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 11,
             ),
-            prefixIcon: Icon(icon, color: const Color(0xffd97706), size: 18),
+            prefixIcon: Icon(icon, color: FinoraColors.primary, size: 18),
             suffixIcon: suffixIcon,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
-                color: Color(0xffcbd5e1),
+                color: FinoraColors.border,
                 width: 1.2,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
-                color: Color(0xffcbd5e1),
+                color: FinoraColors.border,
                 width: 1.2,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
-                color: Color(0xfffbbf24),
+                color: FinoraColors.primary,
                 width: 1.8,
               ),
             ),
@@ -1435,17 +1725,17 @@ class _CardQuickAction extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
+            color: FinoraColors.primarySoft,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+            border: Border.all(color: FinoraColors.border),
           ),
-          child: Icon(icon, color: const Color(0xfffbbf24), size: 16),
+          child: Icon(icon, color: FinoraColors.primary, size: 16),
         ),
         const SizedBox(height: 4),
         Text(
           label,
           style: const TextStyle(
-            color: Colors.white,
+            color: FinoraColors.textPrimary,
             fontSize: 10,
             fontWeight: FontWeight.w700,
           ),
@@ -1475,75 +1765,80 @@ class _AnimatedGoldButtonState extends State<_AnimatedGoldButton> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.96 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOutCubic,
-        child: Container(
-          height: 44,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xfffbbf24), Color(0xffd97706)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(
-                  0xffd97706,
-                ).withValues(alpha: _pressed ? 0.25 : 0.45),
-                blurRadius: _pressed ? 6 : 14,
-                offset: _pressed ? const Offset(0, 2) : const Offset(0, 4),
+    return Semantics(
+      button: true,
+      enabled: !widget.busy && widget.onTap != null,
+      label: widget.label,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _pressed ? 0.96 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: Container(
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [FinoraColors.purple, FinoraColors.primary],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
               borderRadius: BorderRadius.circular(22),
-              onTap: widget.busy ? null : widget.onTap,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (widget.busy)
-                    const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        color: Color(0xff1c1917),
-                        strokeWidth: 2.2,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(
+                    0xff6d5df6,
+                  ).withValues(alpha: _pressed ? 0.25 : 0.45),
+                  blurRadius: _pressed ? 6 : 14,
+                  offset: _pressed ? const Offset(0, 2) : const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(22),
+                onTap: widget.busy ? null : widget.onTap,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (widget.busy)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.2,
+                        ),
+                      )
+                    else ...[
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
                       ),
-                    )
-                  else ...[
-                    Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.label,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.arrow_forward_rounded,
-                        color: Color(0xff1c1917),
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.label,
-                      style: const TextStyle(
-                        color: Color(0xff1c1917),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -1587,12 +1882,12 @@ class _LoginBottomNav extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.28),
+          color: Colors.white.withValues(alpha: 0.88),
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+          border: Border.all(color: FinoraColors.border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
+              color: FinoraColors.primary.withValues(alpha: 0.10),
               blurRadius: 16,
             ),
           ],
@@ -1619,17 +1914,17 @@ class _BottomNavItem extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.12),
+            color: FinoraColors.primarySoft,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+            border: Border.all(color: FinoraColors.border),
           ),
-          child: Icon(icon, color: Colors.white, size: 20),
+          child: Icon(icon, color: FinoraColors.primary, size: 20),
         ),
         const SizedBox(height: 6),
         Text(
           label,
           style: const TextStyle(
-            color: Colors.white,
+            color: FinoraColors.textSecondary,
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
@@ -1651,13 +1946,17 @@ class _BrandMark extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size * 0.28),
         gradient: const LinearGradient(
-          colors: [Color(0xfffceabb), Color(0xffdfac40), Color(0xff996515)],
+          colors: [
+            FinoraColors.purple,
+            FinoraColors.primary,
+            FinoraColors.deepPurple,
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xffdfac40).withValues(alpha: 0.35),
+            color: FinoraColors.primary.withValues(alpha: 0.35),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -1670,7 +1969,7 @@ class _BrandMark extends StatelessWidget {
             width: size * 0.48,
             height: size * 0.48,
             decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xff2a0845), width: 2.2),
+              border: Border.all(color: Colors.white, width: 2.2),
               borderRadius: BorderRadius.circular(size * 0.1),
             ),
             child: Center(
@@ -1678,7 +1977,7 @@ class _BrandMark extends StatelessWidget {
                 width: size * 0.22,
                 height: size * 0.22,
                 decoration: BoxDecoration(
-                  color: const Color(0xff2a0845),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(size * 0.04),
                 ),
               ),
@@ -1877,7 +2176,7 @@ class _HomePageState extends State<HomePage> {
     NavItem('Ngân hàng', Icons.account_balance_wallet_rounded),
     NavItem('Tự động hóa', Icons.bolt_rounded),
     NavItem('Trợ lý AI', Icons.smart_toy_rounded),
-    NavItem('Nhật ký audit', Icons.history_rounded),
+    NavItem('Nhật ký hoạt động', Icons.history_rounded),
     NavItem('Cá nhân', Icons.person_rounded),
   ];
   @override
@@ -1885,64 +2184,80 @@ class _HomePageState extends State<HomePage> {
     final compact = MediaQuery.of(context).size.width < 700;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: FinoraColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.black.withValues(alpha: 0.25),
+        backgroundColor: Colors.white.withValues(alpha: 0.92),
         elevation: 0,
         title: Row(
           children: [
             const _BrandMark(size: 32),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               'finora',
               style: TextStyle(
-                color: Colors.white,
+                color: FinoraColors.ink,
                 fontWeight: FontWeight.w900,
                 fontSize: 22,
                 letterSpacing: -1,
               ),
             ),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                gradient: FinoraColors.goldGradient,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                'WEALTH OS',
-                style: TextStyle(
-                  color: Color(0xff1c1917),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
+            if (!compact) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: FinoraColors.primarySoft,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'WEALTH OS',
+                  style: TextStyle(
+                    color: FinoraColors.primary,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
-        actions: const [],
+        actions: [
+          Semantics(
+            button: true,
+            label: 'Tìm kiếm',
+            child: IconButton(
+              tooltip: 'Tìm kiếm',
+              onPressed: _showQuickActionSheet,
+              icon: const Icon(Icons.search_rounded, color: FinoraColors.ink),
+            ),
+          ),
+          const SizedBox(width: FinoraSpace.xs),
+        ],
       ),
       drawer: null,
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/images/app_bg_maple_light.png',
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
+            child: Opacity(
+              opacity: 0.075,
+              child: Image.asset(
+                'assets/images/app_bg_maple_light.png',
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+              ),
             ),
           ),
           Positioned.fill(
             child: Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0x220f172a),
-                    Color(0x331a052e),
-                    Color(0x55000000),
+                  colors: const [
+                    Color(0x00fafafc),
+                    Color(0x44f3f0ff),
+                    Color(0x66fafafc),
                   ],
                 ),
               ),
@@ -1955,7 +2270,7 @@ class _HomePageState extends State<HomePage> {
                   SizedBox(
                     width: 255,
                     child: Material(
-                      color: Colors.black.withValues(alpha: 0.35),
+                      color: Colors.white.withValues(alpha: 0.95),
                       child: _nav(),
                     ),
                   ),
@@ -1965,26 +2280,133 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      floatingActionButton: compact
-          ? Container(
-              height: 56,
-              width: 56,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: FinoraColors.goldGradient,
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x66fbbf24),
-                    blurRadius: 16,
-                    spreadRadius: 2,
-                    offset: Offset(0, 4),
-                  ),
-                ],
+      bottomNavigationBar: compact
+          ? SafeArea(
+              top: false,
+              child: Container(
+                height: 74,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: FinoraColors.border)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x0f000000),
+                      blurRadius: 10,
+                      offset: Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildBottomNavItem(
+                        icon: Icons.home_rounded,
+                        label: 'Trang chủ',
+                        isSelected: index == 0,
+                        onTap: () => setState(() => index = 0),
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildBottomNavItem(
+                        icon: Icons.account_balance_wallet_rounded,
+                        label: 'Tài khoản',
+                        isSelected: index == 1,
+                        onTap: () => setState(() => index = 1),
+                      ),
+                    ),
+                    _buildQuickActionButton(),
+                    Expanded(
+                      child: _buildBottomNavItem(
+                        icon: Icons.receipt_long_rounded,
+                        label: 'Giao dịch',
+                        isSelected: index == 2,
+                        onTap: () => setState(() => index = 2),
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildBottomNavItem(
+                        icon: Icons.person_rounded,
+                        label: 'Cá nhân',
+                        isSelected: index == 13,
+                        onTap: () => setState(() => index = 13),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: FloatingActionButton(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
-                onPressed: () {
+            )
+          : null,
+    );
+  }
+
+  Widget _buildQuickActionButton() => Semantics(
+    button: true,
+    label: 'Thao tác nhanh',
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: FinoraSpace.xs),
+      child: SizedBox(
+        width: 56,
+        height: 58,
+        child: Material(
+          color: FinoraColors.primary,
+          shape: const CircleBorder(),
+          elevation: 5,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _showQuickActionSheet,
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  void _showQuickActionSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(
+            FinoraSpace.xl,
+            FinoraSpace.sm,
+            FinoraSpace.xl,
+            FinoraSpace.xl,
+          ),
+          decoration: const BoxDecoration(
+            color: FinoraColors.surfaceElevated,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: const BoxDecoration(
+                    color: FinoraColors.borderStrong,
+                    borderRadius: FinoraRadius.full,
+                  ),
+                ),
+              ),
+              const SizedBox(height: FinoraSpace.lg),
+              const Text('Thao tác nhanh', style: FinoraTypography.h3),
+              const SizedBox(height: FinoraSpace.xs),
+              const Text(
+                'Ghi nhận thay đổi tài sản mà không rời khỏi luồng hiện tại.',
+                style: FinoraTypography.bodySmall,
+              ),
+              const SizedBox(height: FinoraSpace.md),
+              _quickActionTile(
+                icon: Icons.add_card_rounded,
+                title: 'Tạo giao dịch',
+                subtitle: 'Ghi thu hoặc chi',
+                onTap: () {
+                  Navigator.pop(sheetContext);
                   showModalBottomSheet(
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
@@ -1995,64 +2417,117 @@ class _HomePageState extends State<HomePage> {
                     ),
                   );
                 },
-                child: const Icon(
-                  Icons.add_rounded,
-                  color: Color(0xff1c1917),
-                  size: 28,
-                ),
               ),
-            )
-          : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: compact
-          ? BottomAppBar(
-              color: const Color(0xee120320),
-              shape: const CircularNotchedRectangle(),
-              notchMargin: 6,
-              child: SizedBox(
-                height: 58,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildBottomNavItem(
-                      icon: Icons.dashboard_rounded,
-                      label: 'Trang chủ',
-                      isSelected: index == 0,
-                      onTap: () => setState(() => index = 0),
+              _quickActionTile(
+                icon: Icons.request_quote_rounded,
+                title: 'Cho vay mới',
+                subtitle: 'Mở danh sách khoản vay để tạo khoản vay',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => LoanPage(
+                        autoOpenCreate: true,
+                        api: widget.api,
+                        viewModel: LoanViewModel(
+                          LoanRepositoryImpl(LoanRemoteService(widget.api)),
+                        ),
+                      ),
                     ),
-                    _buildBottomNavItem(
-                      icon: Icons.account_balance_wallet_rounded,
-                      label: 'Tài khoản',
-                      isSelected: index == 1,
-                      onTap: () => setState(() => index = 1),
-                    ),
-                    const SizedBox(width: 48),
-                    _buildBottomNavItem(
-                      icon: Icons.receipt_long_rounded,
-                      label: 'Giao dịch',
-                      isSelected: index == 2,
-                      onTap: () => setState(() => index = 2),
-                    ),
-                    _buildBottomNavItem(
-                      icon: Icons.person_rounded,
-                      label: 'Cá nhân',
-                      isSelected: index == 13,
-                      onTap: () => setState(() => index = 13),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
-            )
-          : null,
+              _quickActionTile(
+                icon: Icons.payments_rounded,
+                title: 'Thu lãi / gốc',
+                subtitle: 'Chọn khoản vay cần ghi nhận thu',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  setState(() => index = 3);
+                },
+              ),
+              _quickActionTile(
+                icon: Icons.swap_horiz_rounded,
+                title: 'Chuyển tiền',
+                subtitle: 'Chuyển tiền giữa các tài khoản của bạn',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  showModalBottomSheet(
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    context: context,
+                    builder: (_) => _TransferFormSheet(
+                      api: widget.api,
+                      onSuccess: () => setState(() => refreshCounter++),
+                    ),
+                  );
+                },
+              ),
+              _quickActionTile(
+                icon: Icons.add_business_rounded,
+                title: 'Thêm tài sản',
+                subtitle: 'Ghi nhận một tài sản mới',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  showModalBottomSheet(
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    context: context,
+                    builder: (_) => _AssetCreateSheet(
+                      api: widget.api,
+                      onSuccess: () => setState(() => refreshCounter++),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
+
+  Widget _quickActionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) => Material(
+    color: Colors.transparent,
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(vertical: FinoraSpace.xs),
+      minVerticalPadding: FinoraSpace.xs,
+      minLeadingWidth: 48,
+      leading: Container(
+        width: 44,
+        height: 44,
+        decoration: const BoxDecoration(
+          color: FinoraColors.primarySoft,
+          borderRadius: FinoraRadius.md,
+        ),
+        child: Icon(icon, color: FinoraColors.primary),
+      ),
+      title: Text(title, style: FinoraTypography.title),
+      subtitle: Text(
+        subtitle,
+        style: FinoraTypography.caption.copyWith(
+          color: FinoraColors.textSecondary,
+        ),
+      ),
+      trailing: const Icon(
+        Icons.chevron_right_rounded,
+        color: FinoraColors.textSecondary,
+      ),
+      onTap: onTap,
+    ),
+  );
 
   void _showSettingsModal() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xff200733),
+      backgroundColor: FinoraColors.surfaceElevated,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
         return StatefulBuilder(
@@ -2067,34 +2542,29 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       const Icon(
                         Icons.tune_rounded,
-                        color: Color(0xfffbbf24),
+                        color: FinoraColors.primary,
                         size: 22,
                       ),
                       const SizedBox(width: 10),
                       const Text(
-                        'Cấu Hình Chế Độ Số Tiền',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        'Cách hiển thị số tiền',
+                        style: FinoraTypography.h3,
                       ),
                       const Spacer(),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(
                           Icons.close_rounded,
-                          color: Colors.white70,
+                          color: FinoraColors.textSecondary,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Chọn cách hiển thị số tiền trên toàn bộ ứng dụng:',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 13,
+                    'Chọn cách hiển thị số tiền trên toàn bộ ứng dụng.',
+                    style: FinoraTypography.bodySmall.copyWith(
+                      color: FinoraColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -2145,14 +2615,10 @@ class _HomePageState extends State<HomePage> {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0x33fbbf24)
-              : Colors.white.withValues(alpha: 0.08),
+          color: isSelected ? FinoraColors.primarySoft : FinoraColors.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected
-                ? const Color(0xfffbbf24)
-                : Colors.white.withValues(alpha: 0.12),
+            color: isSelected ? FinoraColors.primary : FinoraColors.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -2164,22 +2630,17 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
+                    style: FinoraTypography.title.copyWith(
                       color: isSelected
-                          ? const Color(0xfffbbf24)
-                          : Colors.white,
-                      fontSize: 15,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.w600,
+                          ? FinoraColors.primaryDeep
+                          : FinoraColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 12,
+                    style: FinoraTypography.caption.copyWith(
+                      color: FinoraColors.textSecondary,
                     ),
                   ),
                 ],
@@ -2188,7 +2649,7 @@ class _HomePageState extends State<HomePage> {
             if (isSelected)
               const Icon(
                 Icons.check_circle_rounded,
-                color: Color(0xfffbbf24),
+                color: FinoraColors.primary,
                 size: 22,
               ),
           ],
@@ -2203,27 +2664,39 @@ class _HomePageState extends State<HomePage> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isSelected ? const Color(0xfffbbf24) : Colors.white60,
-            size: 22,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = isDark ? FinoraColors.accentGold : FinoraColors.violet;
+    final inactiveColor = isDark ? Colors.white60 : FinoraColors.textSecondary;
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: FinoraRadius.sm,
+        child: SizedBox(
+          height: 54,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? activeColor : inactiveColor,
+                size: 20,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? activeColor : inactiveColor,
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 3),
-          Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? const Color(0xfffbbf24) : Colors.white60,
-              fontSize: 10.5,
-              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2383,7 +2856,7 @@ class _HomePageState extends State<HomePage> {
             FieldSpec('name', 'Tên tài khoản'),
             FieldSpec('type', 'Loại', initial: 'cash'),
             FieldSpec('currency', 'Tiền tệ', initial: 'VND'),
-            FieldSpec('portfolioId', 'Portfolio ID'),
+            FieldSpec('portfolioId', 'Mã danh mục'),
           ],
         );
       case 2:
@@ -2392,21 +2865,12 @@ class _HomePageState extends State<HomePage> {
           api: widget.api,
         );
       case 3:
-        return ResourcePage(
+        return LoanPage(
+          key: ValueKey('loan_$refreshCounter'),
           api: widget.api,
-          title: 'Khoản vay',
-          path: '/loans',
-          fields: const [
-            FieldSpec(
-              'direction',
-              'Loại (receivable/payable)',
-              initial: 'receivable',
-            ),
-            FieldSpec('counterparty', 'Đối tác'),
-            FieldSpec('principalInitial', 'Gốc ban đầu'),
-            FieldSpec('annualRate', 'Lãi suất năm', initial: '0'),
-            FieldSpec('status', 'Trạng thái', initial: 'active'),
-          ],
+          viewModel: LoanViewModel(
+            LoanRepositoryImpl(LoanRemoteService(widget.api)),
+          ),
         );
       case 4:
         return ValuedResourcePage(
@@ -2459,7 +2923,7 @@ class _HomePageState extends State<HomePage> {
       default:
         return ReadonlyPage(
           api: widget.api,
-          title: 'Nhật ký audit',
+          title: 'Nhật ký hoạt động',
           path: '/audit-logs',
         );
     }
@@ -2486,49 +2950,51 @@ class PageFrame extends StatelessWidget {
   final Widget? action;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(18, 70, 18, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'FINORA / QUẢN LÝ TÀI SẢN',
-                      style: TextStyle(
-                        color: Color(0xfff7d070),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 76, 24, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'FINORA / QUẢN LÝ TÀI SẢN',
+                        style: TextStyle(
+                          color: FinoraColors.violet,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                      const SizedBox(height: 4),
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: FinoraColors.textPrimary,
+                          letterSpacing: -0.4,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              if (action case final Widget action) action,
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(child: child),
-        ],
+                if (action case final Widget action) action,
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(child: child),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class DashboardPage extends StatefulWidget {
@@ -2558,20 +3024,12 @@ class _DashboardPageState extends State<DashboardPage> {
       error = null;
     });
     try {
-      portfolios = await widget.api.request('GET', '/portfolios') as List;
       accounts = await widget.api.request('GET', '/accounts') as List;
       final tx = await widget.api.request('GET', '/transactions?limit=5');
       transactions = (tx as Map)['items'] as List? ?? [];
-      if (portfolios.isNotEmpty) {
-        netWorth =
-            await widget.api.request(
-                  'GET',
-                  '/portfolios/${portfolios.first['id']}/net-worth',
-                )
-                as Map;
-      }
+      netWorth = await widget.api.request('GET', '/net-worth') as Map;
     } catch (e) {
-      error = e.toString();
+      error = presentableError(e);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -2583,39 +3041,47 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildCircularQuickAction(
-            icon: Icons.add_circle_outline_rounded,
-            label: 'Tạo GD',
-            color: const Color(0xfffbbf24),
-            onTap: () {
-              showModalBottomSheet(
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                context: context,
-                builder: (_) => _TransactionFormSheet(
-                  api: widget.api,
-                  onSuccess: () => load(),
-                ),
-              );
-            },
+          Expanded(
+            child: _buildCircularQuickAction(
+              icon: Icons.add_circle_outline_rounded,
+              label: 'Tạo giao dịch',
+              color: const Color(0xfffbbf24),
+              onTap: () {
+                showModalBottomSheet(
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  context: context,
+                  builder: (_) => _TransactionFormSheet(
+                    api: widget.api,
+                    onSuccess: () => load(),
+                  ),
+                );
+              },
+            ),
           ),
-          _buildCircularQuickAction(
-            icon: Icons.account_balance_wallet_rounded,
-            label: 'Tài khoản',
-            color: const Color(0xff38bdf8),
-            onTap: () => widget.onNavigate?.call(1),
+          Expanded(
+            child: _buildCircularQuickAction(
+              icon: Icons.account_balance_wallet_rounded,
+              label: 'Tài khoản',
+              color: const Color(0xff38bdf8),
+              onTap: () => widget.onNavigate?.call(1),
+            ),
           ),
-          _buildCircularQuickAction(
-            icon: Icons.history_toggle_off_rounded,
-            label: 'Nhật ký',
-            color: const Color(0xffc084fc),
-            onTap: () => widget.onNavigate?.call(12),
+          Expanded(
+            child: _buildCircularQuickAction(
+              icon: Icons.request_quote_rounded,
+              label: 'Khoản vay',
+              color: const Color(0xfff97316),
+              onTap: () => widget.onNavigate?.call(3),
+            ),
           ),
-          _buildCircularQuickAction(
-            icon: Icons.auto_fix_high_rounded,
-            label: 'Tự động',
-            color: const Color(0xff4ade80),
-            onTap: () => widget.onNavigate?.call(10),
+          Expanded(
+            child: _buildCircularQuickAction(
+              icon: Icons.auto_fix_high_rounded,
+              label: 'Tự động',
+              color: const Color(0xff4ade80),
+              onTap: () => widget.onNavigate?.call(10),
+            ),
           ),
         ],
       ),
@@ -2628,6 +3094,7 @@ class _DashboardPageState extends State<DashboardPage> {
     required Color color,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
@@ -2639,8 +3106,13 @@ class _DashboardPageState extends State<DashboardPage> {
             height: 52,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.94),
-              border: Border.all(color: Colors.white, width: 1.5),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.94)
+                  : Theme.of(context).colorScheme.surface,
+              border: Border.all(
+                color: isDark ? Colors.white : FinoraColors.border,
+                width: 1.5,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.06),
@@ -2651,196 +3123,15 @@ class _DashboardPageState extends State<DashboardPage> {
             child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSuggestionsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(left: 4, bottom: 10),
-          child: Text(
-            'Gợi ý cho bạn',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: 16,
-            ),
-          ),
-        ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildSuggestionCard(
-                icon: Icons.military_tech_rounded,
-                title: 'Thử thách',
-                subtitle: 'Tích điểm đổi quà',
-                accent: const Color(0xff00dbe7),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isDark ? Colors.white : FinoraColors.textPrimary,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(width: 12),
-              _buildSuggestionCard(
-                icon: Icons.star_rate_rounded,
-                title: 'Số đẹp',
-                subtitle: 'Khẳng định vị thế',
-                accent: const Color(0xffeb6a1b),
-              ),
-              const SizedBox(width: 12),
-              _buildSuggestionCard(
-                icon: Icons.trending_up_rounded,
-                title: 'Sinh lời kép',
-                subtitle: 'Tối ưu dòng vốn',
-                accent: const Color(0xffe2b5ff),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSuggestionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color accent,
-  }) {
-    return Container(
-      width: 155,
-      padding: const EdgeInsets.all(14),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(22),
-        border: Border(
-          left: BorderSide(color: accent, width: 4),
-          top: const BorderSide(color: Colors.white, width: 1.2),
-          right: const BorderSide(color: Colors.white, width: 1.2),
-          bottom: const BorderSide(color: Colors.white, width: 1.2),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 20,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: accent, size: 22),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xff0f172a),
-              fontWeight: FontWeight.w900,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              color: Color(0xff64748b),
-              fontWeight: FontWeight.w600,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPromotionBanner() {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      height: 110,
-      width: double.infinity,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: const LinearGradient(
-          colors: [Color(0xff4a0e72), Color(0xff8b5cf6), Color(0xffeb6a1b)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x338b5cf6),
-            blurRadius: 24,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -20,
-            bottom: -20,
-            child: Icon(
-              Icons.account_circle_rounded,
-              size: 130,
-              color: Colors.white.withValues(alpha: 0.12),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xfffbbf24),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'OFFER VIP',
-                    style: TextStyle(
-                      color: Color(0xff1c1917),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Đặc quyền thượng lưu cùng Finora Gold',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15.5,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Tối ưu dòng tiền & Tích điểm thưởng VIP',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -2851,25 +3142,31 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) => PageFrame(
     title: 'Tổng quan',
-    action: Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-      ),
-      child: IconButton(
-        onPressed: load,
-        icon: const Icon(Icons.refresh_rounded, color: Color(0xfffbbf24)),
-      ),
+    action: IconButton(
+      onPressed: load,
+      tooltip: 'Tải lại dữ liệu',
+      icon: const Icon(Icons.refresh_rounded, color: FinoraColors.accentGold),
     ),
     child: loading
         ? const Center(
-            child: CircularProgressIndicator(color: Color(0xfffbbf24)),
+            child: CircularProgressIndicator(color: FinoraColors.primary),
+          )
+        : (error != null && accounts.isEmpty && transactions.isEmpty)
+        ? FinoraEmptyState(
+            title: 'Chưa thể tải tổng quan',
+            message: 'Kiểm tra kết nối rồi thử lại.',
+            icon: Icons.cloud_off_rounded,
+            action: FilledButton.icon(
+              onPressed: load,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Thử lại'),
+            ),
           )
         : RefreshIndicator(
-            color: const Color(0xfffbbf24),
-            backgroundColor: const Color(0xff1c1917),
+            color: FinoraColors.primary,
             onRefresh: load,
             child: ListView(
+              padding: const EdgeInsets.only(bottom: FinoraSpace.xxl),
               children: [
                 if (error != null) ErrorBox(error!),
                 _BalanceHero(
@@ -2878,179 +3175,79 @@ class _DashboardPageState extends State<DashboardPage> {
                   accountCount: accounts.length,
                 ),
                 _buildQuickActionsRow(),
-                const SizedBox(height: 16),
+                const SizedBox(height: FinoraSpace.lg),
+                const Text('Tài sản và nghĩa vụ', style: FinoraTypography.h3),
+                const SizedBox(height: FinoraSpace.sm),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
                       Metric(
-                        'Tiền mặt khả dụng',
+                        'Tiền mặt',
                         _formatMoney(netWorth?['cash']),
                         Icons.payments_rounded,
-                        accent: const Color(0xff38bdf8),
+                        accent: FinoraColors.info,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: FinoraSpace.sm),
                       Metric(
                         'Nợ phải trả',
                         _formatMoney(netWorth?['liabilities']),
                         Icons.credit_card_off_rounded,
-                        accent: const Color(0xfffb7185),
+                        accent: FinoraColors.danger,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: FinoraSpace.sm),
                       Metric(
-                        'Tài khoản theo dõi',
+                        'Tài khoản',
                         accounts.length.toString(),
                         Icons.account_balance_rounded,
-                        accent: const Color(0xffc084fc),
+                        accent: FinoraColors.primary,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
-                _buildSuggestionsSection(),
-                _buildPromotionBanner(),
-                _buildBankSectionCard(
-                  sectionTitle: '👑 Lối tắt ưu tiên',
-                  items: const [
-                    _BankGridItem(
-                      title: 'Tài khoản',
-                      icon: Icons.account_balance_wallet_rounded,
-                      accent: Color(0xff38bdf8),
-                      index: 1,
-                    ),
-                    _BankGridItem(
-                      title: 'Giao dịch',
-                      icon: Icons.receipt_long_rounded,
-                      accent: Color(0xff4ade80),
-                      index: 2,
-                    ),
-                    _BankGridItem(
-                      title: 'Hạn mức',
-                      icon: Icons.pie_chart_outline_rounded,
-                      accent: Color(0xfff43f5e),
-                      index: 6,
-                    ),
-                    _BankGridItem(
-                      title: 'Danh mục',
-                      icon: Icons.cases_rounded,
-                      accent: Color(0xffa855f7),
-                      index: 8,
-                    ),
-                  ],
-                  selectedIndex: -1,
-                  onSelect: (i) => widget.onNavigate?.call(i),
-                ),
-                _buildBankSectionCard(
-                  sectionTitle: '🔥 Đầu tư & Bất động sản',
-                  items: const [
-                    _BankGridItem(
-                      title: 'Bất động sản',
-                      icon: Icons.home_work_rounded,
-                      accent: Color(0xfff43f5e),
-                      index: 5,
-                    ),
-                    _BankGridItem(
-                      title: 'Tài sản quý',
-                      icon: Icons.diamond_rounded,
-                      accent: Color(0xfffbbf24),
-                      index: 4,
-                    ),
-                    _BankGridItem(
-                      title: 'Khoản vay',
-                      icon: Icons.request_quote_rounded,
-                      accent: Color(0xffef4444),
-                      index: 3,
-                    ),
-                    _BankGridItem(
-                      title: 'Ngân hàng',
-                      icon: Icons.account_balance_rounded,
-                      accent: Color(0xfffbbf24),
-                      badge: 'Mới',
-                      index: 9,
-                    ),
-                  ],
-                  selectedIndex: -1,
-                  onSelect: (i) => widget.onNavigate?.call(i),
-                ),
-                _buildBankSectionCard(
-                  sectionTitle: '⚡ Tiện ích & Automation',
-                  items: const [
-                    _BankGridItem(
-                      title: 'Tự động hóa',
-                      icon: Icons.auto_fix_high_rounded,
-                      accent: Color(0xff38bdf8),
-                      index: 10,
-                    ),
-                    _BankGridItem(
-                      title: 'Dự báo',
-                      icon: Icons.trending_up_rounded,
-                      accent: Color(0xff4ade80),
-                      index: 7,
-                    ),
-                    _BankGridItem(
-                      title: 'Trợ lý AI',
-                      icon: Icons.smart_toy_rounded,
-                      accent: Color(0xffa855f7),
-                      index: 11,
-                    ),
-                    _BankGridItem(
-                      title: 'Nhật ký',
-                      icon: Icons.history_toggle_off_rounded,
-                      accent: Color(0xffe2e8f0),
-                      index: 12,
-                    ),
-                  ],
-                  selectedIndex: -1,
-                  onSelect: (i) => widget.onNavigate?.call(i),
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: FinoraSpace.xl),
                 Row(
                   children: [
-                    const Text(
-                      'Giao dịch gần đây',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        fontSize: 18,
+                    const Expanded(
+                      child: Text(
+                        'Giao dịch gần đây',
+                        style: FinoraTypography.h3,
                       ),
                     ),
-                    const Spacer(),
                     TextButton(
-                      onPressed: () {},
-                      child: const Text(
-                        'Xem tất cả',
-                        style: TextStyle(
-                          color: Color(0xfff7d070),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
+                      onPressed: () => widget.onNavigate?.call(2),
+                      child: const Text('Xem tất cả'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                ...transactions.map(
-                  (x) => FinoraListTile(
-                    icon: x['type'] == 'income'
-                        ? Icons.south_west_rounded
-                        : Icons.north_east_rounded,
-                    iconColor: x['type'] == 'income'
-                        ? const Color(0xff4ade80)
-                        : const Color(0xfffb7185),
-                    title: (x['name']?.toString().trim().isNotEmpty == true)
-                        ? x['name'].toString().trim()
-                        : (x['note']?.toString().isNotEmpty == true
-                              ? x['note'].toString()
-                              : (x['type'] == 'income'
-                                    ? 'Thu nhập'
-                                    : 'Chi tiêu')),
-                    subtitle: x['occurredAt']?.toString() ?? '',
-                    amount:
-                        "${x['type'] == 'income' ? '+' : '-'}${_formatMoney(x['amount'])} ${x['currency'] ?? 'VND'}",
-                  ),
-                ),
+                const SizedBox(height: FinoraSpace.xs),
                 if (transactions.isEmpty)
-                  const EmptyState('Chưa có giao dịch gần đây'),
+                  FinoraEmptyState(
+                    title: 'Chưa có giao dịch',
+                    message: 'Tạo giao dịch đầu tiên để theo dõi dòng tiền.',
+                    icon: Icons.receipt_long_outlined,
+                  )
+                else
+                  ...transactions.map(
+                    (x) => FinoraListTile(
+                      icon: x['type'] == 'income'
+                          ? Icons.south_west_rounded
+                          : Icons.north_east_rounded,
+                      iconColor: x['type'] == 'income'
+                          ? FinoraColors.success
+                          : FinoraColors.danger,
+                      title: (x['name']?.toString().trim().isNotEmpty == true)
+                          ? x['name'].toString().trim()
+                          : (x['note']?.toString().isNotEmpty == true
+                                ? x['note'].toString()
+                                : (x['type'] == 'income'
+                                      ? 'Thu nhập'
+                                      : 'Chi tiêu')),
+                      subtitle: x['occurredAt']?.toString() ?? '',
+                      amount:
+                          "${x['type'] == 'income' ? '+' : '-'}${_formatMoney(x['amount'])} ${x['currency'] ?? 'VND'}",
+                    ),
+                  ),
               ],
             ),
           ),
@@ -3099,16 +3296,7 @@ class _BalanceHeroState extends State<_BalanceHero> {
     clipBehavior: Clip.antiAlias,
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(28),
-      gradient: const LinearGradient(
-        colors: [
-          Color(0xff2a0845),
-          Color(0xff5b2382),
-          Color(0xff7c45a4),
-          Color(0xffeb6a1b),
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
+      color: FinoraColors.primaryDeep,
       border: Border.all(
         color: Colors.white.withValues(alpha: 0.35),
         width: 1.5,
@@ -3162,16 +3350,20 @@ class _BalanceHeroState extends State<_BalanceHero> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Text(
-                  'TỔNG TÀI SẢN RÒNG',
-                  style: TextStyle(
-                    color: Color(0xfffbbf24),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 11.5,
-                    letterSpacing: 1.2,
+                const Expanded(
+                  child: Text(
+                    'TỔNG TÀI SẢN RÒNG',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Color(0xfffbbf24),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 11.5,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -3221,40 +3413,50 @@ class _BalanceHeroState extends State<_BalanceHero> {
               ),
             ),
             const SizedBox(height: 18),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.3),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 210),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: Color(0xff4ade80),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '${widget.accountCount} tài khoản đang theo dõi',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.check_circle_rounded,
-                        color: Color(0xff4ade80),
-                        size: 14,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${widget.accountCount} tài khoản đang theo dõi',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
-                const Spacer(),
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.16),
@@ -3296,54 +3498,57 @@ class Metric extends StatelessWidget {
   final Color accent;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 190,
-    padding: const EdgeInsets.all(16),
-    clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.94),
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: Colors.white, width: 1.2),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.04),
-          blurRadius: 20,
-          spreadRadius: 0,
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: 190,
+      padding: const EdgeInsets.all(FinoraSpace.md),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xff20152c) : FinoraColors.surfaceElevated,
+        borderRadius: FinoraRadius.xl,
+        border: Border.all(
+          color: isDark ? const Color(0xff463652) : FinoraColors.border,
         ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(12),
+        boxShadow: isDark ? const [] : FinoraElevation.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(FinoraSpace.xs),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.14),
+              borderRadius: FinoraRadius.sm,
+            ),
+            child: Icon(icon, color: accent, size: 20),
           ),
-          child: Icon(icon, color: accent, size: 20),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.w900,
-            color: Color(0xff0f172a),
-            fontSize: 17,
+          const SizedBox(height: FinoraSpace.sm),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              color: isDark
+                  ? const Color(0xfff4effa)
+                  : FinoraColors.textPrimary,
+              fontSize: 17,
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xff64748b),
-            fontWeight: FontWeight.w600,
-            fontSize: 11.5,
+          const SizedBox(height: FinoraSpace.xxs),
+          Text(
+            label,
+            style: TextStyle(
+              color: isDark
+                  ? const Color(0xffa792be)
+                  : FinoraColors.textSecondary,
+              fontWeight: FontWeight.w600,
+              fontSize: 11.5,
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 class ResourcePage extends StatefulWidget {
@@ -3391,7 +3596,7 @@ class _ResourcePageState extends State<ResourcePage> {
       items = data is List ? data : ((data as Map)['items'] as List? ?? []);
       error = null;
     } catch (e) {
-      error = e.toString();
+      error = presentableError(e);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -3409,7 +3614,7 @@ class _ResourcePageState extends State<ResourcePage> {
       if (mounted) Navigator.pop(context);
       await load();
     } catch (e) {
-      if (mounted) showError(context, e.toString());
+      if (mounted) showError(context, presentableError(e));
     }
   }
 
@@ -3436,7 +3641,7 @@ class _ResourcePageState extends State<ResourcePage> {
       context: context,
       builder: (_) => FinoraSheet(
         title: 'Thêm ${widget.title}',
-        subtitle: 'Thông tin sẽ được lưu vào user hiện tại.',
+        subtitle: 'Thông tin sẽ được lưu vào tài khoản hiện tại.',
         child: Column(
           children: [
             ...widget.fields.map(
@@ -3462,6 +3667,9 @@ class _ResourcePageState extends State<ResourcePage> {
   }
 
   Future<void> deleteItem(String id, String itemName) async {
+    final deletionNote = widget.path == '/accounts'
+        ? 'Chỉ những tài khoản không có giao dịch hoặc dòng tiền liên kết mới có thể xóa.'
+        : 'Thao tác này có thể không hoàn tác được nếu bản ghi đã có dữ liệu liên kết.';
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -3495,7 +3703,7 @@ class _ResourcePageState extends State<ResourcePage> {
           ],
         ),
         content: Text(
-          'Bạn có chắc chắn muốn xóa "$itemName"?\nChỉ những tài khoản không dính dáng bất kỳ khoản nào mới có thể xóa.',
+          'Bạn có chắc chắn muốn xóa "$itemName"?\n$deletionNote',
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.85),
             fontSize: 13,
@@ -3541,7 +3749,7 @@ class _ResourcePageState extends State<ResourcePage> {
       await load();
     } catch (e) {
       if (mounted) {
-        final rawErr = e.toString();
+        final rawErr = presentableError(e);
         final msg = rawErr.contains('ACCOUNT_HAS_TRANSACTIONS')
             ? 'Không thể xóa "$itemName" vì đang có giao dịch hoặc dòng tiền liên kết.'
             : 'Không thể xóa "$itemName": $rawErr';
@@ -3576,15 +3784,37 @@ class _ResourcePageState extends State<ResourcePage> {
     ),
     child: loading
         ? const Center(
-            child: CircularProgressIndicator(color: Color(0xfffbbf24)),
+            child: CircularProgressIndicator(color: FinoraColors.primary),
+          )
+        : (error != null && items.isEmpty)
+        ? FinoraEmptyState(
+            title: 'Chưa thể tải ${widget.title.toLowerCase()}',
+            message: 'Kiểm tra kết nối rồi thử lại.',
+            icon: Icons.cloud_off_rounded,
+            action: FilledButton.icon(
+              onPressed: load,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Thử lại'),
+            ),
           )
         : ListView(
+            padding: const EdgeInsets.only(bottom: FinoraSpace.xxl),
             children: [
               const _ScreenIntro(
                 'Quản lý thông tin tập trung, rõ ràng và an toàn.',
               ),
               if (error != null) ErrorBox(error!),
-              if (items.isEmpty) const EmptyState('Chưa có dữ liệu'),
+              if (items.isEmpty)
+                FinoraEmptyState(
+                  title: 'Chưa có ${widget.title.toLowerCase()}',
+                  message: 'Thêm bản ghi đầu tiên để bắt đầu quản lý.',
+                  icon: _iconForTitle(widget.title),
+                  action: FilledButton.icon(
+                    onPressed: openForm,
+                    icon: const Icon(Icons.add_rounded),
+                    label: Text('Thêm ${widget.title.toLowerCase()}'),
+                  ),
+                ),
               ...items.map((x) {
                 final id = x['id']?.toString() ?? '';
                 final name =
@@ -3674,13 +3904,19 @@ class _ResourcePageState extends State<ResourcePage> {
     if (x.containsKey('balance') &&
         x['balance'] != null &&
         x['balance'].toString().isNotEmpty) {
-      final b = x['balance'].toString();
+      final b = double.tryParse(x['balance'].toString());
       final curr = x['currency']?.toString() ?? 'VND';
-      parts.add('Số dư: $b $curr');
+      parts.add(
+        'Số dư: ${b == null ? x['balance'] : formatCurrency(b, currency: curr)}',
+      );
     }
 
     if (x.containsKey('principal') && x['principal'] != null) {
-      parts.add('Gốc: ${x['principal']} ${x['currency'] ?? 'VND'}');
+      final principal = double.tryParse(x['principal'].toString());
+      final curr = x['currency']?.toString() ?? 'VND';
+      parts.add(
+        'Gốc: ${principal == null ? x['principal'] : formatCurrency(principal, currency: curr)}',
+      );
     }
     if (x.containsKey('rate') && x['rate'] != null) {
       parts.add('Lãi suất: ${x['rate']}%');
@@ -3751,9 +3987,9 @@ class PersonalInfoPage extends StatefulWidget {
 }
 
 class _PersonalInfoPageState extends State<PersonalInfoPage> {
-  String _email = 'hoangxuan.ks6@gmail.com';
-  String _phone = '*** *** *399';
-  String _address = '4C26, CAU TRE, NGO QUYEN, HAI PHONG';
+  String _email = '';
+  String _phone = '';
+  String _address = '';
 
   void _showEditBasicInfoModal() {
     final phoneCtrl = TextEditingController(text: _phone);
@@ -3773,89 +4009,89 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
           top: 20,
           bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xffcbd5e1),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Chỉnh sửa thông tin cơ bản',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xff1e293b),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: phoneCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Số điện thoại',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: emailCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Email liên hệ',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: addressCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Địa chỉ liên hệ',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xff6b21a8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xffcbd5e1),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                onPressed: () {
-                  setState(() {
-                    _phone = phoneCtrl.text.trim();
-                    _email = emailCtrl.text.trim();
-                    _address = addressCtrl.text.trim();
-                  });
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Đã cập nhật thông tin cá nhân thành công!',
-                      ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Chỉnh sửa thông tin cơ bản',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xff1e293b),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Số điện thoại',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Email liên hệ',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: addressCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Địa chỉ liên hệ',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xff6b21a8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  );
-                },
-                child: const Text(
-                  'Lưu thay đổi',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _phone = phoneCtrl.text.trim();
+                      _email = emailCtrl.text.trim();
+                      _address = addressCtrl.text.trim();
+                    });
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Đã cập nhật thông tin trong phiên này.'),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Lưu thay đổi',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -3895,37 +4131,36 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Hạn mức tối đa hiện tại: 300,000,000 VND/ngày\nXác thực bằng Smart OTP để tăng hoặc điều chỉnh hạn mức.',
+              'Tính năng điều chỉnh hạn mức chưa được kết nối với dữ liệu Finora.',
               style: TextStyle(fontSize: 13, color: Color(0xff64748b)),
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
-              height: 46,
+              height: 48,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xffd97706),
+                  backgroundColor: const Color(0xffcbd5e1),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Yêu cầu điều chỉnh hạn mức đã được tiếp nhận và xử lý!',
-                      ),
-                    ),
-                  );
-                },
+                onPressed: null,
                 child: const Text(
-                  'Xác nhận qua Smart OTP',
+                  'Chưa khả dụng',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Color(0xff64748b),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Đóng'),
               ),
             ),
           ],
@@ -3936,9 +4171,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
 
   @override
   Widget build(BuildContext context) {
-    const double dailyLimit = 300000000;
-    const double usedLimit = 936207;
-    const double progress = (usedLimit / dailyLimit);
+    const double progress = 0;
 
     return Scaffold(
       backgroundColor: const Color(0xfff8fafc),
@@ -4065,7 +4298,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  '300,000,000 VND/ngày và\n300,000,000 VND/lần',
+                  'Chưa đồng bộ hạn mức',
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w900,
@@ -4101,7 +4334,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                         ),
                         SizedBox(height: 2),
                         Text(
-                          '936,207 VND',
+                          '—',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -4122,7 +4355,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                         ),
                         SizedBox(height: 2),
                         Text(
-                          '299,063,793 VND',
+                          '—',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -4134,14 +4367,18 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                   ],
                 ),
                 const SizedBox(height: 14),
-                GestureDetector(
-                  onTap: _showLimitChangeModal,
-                  child: const Text(
-                    'Thay đổi hạn mức giao dịch',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xffd97706),
+                Semantics(
+                  button: true,
+                  label: 'Thay đổi hạn mức giao dịch',
+                  child: GestureDetector(
+                    onTap: _showLimitChangeModal,
+                    child: const Text(
+                      'Thay đổi hạn mức giao dịch',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xffd97706),
+                      ),
                     ),
                   ),
                 ),
@@ -4155,25 +4392,29 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildSectionHeader('Thông tin cơ bản'),
-              GestureDetector(
-                onTap: _showEditBasicInfoModal,
-                child: const Row(
-                  children: [
-                    Icon(
-                      Icons.edit_outlined,
-                      size: 14,
-                      color: Color(0xffd97706),
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'Chỉnh sửa',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
+              Semantics(
+                button: true,
+                label: 'Chỉnh sửa thông tin cơ bản',
+                child: GestureDetector(
+                  onTap: _showEditBasicInfoModal,
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.edit_outlined,
+                        size: 14,
                         color: Color(0xffd97706),
                       ),
-                    ),
-                  ],
+                      SizedBox(width: 4),
+                      Text(
+                        'Chỉnh sửa',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xffd97706),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -4194,9 +4435,13 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
             ),
             child: Column(
               children: [
-                _buildInfoRow('Tên đăng nhập', '0857869399'),
+                _buildInfoRow('Tên đăng nhập', 'Chưa đồng bộ'),
                 const Divider(height: 1, indent: 0, endIndent: 0),
-                _buildInfoRow('Mã KH (CIF)', '03769945', showInfoIcon: true),
+                _buildInfoRow(
+                  'Mã khách hàng',
+                  'Chưa đồng bộ',
+                  showInfoIcon: true,
+                ),
                 const Divider(height: 1, indent: 0, endIndent: 0),
                 _buildInfoRow('Số điện thoại', _phone),
                 const Divider(height: 1, indent: 0, endIndent: 0),
@@ -4226,23 +4471,19 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
             ),
             child: Column(
               children: [
-                _buildInfoRow('Số CMND/CCCD/Hộ chiếu', '031097006012'),
+                _buildInfoRow('Số CMND/CCCD/Hộ chiếu', 'Chưa đồng bộ'),
                 const Divider(height: 1, indent: 0, endIndent: 0),
-                _buildInfoRow('Họ và tên', 'NGUYEN XUAN HOANG'),
+                _buildInfoRow('Họ và tên', 'Chưa đồng bộ'),
                 const Divider(height: 1, indent: 0, endIndent: 0),
-                _buildInfoRow('Ngày sinh', '12/08/1997'),
+                _buildInfoRow('Ngày sinh', 'Chưa đồng bộ'),
                 const Divider(height: 1, indent: 0, endIndent: 0),
-                _buildInfoRow('Giới tính', 'Nam'),
+                _buildInfoRow('Giới tính', 'Chưa đồng bộ'),
                 const Divider(height: 1, indent: 0, endIndent: 0),
-                _buildInfoRow('Quốc tịch', 'Việt Nam'),
+                _buildInfoRow('Quốc tịch', 'Chưa đồng bộ'),
                 const Divider(height: 1, indent: 0, endIndent: 0),
-                _buildInfoRow('Ngày cấp', '15/05/2021'),
+                _buildInfoRow('Ngày cấp', 'Chưa đồng bộ'),
                 const Divider(height: 1, indent: 0, endIndent: 0),
-                _buildInfoRow(
-                  'Nơi cấp',
-                  'Cục Cảnh sát QLHC về TTXH',
-                  isMultiLine: true,
-                ),
+                _buildInfoRow('Nơi cấp', 'Chưa đồng bộ', isMultiLine: true),
               ],
             ),
           ),
@@ -4337,8 +4578,11 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  // Retained for the legacy profile fallback below.
   int _satisfactionRating = 0;
+  List<Map<String, dynamic>> _linkedAccounts = const [];
   String _sepaySubtitle = 'Kết nối ngân hàng qua SePay';
+  String _syncLabel = 'Chưa liên kết';
 
   @override
   void initState() {
@@ -4352,15 +4596,24 @@ class _ProfilePageState extends State<ProfilePage> {
       final accounts = (data['bankAccounts'] as List?) ?? const [];
       if (!mounted) return;
       if (accounts.isEmpty) {
-        setState(() => _sepaySubtitle = 'Kết nối ngân hàng qua SePay');
+        setState(() {
+          _linkedAccounts = const [];
+          _sepaySubtitle = 'Kết nối ngân hàng qua SePay';
+          _syncLabel = 'Chưa liên kết';
+        });
         return;
       }
       final profile = data['profile'] as Map?;
       final synced = profile?['lastSyncedAt']?.toString();
-      setState(
-        () => _sepaySubtitle =
-            '${accounts.length} tài khoản đã liên kết · ${_relativeSync(synced)}',
-      );
+      setState(() {
+        _linkedAccounts = accounts
+            .whereType<Map>()
+            .map((account) => Map<String, dynamic>.from(account))
+            .toList(growable: false);
+        _syncLabel = _relativeSync(synced);
+        _sepaySubtitle =
+            '${accounts.length} tài khoản đã liên kết · $_syncLabel';
+      });
     } catch (_) {
       // This menu remains usable while the profile endpoint is temporarily unavailable.
     }
@@ -4383,9 +4636,28 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _openPersonalInfo() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => PersonalInfoPage(api: widget.api),
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.all(FinoraSpace.xl),
+          decoration: const BoxDecoration(
+            color: FinoraColors.surfaceElevated,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: FinoraEmptyState(
+            title: 'Hồ sơ chưa đồng bộ',
+            message:
+                'Finora chưa nhận được dữ liệu hồ sơ từ nguồn tài khoản. Thông tin sẽ xuất hiện khi nguồn dữ liệu được kết nối.',
+            icon: Icons.person_outline_rounded,
+            action: FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Đã hiểu'),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -4419,8 +4691,403 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _showAppearancePicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            FinoraSpace.lg,
+            FinoraSpace.sm,
+            FinoraSpace.lg,
+            FinoraSpace.xl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Giao diện',
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: FinoraSpace.xs),
+              Text(
+                'Chọn chế độ hiển thị phù hợp với bạn.',
+                style: Theme.of(sheetContext).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: FinoraSpace.md),
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.light_mode_outlined),
+                title: Text('Đang dùng giao diện sáng'),
+                subtitle: Text(
+                  'Giao diện tối sẽ được bổ sung khi hệ thống hỗ trợ đầy đủ.',
+                ),
+              ),
+              const SizedBox(height: FinoraSpace.sm),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  child: const Text('Đóng'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _buildFinoraProfile(context);
+
+  Widget _buildFinoraProfile(BuildContext context) => PageFrame(
+    title: 'Cá nhân',
+    child: SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: FinoraSpace.xxl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildProfileOverview(),
+          const SizedBox(height: FinoraSpace.xl),
+          const Text('Tổng quan kết nối', style: FinoraTypography.h3),
+          const SizedBox(height: FinoraSpace.sm),
+          FinoraCard(
+            onTap: _openSePay,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildConnectionSummary(),
+                const SizedBox(height: FinoraSpace.md),
+                _buildConnectionNotice(),
+                if (_linkedAccounts.isNotEmpty) ...[
+                  const SizedBox(height: FinoraSpace.sm),
+                  Wrap(
+                    spacing: FinoraSpace.xs,
+                    runSpacing: FinoraSpace.xs,
+                    children: _linkedAccounts
+                        .take(3)
+                        .map(_buildBankChip)
+                        .toList(growable: false),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: FinoraSpace.xl),
+          const Text('Thiết lập cá nhân', style: FinoraTypography.h3),
+          const SizedBox(height: FinoraSpace.sm),
+          FinoraCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                _buildMenuItemTile(
+                  icon: Theme.of(context).brightness == Brightness.dark
+                      ? Icons.dark_mode_rounded
+                      : Icons.light_mode_rounded,
+                  title: 'Giao diện',
+                  subtitle: 'Giao diện sáng',
+                  iconColor: FinoraColors.primary,
+                  onTap: _showAppearancePicker,
+                ),
+                const Divider(height: 1, indent: 56),
+                _buildMenuItemTile(
+                  icon: Icons.tune_rounded,
+                  title: 'Hiển thị số tiền',
+                  subtitle: 'Chọn cách hiển thị số liệu tài chính',
+                  iconColor: FinoraColors.primary,
+                  onTap: widget.onOpenSettings,
+                ),
+                const Divider(height: 1, indent: 56),
+                _buildMenuItemTile(
+                  icon: Icons.account_balance_rounded,
+                  title: 'Liên kết ngân hàng',
+                  subtitle: _sepaySubtitle,
+                  iconColor: FinoraColors.info,
+                  onTap: _openSePay,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: FinoraSpace.xl),
+          const Text('Hỗ trợ & bảo mật', style: FinoraTypography.h3),
+          const SizedBox(height: FinoraSpace.sm),
+          FinoraCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                _buildMenuItemTile(
+                  icon: Icons.help_outline_rounded,
+                  title: 'Trung tâm hỗ trợ',
+                  subtitle: 'Hướng dẫn và hỗ trợ sử dụng Finora',
+                  iconColor: FinoraColors.accentAmber,
+                  onTap: () => _showSupportModal(
+                    'Trung tâm hỗ trợ',
+                    'Kênh hỗ trợ chưa được cấu hình cho không gian làm việc này.',
+                  ),
+                ),
+                const Divider(height: 1, indent: 56),
+                _buildMenuItemTile(
+                  icon: Icons.verified_user_outlined,
+                  title: 'Dữ liệu của bạn được bảo vệ',
+                  subtitle:
+                      'Finora chỉ dùng dữ liệu cần thiết để cập nhật tài chính',
+                  iconColor: FinoraColors.success,
+                  onTap: () => _showSupportModal(
+                    'Bảo vệ dữ liệu',
+                    'Finora bảo vệ dữ liệu kết nối của bạn và chỉ dùng chúng để cung cấp các tính năng quản lý tài chính.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: FinoraSpace.xl),
+          OutlinedButton.icon(
+            onPressed: widget.onLogout,
+            icon: const Icon(Icons.logout_rounded),
+            label: const Text('Đăng xuất'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: FinoraColors.danger,
+              side: const BorderSide(color: FinoraColors.danger),
+              minimumSize: const Size.fromHeight(48),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildProfileOverview() {
+    final connected = _linkedAccounts.isNotEmpty;
+    final mappedCount = _linkedAccounts
+        .where((account) => account['mapping'] != null)
+        .length;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: FinoraColors.goldGradient,
+        borderRadius: FinoraRadius.xl,
+        boxShadow: FinoraElevation.floating,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openPersonalInfo,
+          borderRadius: FinoraRadius.xl,
+          child: Padding(
+            padding: const EdgeInsets.all(FinoraSpace.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const CircleAvatar(
+                      radius: 25,
+                      backgroundColor: Color(0x24ffffff),
+                      foregroundColor: Colors.white,
+                      child: Icon(Icons.person_outline_rounded, size: 28),
+                    ),
+                    const SizedBox(width: FinoraSpace.sm),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hồ sơ Finora',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Không gian tài chính cá nhân',
+                            style: TextStyle(
+                              color: Color(0xdfffffff),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: FinoraSpace.lg),
+                Text(
+                  connected
+                      ? 'Dữ liệu tài chính đang được cập nhật'
+                      : 'Sẵn sàng thiết lập không gian tài chính',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: FinoraSpace.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildOverviewMetric(
+                        '${_linkedAccounts.length}',
+                        'ngân hàng liên kết',
+                      ),
+                    ),
+                    const SizedBox(width: FinoraSpace.sm),
+                    Expanded(
+                      child: _buildOverviewMetric(
+                        '$mappedCount',
+                        'nguồn dữ liệu đã gán',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewMetric(String value, String label) => Container(
+    padding: const EdgeInsets.symmetric(
+      horizontal: FinoraSpace.sm,
+      vertical: FinoraSpace.xs,
+    ),
+    decoration: const BoxDecoration(
+      color: Color(0x1fffffff),
+      borderRadius: FinoraRadius.sm,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Color(0xdfffffff),
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildConnectionSummary() => Row(
+    children: [
+      Container(
+        width: 42,
+        height: 42,
+        decoration: const BoxDecoration(
+          color: FinoraColors.primarySoft,
+          borderRadius: FinoraRadius.sm,
+        ),
+        child: const Icon(
+          Icons.account_balance_rounded,
+          color: FinoraColors.primary,
+        ),
+      ),
+      const SizedBox(width: FinoraSpace.sm),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Tài khoản ngân hàng', style: FinoraTypography.title),
+            const SizedBox(height: FinoraSpace.xxs),
+            Text(_sepaySubtitle, style: FinoraTypography.bodySmall),
+          ],
+        ),
+      ),
+      const Icon(Icons.chevron_right_rounded),
+    ],
+  );
+
+  Widget _buildConnectionNotice() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(
+      horizontal: FinoraSpace.sm,
+      vertical: FinoraSpace.xs,
+    ),
+    decoration: const BoxDecoration(
+      color: Color(0xfff8f7ff),
+      borderRadius: FinoraRadius.sm,
+    ),
+    child: Row(
+      children: [
+        Icon(
+          _linkedAccounts.isEmpty
+              ? Icons.info_outline_rounded
+              : Icons.sync_rounded,
+          size: 16,
+          color: _linkedAccounts.isEmpty
+              ? FinoraColors.textSecondary
+              : FinoraColors.success,
+        ),
+        const SizedBox(width: FinoraSpace.xs),
+        Expanded(
+          child: Text(
+            _linkedAccounts.isEmpty
+                ? 'Liên kết ngân hàng để Finora cập nhật dòng tiền tự động.'
+                : _syncLabel,
+            style: FinoraTypography.caption.copyWith(
+              color: FinoraColors.textSecondary,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildBankChip(Map<String, dynamic> account) {
+    final bankName = account['bankName']?.toString().trim();
+    final maskedNumber = account['accountNumberMasked']?.toString().trim();
+    final label = (bankName?.isNotEmpty ?? false)
+        ? bankName!
+        : 'Tài khoản đã liên kết';
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 190),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FinoraSpace.sm,
+        vertical: FinoraSpace.xs,
+      ),
+      decoration: const BoxDecoration(
+        color: FinoraColors.primarySoft,
+        borderRadius: FinoraRadius.full,
+      ),
+      child: Text(
+        (maskedNumber?.isNotEmpty ?? false) ? '$label · $maskedNumber' : label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: FinoraTypography.caption.copyWith(
+          color: FinoraColors.primaryDeep,
+        ),
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  Widget _buildLegacyProfile(BuildContext context) {
     return PageFrame(
       title: 'Cá nhân',
       child: ListView(
@@ -4471,15 +5138,10 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(35),
-                          child: Image.network(
-                            'https://api.dicebear.com/7.x/bottts/png?seed=Hoang',
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(
-                                  Icons.person_rounded,
-                                  size: 40,
-                                  color: Color(0xff6b21a8),
-                                ),
+                          child: const Icon(
+                            Icons.person_rounded,
+                            size: 40,
+                            color: Color(0xff6b21a8),
                           ),
                         ),
                       ),
@@ -4490,7 +5152,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'NGUYEN XUAN HOANG',
+                        'Hồ sơ Finora',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
@@ -4508,7 +5170,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Mã KH (CIF): 03769945',
+                    'Thông tin tài khoản',
                     style: TextStyle(
                       fontSize: 11.5,
                       color: Color(0xff64748b),
@@ -4569,31 +5231,31 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 _buildMenuItemTile(
                   icon: Icons.chat_rounded,
-                  title: 'Chat ngay trên App TPBank',
+                  title: 'Trung tâm hỗ trợ Finora',
                   iconColor: const Color(0xffd97706),
                   onTap: () => _showSupportModal(
-                    'Chat ngay trên App',
-                    'Kết nối trợ lý hỗ trợ trực tiếp 24/7.',
+                    'Trung tâm hỗ trợ',
+                    'Kênh hỗ trợ sẽ được cấu hình theo không gian làm việc của bạn.',
                   ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
                 _buildMenuItemTile(
                   icon: Icons.forum_rounded,
-                  title: 'Chat qua Messenger',
+                  title: 'Gửi phản hồi',
                   iconColor: const Color(0xff2563eb),
                   onTap: () => _showSupportModal(
-                    'Messenger',
-                    'Đang chuyển hướng tới Messenger hỗ trợ...',
+                    'Gửi phản hồi',
+                    'Tính năng gửi phản hồi sẽ được kết nối trong phiên bản sau.',
                   ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
                 _buildMenuItemTile(
                   icon: Icons.mark_chat_read_rounded,
-                  title: 'Chat/Gọi qua Zalo',
+                  title: 'Trợ giúp sử dụng',
                   iconColor: const Color(0xff0284c7),
                   onTap: () => _showSupportModal(
-                    'Zalo Official',
-                    'Đang mở trang Zalo CSKH chính thức...',
+                    'Trợ giúp sử dụng',
+                    'Xem hướng dẫn sử dụng Finora.',
                   ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
@@ -4603,17 +5265,17 @@ class _ProfilePageState extends State<ProfilePage> {
                   iconColor: const Color(0xff06b6d4),
                   onTap: () => _showSupportModal(
                     'Gửi Email',
-                    'Vui lòng gửi ý kiến về hotro@tpbank.com.vn',
+                    'Kênh email hỗ trợ chưa được cấu hình.',
                   ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
                 _buildMenuItemTile(
                   icon: Icons.phone_rounded,
-                  title: 'Gọi Hotline',
+                  title: 'Gọi đường dây hỗ trợ',
                   iconColor: const Color(0xff16a34a),
                   onTap: () => _showSupportModal(
-                    'Gọi Hotline',
-                    'Đang gọi 1900 58 58 85...',
+                    'Gọi đường dây hỗ trợ',
+                    'Đường dây hỗ trợ chưa được cấu hình.',
                   ),
                 ),
                 const Divider(height: 1, indent: 52, endIndent: 16),
@@ -4630,7 +5292,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 _buildMenuItemTile(
                   icon: Icons.tune_rounded,
                   title: 'Cấu hình hiển thị số tiền',
-                  subtitle: 'Rút gọn (100) vs Đầy đủ (100.000 VND)',
+                  subtitle: 'Rút gọn (100) so với đầy đủ (100.000 VND)',
                   iconColor: const Color(0xff7c3aed),
                   onTap: widget.onOpenSettings,
                 ),
@@ -4664,7 +5326,7 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Column(
               children: [
                 const Text(
-                  'Mức độ hài lòng về App TPBank?',
+                  'Mức độ hài lòng với Finora?',
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
@@ -4677,30 +5339,36 @@ class _ProfilePageState extends State<ProfilePage> {
                   children: List.generate(5, (index) {
                     final starIndex = index + 1;
                     final isFilled = starIndex <= _satisfactionRating;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _satisfactionRating = starIndex;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Cảm ơn bạn đã đánh giá $_satisfactionRating sao!',
+                    return Semantics(
+                      button: true,
+                      selected: _satisfactionRating == starIndex,
+                      label:
+                          '$starIndex sao${_satisfactionRating == starIndex ? ', đang chọn' : ''}',
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _satisfactionRating = starIndex;
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Cảm ơn bạn đã đánh giá $_satisfactionRating sao!',
+                              ),
+                              duration: const Duration(seconds: 2),
                             ),
-                            duration: const Duration(seconds: 2),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Icon(
+                            isFilled
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            size: 34,
+                            color: isFilled
+                                ? const Color(0xfff59e0b)
+                                : const Color(0xffcbd5e1),
                           ),
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Icon(
-                          isFilled
-                              ? Icons.star_rounded
-                              : Icons.star_outline_rounded,
-                          size: 34,
-                          color: isFilled
-                              ? const Color(0xfff59e0b)
-                              : const Color(0xffcbd5e1),
                         ),
                       ),
                     );
@@ -4709,29 +5377,33 @@ class _ProfilePageState extends State<ProfilePage> {
                 const SizedBox(height: 12),
                 const Divider(height: 1),
                 const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () => _showSupportModal(
-                    'Lịch sử đánh giá',
-                    'Bạn chưa có lịch sử đánh giá nào trước đó.',
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Lịch sử đánh giá',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
+                Semantics(
+                  button: true,
+                  label: 'Mở lịch sử đánh giá',
+                  child: GestureDetector(
+                    onTap: () => _showSupportModal(
+                      'Lịch sử đánh giá',
+                      'Bạn chưa có lịch sử đánh giá nào trước đó.',
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Lịch sử đánh giá',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xffd97706),
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 18,
                           color: Color(0xffd97706),
                         ),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 18,
-                        color: Color(0xffd97706),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -4889,7 +5561,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
       items = x['items'] as List? ?? [];
       error = null;
     } catch (e) {
-      error = e.toString();
+      error = presentableError(e);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -4975,7 +5647,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
   @override
   Widget build(BuildContext c) => PageFrame(
-    title: 'Lịch sử Giao dịch',
+    title: 'Lịch sử giao dịch',
     action: Row(
       children: [
         IconButton(
@@ -5003,17 +5675,29 @@ class _TransactionsPageState extends State<TransactionsPage> {
     ),
     child: loading
         ? const Center(
-            child: CircularProgressIndicator(color: Color(0xfffbbf24)),
+            child: CircularProgressIndicator(color: FinoraColors.primary),
+          )
+        : (error != null && items.isEmpty)
+        ? FinoraEmptyState(
+            title: 'Chưa thể tải giao dịch',
+            message: 'Kiểm tra kết nối rồi thử lại.',
+            icon: Icons.cloud_off_rounded,
+            action: FilledButton.icon(
+              onPressed: load,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Thử lại'),
+            ),
           )
         : ListView(
             physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: FinoraSpace.xxl),
             children: [
               // KPI Analytics Cards Header
               Row(
                 children: [
                   Expanded(
                     child: _buildMetricCard(
-                      title: 'Tổng Thu',
+                      title: 'Tổng thu',
                       amount: _totalIncome,
                       isIncome: true,
                       icon: Icons.south_west_rounded,
@@ -5023,7 +5707,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: _buildMetricCard(
-                      title: 'Tổng Chi',
+                      title: 'Tổng chi',
                       amount: _totalExpense,
                       isIncome: false,
                       icon: Icons.north_east_rounded,
@@ -5044,7 +5728,22 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
               // Grouped List Items
               if (_groupedItems.isEmpty)
-                const EmptyState('Không tìm thấy giao dịch nào')
+                FinoraEmptyState(
+                  title: searchController.text.isEmpty
+                      ? 'Chưa có giao dịch'
+                      : 'Không tìm thấy giao dịch',
+                  message: searchController.text.isEmpty
+                      ? 'Tạo giao dịch đầu tiên để theo dõi dòng tiền.'
+                      : 'Thử đổi từ khoá hoặc bộ lọc.',
+                  icon: Icons.receipt_long_outlined,
+                  action: searchController.text.isEmpty
+                      ? FilledButton.icon(
+                          onPressed: form,
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('Tạo giao dịch'),
+                        )
+                      : null,
+                )
               else
                 ..._groupedItems.entries.map((entry) {
                   final dateLabel = entry.key;
@@ -5518,7 +6217,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
         widget.onSuccess();
       }
     } catch (e) {
-      if (mounted) showError(context, e.toString());
+      if (mounted) showError(context, presentableError(e));
     } finally {
       if (mounted) setState(() => submitting = false);
     }
@@ -5544,7 +6243,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
         : '${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}';
 
     return FinoraSheet(
-      title: 'Tạo Giao dịch',
+      title: 'Tạo giao dịch',
       subtitle:
           'Ghi nhận thu chi nhanh. Số tiền được tự động nội suy thông minh.',
       child: Column(
@@ -5725,11 +6424,11 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildQuickAmountChip('100k', '100'),
+                _buildQuickAmountChip('100k', '100k'),
                 const SizedBox(width: 6),
-                _buildQuickAmountChip('200k', '200'),
+                _buildQuickAmountChip('200k', '200k'),
                 const SizedBox(width: 6),
-                _buildQuickAmountChip('500k', '500'),
+                _buildQuickAmountChip('500k', '500k'),
                 const SizedBox(width: 6),
                 _buildQuickAmountChip('1M', '1tr'),
                 const SizedBox(width: 6),
@@ -5743,7 +6442,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
           _CustomGlassTextField(
             controller: amountController,
             keyboardType: TextInputType.text,
-            labelText: 'Số tiền (Nhập 100 = 100k, 1000 = 1tr, 1.5tr)',
+            labelText: 'Số tiền (vd: 100k, 1tr, 30t, 30m)',
             icon: Icons.attach_money_rounded,
             onChanged: (_) => setState(() {}),
           ),
@@ -5875,45 +6574,346 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
   }
 }
 
-double parseSmartAmount(String rawInput, {String currency = 'VND'}) {
-  final clean = rawInput
-      .trim()
-      .toLowerCase()
-      .replaceAll(',', '.')
-      .replaceAll(' ', '');
-  if (clean.isEmpty) return 0.0;
+class _AssetCreateSheet extends StatefulWidget {
+  const _AssetCreateSheet({required this.api, required this.onSuccess});
+  final ApiClient api;
+  final VoidCallback onSuccess;
 
-  final isVnd = currency.toUpperCase() == 'VND';
+  @override
+  State<_AssetCreateSheet> createState() => _AssetCreateSheetState();
+}
 
-  if (RegExp(r'^[0-9.]+(k)$').hasMatch(clean)) {
-    final numStr = clean.replaceAll('k', '');
-    final val = double.tryParse(numStr) ?? 0.0;
-    return val * 1000;
-  }
+class _AssetCreateSheetState extends State<_AssetCreateSheet> {
+  final name = TextEditingController();
+  String assetType = 'other';
+  bool submitting = false;
 
-  if (RegExp(r'^[0-9.]+(tr|m|trieu|triệu)$').hasMatch(clean)) {
-    final numStr = clean.replaceAll(RegExp(r'(tr|m|trieu|triệu)'), '');
-    final val = double.tryParse(numStr) ?? 0.0;
-    return val * 1000000;
-  }
-
-  if (RegExp(r'^[0-9.]+(ty|b|tỷ)$').hasMatch(clean)) {
-    final numStr = clean.replaceAll(RegExp(r'(ty|b|tỷ)'), '');
-    final val = double.tryParse(numStr) ?? 0.0;
-    return val * 1000000000;
-  }
-
-  final val = double.tryParse(clean);
-  if (val != null) {
-    if (isVnd &&
-        val > 0 &&
-        (appAmountDisplayMode == 'compact' || val < 10000)) {
-      return val * 1000;
+  Future<void> _submit() async {
+    if (name.text.trim().isEmpty) {
+      showError(context, 'Nhập tên tài sản.');
+      return;
     }
-    return val;
+    setState(() => submitting = true);
+    try {
+      await widget.api.request('POST', '/assets', {
+        'name': name.text.trim(),
+        'assetType': assetType,
+      });
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.onSuccess();
+    } catch (error) {
+      if (mounted) showError(context, presentableError(error));
+    } finally {
+      if (mounted) setState(() => submitting = false);
+    }
   }
 
-  return 0.0;
+  @override
+  void dispose() {
+    name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Container(
+      padding: EdgeInsets.fromLTRB(
+        FinoraSpace.lg,
+        FinoraSpace.sm,
+        FinoraSpace.lg,
+        FinoraSpace.xl + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: FinoraColors.surfaceElevated,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: const BoxDecoration(
+                  color: FinoraColors.borderStrong,
+                  borderRadius: FinoraRadius.full,
+                ),
+              ),
+            ),
+            const SizedBox(height: FinoraSpace.lg),
+            const Text('Thêm tài sản', style: FinoraTypography.h3),
+            const SizedBox(height: FinoraSpace.xs),
+            Text(
+              'Bạn có thể bổ sung định giá sau khi tạo.',
+              style: FinoraTypography.bodySmall.copyWith(
+                color: FinoraColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: FinoraSpace.lg),
+            TextField(
+              controller: name,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Tên tài sản'),
+            ),
+            const SizedBox(height: FinoraSpace.sm),
+            DropdownButtonFormField<String>(
+              initialValue: assetType,
+              decoration: const InputDecoration(labelText: 'Loại tài sản'),
+              items: const [
+                DropdownMenuItem(value: 'other', child: Text('Khác')),
+                DropdownMenuItem(
+                  value: 'gold',
+                  child: Text('Vàng / kim loại quý'),
+                ),
+                DropdownMenuItem(value: 'vehicle', child: Text('Phương tiện')),
+                DropdownMenuItem(
+                  value: 'collectible',
+                  child: Text('Tài sản sưu tầm'),
+                ),
+              ],
+              onChanged: submitting
+                  ? null
+                  : (value) => setState(() => assetType = value ?? 'other'),
+            ),
+            const SizedBox(height: FinoraSpace.lg),
+            FilledButton.icon(
+              onPressed: submitting ? null : _submit,
+              icon: submitting
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.add_business_rounded),
+              label: const Text('Tạo tài sản'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _TransferFormSheet extends StatefulWidget {
+  const _TransferFormSheet({required this.api, required this.onSuccess});
+  final ApiClient api;
+  final VoidCallback onSuccess;
+
+  @override
+  State<_TransferFormSheet> createState() => _TransferFormSheetState();
+}
+
+class _TransferFormSheetState extends State<_TransferFormSheet> {
+  final amountController = TextEditingController();
+  final noteController = TextEditingController();
+  List<Map<String, dynamic>> accounts = [];
+  String? fromAccountId;
+  String? toAccountId;
+  bool loading = true;
+  bool submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAccounts();
+  }
+
+  Future<void> _loadAccounts() async {
+    try {
+      final result = await widget.api.request('GET', '/accounts');
+      final rows = result is List
+          ? result
+          : (result is Map ? result['items'] as List? ?? [] : []);
+      if (!mounted) return;
+      setState(() {
+        accounts = rows
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
+        if (accounts.length >= 2) {
+          fromAccountId = accounts.first['id']?.toString();
+          toAccountId = accounts[1]['id']?.toString();
+        }
+        loading = false;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => loading = false);
+        showError(context, presentableError(error));
+      }
+    }
+  }
+
+  Future<void> _submit() async {
+    final amount = parseSmartAmount(amountController.text);
+    if (fromAccountId == null ||
+        toAccountId == null ||
+        fromAccountId == toAccountId) {
+      showError(context, 'Chọn hai tài khoản khác nhau.');
+      return;
+    }
+    if (amount <= 0) {
+      showError(context, 'Nhập số tiền hợp lệ.');
+      return;
+    }
+    setState(() => submitting = true);
+    try {
+      await widget.api.request('POST', '/transfers', {
+        'fromAccountId': fromAccountId,
+        'toAccountId': toAccountId,
+        'amount': amount.toStringAsFixed(0),
+        'currency': 'VND',
+        'note': noteController.text.trim(),
+        'occurredAt': DateTime.now().toUtc().toIso8601String(),
+      });
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.onSuccess();
+    } catch (error) {
+      if (mounted) showError(context, presentableError(error));
+    } finally {
+      if (mounted) setState(() => submitting = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    amountController.dispose();
+    noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Container(
+      padding: EdgeInsets.fromLTRB(
+        FinoraSpace.lg,
+        FinoraSpace.sm,
+        FinoraSpace.lg,
+        FinoraSpace.xl + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: FinoraColors.surfaceElevated,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: const BoxDecoration(
+                  color: FinoraColors.borderStrong,
+                  borderRadius: FinoraRadius.full,
+                ),
+              ),
+            ),
+            const SizedBox(height: FinoraSpace.lg),
+            const Text('Chuyển tiền', style: FinoraTypography.h3),
+            const SizedBox(height: FinoraSpace.xs),
+            Text(
+              'Chuyển tiền nội bộ giữa các tài khoản của bạn.',
+              style: FinoraTypography.bodySmall.copyWith(
+                color: FinoraColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: FinoraSpace.lg),
+            if (loading)
+              const Center(
+                child: CircularProgressIndicator(color: FinoraColors.primary),
+              )
+            else if (accounts.length < 2)
+              FinoraEmptyState(
+                title: 'Cần ít nhất hai tài khoản',
+                message: 'Tạo thêm tài khoản trước khi chuyển tiền nội bộ.',
+                icon: Icons.account_balance_wallet_outlined,
+              )
+            else ...[
+              DropdownButtonFormField<String>(
+                initialValue: fromAccountId,
+                decoration: const InputDecoration(labelText: 'Từ tài khoản'),
+                items: accounts
+                    .map(
+                      (a) => DropdownMenuItem(
+                        value: a['id']?.toString(),
+                        child: Text(a['name']?.toString() ?? 'Tài khoản'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: submitting
+                    ? null
+                    : (value) => setState(() => fromAccountId = value),
+              ),
+              const SizedBox(height: FinoraSpace.sm),
+              DropdownButtonFormField<String>(
+                initialValue: toAccountId,
+                decoration: const InputDecoration(labelText: 'Đến tài khoản'),
+                items: accounts
+                    .map(
+                      (a) => DropdownMenuItem(
+                        value: a['id']?.toString(),
+                        child: Text(a['name']?.toString() ?? 'Tài khoản'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: submitting
+                    ? null
+                    : (value) => setState(() => toAccountId = value),
+              ),
+              const SizedBox(height: FinoraSpace.sm),
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.text,
+                decoration: const InputDecoration(
+                  labelText: 'Số tiền',
+                  hintText: 'Ví dụ: 500k hoặc 1tr',
+                  prefixIcon: Icon(Icons.payments_outlined),
+                ),
+              ),
+              const SizedBox(height: FinoraSpace.sm),
+              TextField(
+                controller: noteController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Ghi chú',
+                  prefixIcon: Icon(Icons.notes_rounded),
+                ),
+              ),
+              const SizedBox(height: FinoraSpace.lg),
+              FilledButton.icon(
+                onPressed: submitting ? null : _submit,
+                icon: submitting
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.swap_horiz_rounded),
+                label: const Text('Xác nhận chuyển tiền'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+double parseSmartAmount(String rawInput, {String currency = 'VND'}) {
+  return currency.toUpperCase() == 'VND'
+      ? parseVietnameseMoneyInput(rawInput)
+      : (double.tryParse(rawInput.trim()) ?? 0);
 }
 
 String formatCurrency(double amount, {String currency = 'VND'}) {
@@ -5933,7 +6933,10 @@ class BudgetPage extends StatefulWidget {
 }
 
 class _BudgetPageState extends State<BudgetPage> {
-  final period = TextEditingController(text: '2026-07'),
+  final period = TextEditingController(
+        text:
+            '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}',
+      ),
       category = TextEditingController(),
       limit = TextEditingController();
   dynamic data;
@@ -5945,21 +6948,26 @@ class _BudgetPageState extends State<BudgetPage> {
       data = await widget.api.request('GET', '/budgets/${period.text}');
       err = null;
     } catch (e) {
-      err = e.toString();
+      err = presentableError(e);
     } finally {
       if (mounted) setState(() => loading = false);
     }
   }
 
   Future<void> save() async {
+    final parsedLimit = parseSmartAmount(limit.text);
+    if (parsedLimit <= 0) {
+      showError(context, 'Nhập hạn mức hợp lệ, ví dụ 30tr.');
+      return;
+    }
     try {
       await widget.api.request('PUT', '/budgets/${period.text}', {
         'categoryId': category.text,
-        'limit': limit.text,
+        'limit': parsedLimit.toStringAsFixed(0),
       });
       load();
     } catch (e) {
-      if (mounted) showError(context, e.toString());
+      if (mounted) showError(context, presentableError(e));
     }
   }
 
@@ -6026,14 +7034,14 @@ class _BudgetPageState extends State<BudgetPage> {
               const SizedBox(height: 14),
               _CustomGlassTextField(
                 controller: category,
-                labelText: 'Category ID',
+                labelText: 'Mã danh mục',
                 icon: Icons.sell_outlined,
               ),
               const SizedBox(height: 12),
               _CustomGlassTextField(
                 controller: limit,
-                keyboardType: TextInputType.number,
-                labelText: 'Hạn mức',
+                keyboardType: TextInputType.text,
+                labelText: 'Hạn mức (vd: 30tr)',
                 icon: Icons.account_balance_wallet_outlined,
               ),
               const SizedBox(height: 14),
@@ -6053,23 +7061,97 @@ class _BudgetPageState extends State<BudgetPage> {
           ),
         ),
         if (err != null) ErrorBox(err!),
-        if (data != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: FinoraSurface(
-              child: Text(
-                JsonEncoder.withIndent('  ').convert(data),
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
+        if (data != null) _buildBudgetResults(),
       ],
     ),
   );
+
+  Widget _buildBudgetResults() {
+    final response = data is Map
+        ? Map<String, dynamic>.from(data as Map)
+        : <String, dynamic>{};
+    final rows = (response['rows'] as List?) ?? const [];
+    return Padding(
+      padding: const EdgeInsets.only(top: FinoraSpace.md),
+      child: FinoraSurface(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Ngân sách ${response['period'] ?? period.text}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: FinoraSpace.sm),
+            if (rows.isEmpty)
+              const Text(
+                'Chưa có hạn mức cho kỳ này.',
+                style: TextStyle(color: Colors.white70),
+              )
+            else
+              ...rows.map((raw) {
+                final row = Map<String, dynamic>.from(raw as Map);
+                final limitValue =
+                    double.tryParse(row['limit']?.toString() ?? '') ?? 0;
+                final spentValue =
+                    double.tryParse(row['spent']?.toString() ?? '') ?? 0;
+                final progress = limitValue > 0
+                    ? (spentValue / limitValue).clamp(0.0, 1.0)
+                    : 0.0;
+                final isOver = limitValue > 0 && spentValue > limitValue;
+                final currency = row['currency']?.toString() ?? 'VND';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: FinoraSpace.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Danh mục ${row['categoryId'] ?? 'Chưa phân loại'}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${formatCurrency(spentValue, currency: currency)} / ${formatCurrency(limitValue, currency: currency)}',
+                            style: TextStyle(
+                              color: isOver
+                                  ? FinoraColors.accentAmber
+                                  : FinoraColors.goldLight,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: FinoraSpace.xs),
+                      LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 7,
+                        borderRadius: const BorderRadius.all(
+                          Radius.circular(99),
+                        ),
+                        backgroundColor: Colors.white.withValues(alpha: 0.14),
+                        valueColor: AlwaysStoppedAnimation(
+                          isOver ? FinoraColors.danger : FinoraColors.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class SePayConnectionPage extends StatefulWidget {
@@ -6100,7 +7182,7 @@ class _SePayConnectionPageState extends State<SePayConnectionPage> {
       _accounts = (data['bankAccounts'] as List?) ?? const [];
       _error = null;
     } catch (error) {
-      _error = error.toString();
+      _error = presentableError(error);
     }
     if (mounted) {
       setState(() {
@@ -6134,7 +7216,7 @@ class _SePayConnectionPageState extends State<SePayConnectionPage> {
       }
       await _load();
     } catch (error) {
-      if (mounted) showError(context, error.toString());
+      if (mounted) showError(context, presentableError(error));
     }
   }
 
@@ -6157,7 +7239,7 @@ class _SePayConnectionPageState extends State<SePayConnectionPage> {
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: Text(
-                  'Nếu user có nhiều thành viên, giao dịch ngân hàng sẽ được chia sẻ theo quyền của user đó.',
+                  'Nếu không gian làm việc có nhiều thành viên, giao dịch ngân hàng sẽ được chia sẻ theo quyền của từng thành viên.',
                   style: TextStyle(color: Color(0xff64748b), fontSize: 12),
                 ),
               ),
@@ -6184,7 +7266,7 @@ class _SePayConnectionPageState extends State<SePayConnectionPage> {
       );
       await _load();
     } catch (error) {
-      if (mounted) showError(context, error.toString());
+      if (mounted) showError(context, presentableError(error));
     }
   }
 
@@ -6216,7 +7298,7 @@ class _SePayConnectionPageState extends State<SePayConnectionPage> {
       );
       await _load();
     } catch (error) {
-      if (mounted) showError(context, error.toString());
+      if (mounted) showError(context, presentableError(error));
     }
   }
 
@@ -6303,7 +7385,7 @@ class _SePayConnectionPageState extends State<SePayConnectionPage> {
                                   ),
                                 ),
                               ),
-                              Text(account['status']?.toString() ?? ''),
+                              Text(_connectionStatusLabel(account['status'])),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -6334,7 +7416,7 @@ class _SePayConnectionPageState extends State<SePayConnectionPage> {
                               child: TextButton.icon(
                                 onPressed: () => _mapAccount(account),
                                 icon: const Icon(Icons.link),
-                                label: const Text('Map tài khoản Finora'),
+                                label: const Text('Gán tài khoản Finora'),
                               ),
                             )
                           else
@@ -6342,7 +7424,7 @@ class _SePayConnectionPageState extends State<SePayConnectionPage> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    'Đã map vào tài khoản Finora',
+                                    'Đã gán vào tài khoản Finora',
                                     style: TextStyle(
                                       color: Colors.green.shade700,
                                     ),
@@ -6456,7 +7538,7 @@ class _BankPageState extends State<BankPage> {
       feed = (data['items'] as List?) ?? const [];
       err = null;
     } catch (e) {
-      err = e.toString();
+      err = presentableError(e);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -6471,7 +7553,7 @@ class _BankPageState extends State<BankPage> {
       await widget.api.request('POST', '/bank-feed/$id/$action', payload);
       await load();
     } catch (e) {
-      if (mounted) showError(context, e.toString());
+      if (mounted) showError(context, presentableError(e));
     }
   }
 
@@ -6641,6 +7723,17 @@ String _confidenceLabel(dynamic value) {
   return 'Chưa phân loại';
 }
 
+String _connectionStatusLabel(dynamic value) {
+  return switch (value?.toString()) {
+    'active' => 'Đang kết nối',
+    'pending' => 'Đang chờ',
+    'error' => 'Cần kiểm tra',
+    'revoked' => 'Đã ngắt kết nối',
+    null || '' => 'Chưa xác định',
+    _ => 'Trạng thái: ${value.toString()}',
+  };
+}
+
 class _BankFeedEditSheet extends StatefulWidget {
   const _BankFeedEditSheet({required this.api, required this.item});
   final ApiClient api;
@@ -6708,7 +7801,7 @@ class _BankFeedEditSheetState extends State<_BankFeedEditSheet> {
         TextField(
           controller: _category,
           decoration: const InputDecoration(
-            labelText: 'Danh mục (ID, tùy chọn)',
+            labelText: 'Mã danh mục (không bắt buộc)',
           ),
         ),
         DropdownButtonFormField<String>(
@@ -6927,13 +8020,18 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
       };
 
       if (balanceController.text.trim().isNotEmpty) {
-        payload['balance'] = balanceController.text.trim();
+        final balance = parseSmartAmount(balanceController.text);
+        if (balance <= 0) {
+          showError(context, 'Nhập số dư hợp lệ, ví dụ 30tr.');
+          return;
+        }
+        payload['initialBalance'] = balance.toStringAsFixed(0);
       }
 
       await widget.api.request('POST', '/accounts', payload);
       if (mounted) widget.onSuccess();
     } catch (e) {
-      if (mounted) showError(context, e.toString());
+      if (mounted) showError(context, presentableError(e));
     } finally {
       if (mounted) setState(() => submitting = false);
     }
@@ -6949,7 +8047,7 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
   @override
   Widget build(BuildContext context) {
     return FinoraSheet(
-      title: 'Thêm Tài khoản',
+      title: 'Thêm tài khoản',
       subtitle:
           'Chọn loại tài khoản & số dư. Thông tin khác sẽ được tự động nội suy.',
       child: Column(
@@ -7044,8 +8142,8 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
           const SizedBox(height: 16),
           _CustomGlassTextField(
             controller: balanceController,
-            keyboardType: TextInputType.number,
-            labelText: 'Số dư / Giá trị ban đầu (VND)',
+            keyboardType: TextInputType.text,
+            labelText: 'Số dư / Giá trị ban đầu (vd: 30tr)',
             icon: Icons.payments_outlined,
           ),
           const SizedBox(height: 12),
@@ -7070,41 +8168,39 @@ class FinoraSurface extends StatelessWidget {
   const FinoraSurface({super.key, required this.child});
   final Widget child;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white, width: 1),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.05),
-          blurRadius: 12,
-          offset: const Offset(0, 3),
-        ),
-      ],
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: FinoraColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: FinoraColors.border, width: 1),
+        boxShadow: FinoraElevation.card,
+      ),
+      child: child,
+    );
+  }
 }
 
 class _ScreenIntro extends StatelessWidget {
   const _ScreenIntro(this.text);
   final String text;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Text(
-      text,
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.85),
-        height: 1.35,
-        fontSize: 12.5,
-        fontWeight: FontWeight.w600,
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: FinoraColors.textSecondary,
+          height: 1.35,
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class SectionTitle extends StatelessWidget {
@@ -7112,30 +8208,32 @@ class SectionTitle extends StatelessWidget {
   final String text;
   final IconData icon;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(8),
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: FinoraColors.primarySoft,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: FinoraColors.primary, size: 16),
           ),
-          child: Icon(icon, color: const Color(0xfffbbf24), size: 16),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          text,
-          style: const TextStyle(
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-            fontSize: 14.5,
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: FinoraColors.textPrimary,
+              fontSize: 14.5,
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 class FinoraListTile extends StatelessWidget {
@@ -7156,98 +8254,100 @@ class FinoraListTile extends StatelessWidget {
   final VoidCallback? onDelete;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: FinoraSurface(
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: (iconColor ?? const Color(0xffd97706)).withValues(
-                alpha: 0.12,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              icon,
-              color: iconColor ?? const Color(0xffd97706),
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xff0f172a),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xff64748b),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          if (amount != null)
-            Text(
-              amount!,
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                color: iconColor ?? const Color(0xffd97706),
-                fontSize: 13,
-              ),
-            ),
-          if (badge != null)
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: FinoraSurface(
+        child: Row(
+          children: [
             Container(
-              margin: const EdgeInsets.only(left: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: (iconColor ?? const Color(0xffd97706)).withValues(
-                  alpha: 0.14,
+                color: (iconColor ?? FinoraColors.primary).withValues(
+                  alpha: 0.12,
                 ),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(
-                badge!,
+              child: Icon(
+                icon,
+                color: iconColor ?? FinoraColors.primary,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: FinoraColors.textPrimary,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: FinoraColors.textSecondary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            if (amount != null)
+              Text(
+                amount!,
                 style: TextStyle(
-                  color: iconColor ?? const Color(0xffd97706),
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w900,
+                  color: iconColor ?? FinoraColors.primary,
+                  fontSize: 13,
                 ),
               ),
-            ),
-          if (onDelete != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: IconButton(
-                onPressed: onDelete,
-                tooltip: 'Xóa tài khoản',
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Color(0xfff87171),
-                  size: 20,
+            if (badge != null)
+              Container(
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: (iconColor ?? FinoraColors.primary).withValues(
+                    alpha: 0.14,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badge!,
+                  style: TextStyle(
+                    color: iconColor ?? FinoraColors.primary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
-        ],
+            if (onDelete != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: IconButton(
+                  onPressed: onDelete,
+                  tooltip: 'Xóa tài khoản',
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Color(0xfff87171),
+                    size: 20,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 IconData _iconForTitle(String title) => switch (title) {
@@ -7265,31 +8365,38 @@ class ErrorBox extends StatelessWidget {
   const ErrorBox(this.text, {super.key});
   final String text;
   @override
-  Widget build(BuildContext c) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0x44ef4444),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0x88ef4444)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xfffca5a5)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                height: 1.35,
-                fontWeight: FontWeight.w600,
+  Widget build(BuildContext c) => Semantics(
+    liveRegion: true,
+    container: true,
+    label: presentableError(text),
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0x14f04438),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: FinoraColors.danger.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.info_outline_rounded, color: FinoraColors.danger),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                presentableError(text),
+                style: const TextStyle(
+                  color: FinoraColors.textPrimary,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -7309,11 +8416,11 @@ class EmptyState extends StatelessWidget {
             height: 62,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.1),
+              color: FinoraColors.primarySoft,
             ),
             child: const Icon(
               Icons.inbox_rounded,
-              color: Color(0xfff7d070),
+              color: FinoraColors.primary,
               size: 29,
             ),
           ),
@@ -7321,20 +8428,13 @@ class EmptyState extends StatelessWidget {
           Text(
             text,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              fontSize: 16,
-            ),
+            style: FinoraTypography.title,
           ),
           const SizedBox(height: 5),
           Text(
             'Dữ liệu mới sẽ xuất hiện tại đây.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 13,
-            ),
+            style: TextStyle(color: FinoraColors.textSecondary, fontSize: 13),
           ),
         ],
       ),
@@ -7342,11 +8442,23 @@ class EmptyState extends StatelessWidget {
   );
 }
 
+String presentableError(Object error) {
+  final raw = error.toString().trim();
+  if (raw.isEmpty) return 'Đã xảy ra lỗi. Vui lòng thử lại.';
+  if (raw.contains('SocketException') || raw.contains('Failed host lookup')) {
+    return 'Không thể kết nối máy chủ. Kiểm tra mạng rồi thử lại.';
+  }
+  return raw.replaceFirst(RegExp(r'^(Exception|ApiException):\s*'), '').trim();
+}
+
 void showError(BuildContext c, String e) =>
     ScaffoldMessenger.of(c).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: const Color(0xff200733),
-        content: Text(e, style: const TextStyle(color: Colors.white)),
+        content: Text(
+          presentableError(e),
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
     );

@@ -7,21 +7,19 @@
         type="button" 
         (click)="toggleSidebar()"
         class="app-icon-button md:hidden"
-        aria-label="Toggle navigation menu"
+        [attr.aria-label]="sidebarOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'"
+        aria-controls="finora-navigation-drawer"
+        [attr.aria-expanded]="sidebarOpen"
       >
         <app-icon name="menu"></app-icon>
       </button>
 
       <div class="flex items-center gap-2 sm:gap-3">
-        <img
-          src="assets/branding/wealthos-logo-01-ascending-w.png"
-          alt="WealthOS Logo"
-          class="h-9 w-auto object-contain shrink-0 filter drop-shadow-sm"
-        />
+        <span class="brand-mark" aria-hidden="true">F</span>
         <div class="brand-copy">
           <div class="flex items-center gap-1.5 sm:gap-2">
-            <span class="brand-name">WealthOS</span>
-            <span class="brand-caption">PERSONAL WEALTH</span>
+            <span class="brand-name">Finora</span>
+            <span class="brand-caption">WEALTH OS</span>
           </div>
         </div>
       </div>
@@ -29,28 +27,18 @@
 
     <!-- Quick Search & Workspace Selector -->
     <div class="app-topbar__tools">
-      <!-- Search Box (Desktop) -->
-      <div *ngIf="isAuthenticated" class="workspace-select">
-        <span class="status-dot"></span>
-        <app-icon name="search" class="text-[var(--text-muted)] text-sm mr-2"></app-icon>
-        <input 
-          type="text" 
-          placeholder="Search workspace..."
-          class="bg-transparent text-xs w-36 lg:w-52 focus:outline-none text-[var(--text-main)] font-medium"
-        />
-      </div>
-
       <!-- Workspace Switcher Dropdown -->
-      <div class="flex items-center gap-2" *ngIf="isAuthenticated">
+      <div class="workspace-switcher flex items-center gap-2" *ngIf="isAuthenticated">
         <div class="bg-[var(--bg-subtle)] border border-[var(--border-strong)] rounded-xl px-2 sm:px-3 py-1 flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
           <select
             id="workspace-select"
+            aria-label="Chọn không gian làm việc"
             class="bg-transparent text-[var(--text-main)] text-[11px] sm:text-xs font-semibold focus:outline-none cursor-pointer max-w-[110px] sm:max-w-none truncate"
             [value]="selectedWorkspaceId || ''"
             (change)="onWorkspaceChange($event)"
           >
-            <option value="">-- Workspace --</option>
+            <option value="">-- Chọn không gian --</option>
             <option *ngFor="let item of workspaces" [value]="item.id">
               {{ item.name }} ({{ item.baseCurrency }})
             </option>
@@ -62,6 +50,7 @@
       <div class="language-select">
         <app-icon name="language" class="text-xs text-[var(--accent-primary)]"></app-icon>
         <select
+          aria-label="Chọn ngôn ngữ"
           class="bg-transparent text-[11px] sm:text-xs font-bold text-[var(--text-main)] focus:outline-none cursor-pointer"
           [value]="langService.currentLanguage"
           (change)="changeLanguage($event)"
@@ -76,8 +65,9 @@
         *ngIf="isAuthenticated"
         type="button"
         (click)="toggleAmountDisplayMode()"
-        class="bg-[var(--bg-subtle)] border border-[var(--border-strong)] rounded-xl px-2.5 py-1 text-xs font-bold flex items-center gap-1.5 hover:bg-black/10 transition-colors cursor-pointer"
+        class="amount-toggle bg-[var(--bg-subtle)] border border-[var(--border-strong)] rounded-xl px-2.5 py-1 text-xs font-bold flex items-center gap-1.5 hover:bg-black/10 transition-colors cursor-pointer"
         [title]="'Chế độ số tiền: ' + (amountDisplayMode === 'compact' ? 'Viết tắt (100)' : 'Đầy đủ (100.000 VND)')"
+        [attr.aria-label]="'Chế độ số tiền: ' + (amountDisplayMode === 'compact' ? 'Rút gọn' : 'Đầy đủ')"
       >
         <app-icon name="tune" class="text-xs text-[var(--accent-primary)]"></app-icon>
         <span class="text-[11px] font-semibold">
@@ -92,7 +82,8 @@
           type="button"
           (click)="toggleDarkMode()"
           class="app-icon-button hidden sm:inline-flex"
-          [title]="isDarkMode ? 'Light Mode' : 'Dark Mode'"
+          [title]="isDarkMode ? 'Chế độ sáng' : 'Chế độ tối'"
+          [attr.aria-label]="isDarkMode ? 'Chuyển sang chế độ sáng' : 'Chuyển sang chế độ tối'"
         >
           <app-icon [name]="isDarkMode ? 'light_mode' : 'dark_mode'" class="text-[var(--text-muted)]"></app-icon>
         </button>
@@ -100,26 +91,32 @@
         <button
           (click)="logout()"
           class="avatar-button"
+          aria-label="Đăng xuất"
+          title="Đăng xuất"
         >
-          <app-icon name="logout" class="text-xs sm:text-sm"></app-icon>
-          <span class="hidden">{{ 'common.logout' | translate }}</span><span>TH</span>
+          <app-icon name="logout" class="text-sm"></app-icon>
+          <span class="hidden">{{ 'common.logout' | translate }}</span>
         </button>
       </div>
     </div>
   </header>
 
   <!-- Mobile Backdrop Overlay when Drawer is Open -->
-  <div 
+  <button
+    type="button"
     *ngIf="isAuthenticated && sidebarOpen" 
     (click)="toggleSidebar()" 
+    aria-label="Đóng menu điều hướng"
     class="app-backdrop md:hidden"
-  ></div>
+  ></button>
 
   <!-- Body Layout (Left Sidebar + Main Content) -->
   <div class="app-body">
     <!-- Navigation Sidebar (Drawer on Mobile, Column on Desktop) -->
     <aside 
       *ngIf="isAuthenticated"
+      id="finora-navigation-drawer"
+      aria-label="Điều hướng chính"
       [class.w-60]="sidebarOpen"
       [class.w-16]="!sidebarOpen"
       [class.translate-x-0]="sidebarOpen"
@@ -134,6 +131,7 @@
             <a
               *ngFor="let item of navItems.slice(0, 9)"
               [routerLink]="item.path"
+              (click)="closeSidebarOnMobile()"
               routerLinkActive="bg-[#460f79] text-white font-bold shadow-md"
               class="sidebar-link"
               [title]="item.labelKey | translate"
@@ -151,6 +149,7 @@
             <a
               *ngFor="let item of navItems.slice(9)"
               [routerLink]="item.path"
+              (click)="closeSidebarOnMobile()"
               routerLinkActive="bg-[#460f79] text-white font-bold shadow-md"
               class="sidebar-link"
               [title]="item.labelKey | translate"
@@ -165,7 +164,7 @@
       <!-- Bottom Workspace Status Footer -->
       <div *ngIf="sidebarOpen" class="sidebar-footer">
         <div class="flex items-center justify-between font-bold text-[var(--text-main)]">
-          <span>WealthOS Mobile</span>
+          <span>Finora</span>
           <span class="status-dot"></span>
         </div>
           <p class="sidebar-footer__version">v2.4.0 · Secure ledger</p>
@@ -187,7 +186,26 @@
       class="flex flex-col items-center gap-1"
     >
       <app-icon name="home" class="text-xl"></app-icon>
-      <span class="text-[10px] tracking-tight">Home</span>
+      <span class="text-[10px] tracking-tight">Tổng quan</span>
+    </a>
+
+    <a
+      routerLink="/accounts"
+      routerLinkActive="text-[#460f79] font-bold"
+      class="flex flex-col items-center gap-1"
+    >
+      <app-icon name="account_balance" class="text-xl"></app-icon>
+      <span class="text-[10px] tracking-tight">Tài khoản</span>
+    </a>
+
+    <a
+      routerLink="/transactions"
+      [queryParams]="{ entry: '1' }"
+      class="mobile-nav__action"
+      aria-label="Thêm giao dịch"
+    >
+      <span class="mobile-nav__action-icon"><app-icon name="add"></app-icon></span>
+      <span class="text-[10px] tracking-tight">Thêm</span>
     </a>
 
     <a
@@ -196,21 +214,15 @@
       class="flex flex-col items-center gap-1"
     >
       <app-icon name="swap_horiz" class="text-xl"></app-icon>
-      <span class="text-[10px] tracking-tight">Transactions</span>
-    </a>
-
-    <a
-      routerLink="/portfolios"
-      routerLinkActive="text-[#460f79] font-bold"
-      class="flex flex-col items-center gap-1"
-    >
-      <app-icon name="pie_chart" class="text-xl"></app-icon>
-      <span class="text-[10px] tracking-tight">Wealth</span>
+      <span class="text-[10px] tracking-tight">Giao dịch</span>
     </a>
 
     <button
       (click)="toggleSidebar()"
       class="flex flex-col items-center gap-1"
+      [attr.aria-label]="sidebarOpen ? 'Đóng menu' : 'Mở menu'"
+      aria-controls="finora-navigation-drawer"
+      [attr.aria-expanded]="sidebarOpen"
     >
       <app-icon name="menu" class="text-xl"></app-icon>
       <span class="text-[10px] tracking-tight">Menu</span>
@@ -221,6 +233,8 @@
   <div class="toast-stack">
     <article
       *ngFor="let toast of toasts$ | async"
+      [attr.role]="toastRole(toast.type)"
+      aria-atomic="true"
       [ngClass]="[
         'toast-message',
         toastClass(toast.type)
@@ -234,7 +248,7 @@
         type="button"
         class="text-xs opacity-60 hover:opacity-100 p-1 rounded hover:bg-black/5"
         (click)="closeToast(toast.id)"
-        aria-label="Dismiss alert"
+        aria-label="Đóng thông báo"
       >
         <app-icon name="close" class="text-sm"></app-icon>
       </button>

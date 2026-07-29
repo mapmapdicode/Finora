@@ -5,6 +5,7 @@ import { ApiService } from '../../core/services/api.service';
 import { Account, Loan, LoanAccruals, LoanPayment, LoanPaymentRequest, LoanPortfolioSummary, LoanScheduleItem } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { normalizeVndAmount } from '../../shared/money-input';
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 
@@ -72,7 +73,7 @@ export class LoanListComponent implements OnInit {
     const payload = {
       counterparty: this.creationForm.value.counterparty,
       direction: this.creationForm.value.direction,
-      principalInitial: this.creationForm.value.principalInitial,
+      principalInitial: normalizeVndAmount(this.creationForm.value.principalInitial),
       annualRate: this.creationForm.value.annualRate,
 	  dailyRatePerMillion: this.creationForm.value.dailyRatePerMillion,
 	  settlementAccountId: this.creationForm.value.settlementAccountId,
@@ -152,7 +153,7 @@ export class LoanListComponent implements OnInit {
     const loanId = this.paymentForm.value.loanId || this.selectedLoanForPayment;
     if (!loanId || this.paymentForm.invalid) return;
     const payload = {
-      principalAmount: this.paymentForm.value.principalAmount || '0',
+      principalAmount: normalizeVndAmount(this.paymentForm.value.principalAmount) || '0',
       interestAmount: this.paymentForm.value.interestAmount || '0',
       feeAmount: this.paymentForm.value.feeAmount || '0',
       waivedAmount: this.paymentForm.value.waivedAmount || '0',
@@ -181,7 +182,7 @@ export class LoanListComponent implements OnInit {
     if (!this.auth.canMutate) return;
     this.api
       .createLoanPaymentRequest(loanId, {
-        amount: this.requestForm.value.amount || undefined,
+        amount: normalizeVndAmount(this.requestForm.value.amount) || undefined,
         currency: this.requestForm.value.currency || 'VND',
         expiresAt: this.requestForm.value.expiresAt || undefined,
         note: 'Yêu cầu thanh toán QR',
@@ -199,5 +200,15 @@ export class LoanListComponent implements OnInit {
 
   statusText(item: Loan) {
     return item.direction === 'receivable' ? 'Phải thu' : 'Phải trả';
+  }
+
+  loanStatusLabel(status: string | undefined) {
+    const labels: Record<string, string> = {
+      active: 'Đang hiệu lực',
+      overdue: 'Quá hạn',
+      settled: 'Đã tất toán',
+      cancelled: 'Đã huỷ',
+    };
+    return labels[status || ''] || status || 'Chưa xác định';
   }
 }

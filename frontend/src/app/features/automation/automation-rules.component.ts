@@ -21,6 +21,10 @@ export class AutomationRulesComponent implements OnInit {
   editingId: string | null = null;
   statusMessage = '';
   previewResult: unknown = null;
+  rulesLoading = true;
+  saving = false;
+  previewLoading = false;
+  isCreating = false;
   form: FormGroup;
 
   constructor(
@@ -50,18 +54,21 @@ export class AutomationRulesComponent implements OnInit {
   }
 
   reload() {
+    this.rulesLoading = true;
     this.api.listAutomationRules().subscribe({
       next: (items) => {
         this.rules = items;
+        this.rulesLoading = false;
       },
       error: () => {
+        this.rulesLoading = false;
         this.statusMessage = 'Không thể tải danh sách quy tắc.';
       },
     });
   }
 
   submitRule() {
-    if (!this.auth.canMutate) return;
+    if (!this.auth.canMutate || this.saving) return;
     if (this.form.invalid) return;
     const payload = this.form.value;
     if (!payload.contentPattern && !payload.referencePattern && !payload.predicate) {
@@ -84,11 +91,14 @@ export class AutomationRulesComponent implements OnInit {
       maxAmount: payload.maxAmount || '',
     };
 
+    this.saving = true;
     if (this.editingId) {
       this.api.updateAutomationRule(this.editingId, body).subscribe({
         next: () => {
           this.statusMessage = 'Đã cập nhật quy tắc.';
           this.editingId = null;
+          this.isCreating = false;
+          this.saving = false;
           this.form.reset({
             name: '',
             accountId: '',
@@ -107,6 +117,7 @@ export class AutomationRulesComponent implements OnInit {
           this.reload();
         },
         error: () => {
+          this.saving = false;
           this.statusMessage = 'Cập nhật quy tắc thất bại.';
         },
       });
@@ -116,6 +127,8 @@ export class AutomationRulesComponent implements OnInit {
     this.api.createAutomationRule(body).subscribe({
       next: () => {
         this.statusMessage = 'Đã tạo quy tắc mới.';
+        this.isCreating = false;
+        this.saving = false;
         this.form.reset({
           name: '',
           accountId: '',
@@ -134,6 +147,7 @@ export class AutomationRulesComponent implements OnInit {
         this.reload();
       },
       error: () => {
+        this.saving = false;
         this.statusMessage = 'Tạo quy tắc thất bại.';
       },
     });
@@ -142,6 +156,7 @@ export class AutomationRulesComponent implements OnInit {
   beginEdit(rule: BankAutomationRule) {
     if (!this.auth.canMutate) return;
     this.editingId = rule.id;
+    this.isCreating = true;
     this.previewResult = null;
     this.form.patchValue({
       name: rule.name,
@@ -162,6 +177,7 @@ export class AutomationRulesComponent implements OnInit {
 
   cancelEdit() {
     this.editingId = null;
+    this.isCreating = false;
     this.form.reset({
       name: '',
       accountId: '',
@@ -198,17 +214,51 @@ export class AutomationRulesComponent implements OnInit {
   }
 
   preview() {
+    if (this.previewLoading) return;
+    this.previewLoading = true;
     this.api.previewRule({ sample: 20 }).subscribe({
       next: (result) => {
         this.previewResult = result;
+        this.previewLoading = false;
       },
       error: () => {
-        this.statusMessage = 'Không thể preview rule.';
+        this.previewLoading = false;
+        this.statusMessage = 'Không thể xem trước quy tắc.';
       },
     });
   }
 
   directionLabel(direction: string) {
     return direction === 'in' ? 'Tiền vào' : 'Tiền ra';
+  }
+
+  actionLabel(action: string | undefined) {
+    const labels: Record<string, string> = {
+      categorize: 'Phân loại',
+      ignore: 'Bỏ qua',
+      transfer: 'Chuyển khoản',
+      loan_match: 'Khớp trả khoản vay',
+      investment_funding: 'Nạp đầu tư',
+    };
+    return labels[action || ''] || action || 'Chưa xác định';
+  }
+
+  typeLabel(type: string | undefined) {
+    const labels: Record<string, string> = {
+      expense: 'Chi phí',
+      income: 'Thu nhập',
+      loan_payment: 'Trả khoản vay',
+      loan_disbursement: 'Giải ngân khoản vay',
+      investment_funding: 'Nạp đầu tư',
+      valuation_adjustment: 'Điều chỉnh định giá',
+    };
+    return labels[type || ''] || type || 'Chưa xác định';
+  }
+
+  openCreate() {
+    if (!this.auth.canMutate) return;
+    this.cancelEdit();
+    this.isCreating = true;
+    this.statusMessage = '';
   }
 }

@@ -15,10 +15,20 @@ type LoginRequest struct {
 }
 
 type RegisterRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Name     string `json:"name"`
-	UserName string `json:"userName,omitempty"`
+	Email           string `json:"email"`
+	Password        string `json:"password"`
+	ConfirmPassword string `json:"confirmPassword"`
+	Name            string `json:"name"`
+	UserName        string `json:"userName,omitempty"`
+}
+
+type VerifyEmailRequest struct {
+	Email string `json:"email"`
+	Code  string `json:"code"`
+}
+
+type ResendVerificationEmailRequest struct {
+	Email string `json:"email"`
 }
 
 type UserCreateRequest struct {
@@ -58,10 +68,13 @@ type PortfolioSnapshotResponse struct {
 }
 
 type AccountCreateRequest struct {
-	PortfolioID string `json:"portfolioId"`
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Currency    string `json:"currency"`
+	PortfolioID    string `json:"portfolioId"`
+	Name           string `json:"name"`
+	Type           string `json:"type"`
+	Currency       string `json:"currency"`
+	InitialBalance string `json:"initialBalance"`
+	// Balance is retained for older mobile clients that used this field.
+	Balance string `json:"balance"`
 }
 
 type BotTransactionCreateRequest struct {
@@ -180,6 +193,7 @@ type TransferCreateRequest struct {
 
 type LoanCreateRequest struct {
 	PortfolioID         string       `json:"portfolioId"`
+	CustomerID          string       `json:"customerId"`
 	Counterparty        string       `json:"counterparty"`
 	Direction           string       `json:"direction"`
 	PrincipalInitial    string       `json:"principalInitial"`
@@ -192,14 +206,20 @@ type LoanCreateRequest struct {
 	SettlementAccountID string       `json:"settlementAccountId"`
 }
 
+type CustomerCreateRequest struct {
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
+}
+
 type LoanPaymentRequest struct {
-	LoanID     string       `json:"loanId"`
-	Principal  string       `json:"principalAmount"`
-	Interest   string       `json:"interestAmount"`
-	Fee        string       `json:"feeAmount"`
-	Waived     string       `json:"waivedAmount"`
-	OccurredAt FlexibleTime `json:"occurredAt"`
-	AccountID  string       `json:"accountId"`
+	LoanID       string       `json:"loanId"`
+	Principal    string       `json:"principalAmount"`
+	Interest     string       `json:"interestAmount"`
+	InterestDays int          `json:"interestDays"`
+	Fee          string       `json:"feeAmount"`
+	Waived       string       `json:"waivedAmount"`
+	OccurredAt   FlexibleTime `json:"occurredAt"`
+	AccountID    string       `json:"accountId"`
 }
 
 type PropertyCreateRequest struct {

@@ -21,7 +21,7 @@ export const AuthInterceptor: HttpInterceptorFn = (req, next) => {
       statusText: 'Forbidden',
       error: {
         code: 'FORBIDDEN',
-        message: 'This workspace is read-only. Switch to an editable workspace to perform this action.',
+        message: 'Không gian làm việc này chỉ cho phép xem. Hãy chuyển sang không gian có quyền chỉnh sửa để thực hiện thao tác.',
       },
       url: req.url,
     });

@@ -82,11 +82,14 @@ type AuditLog struct {
 
 type User struct {
 	Timestamped
-	Email        string `json:"email"`
-	Name         string `json:"name"`
-	Password     string `json:"-"`
-	BaseCurrency string `json:"baseCurrency,omitempty"`
+	Email           string     `json:"email"`
+	Name            string     `json:"name"`
+	Password        string     `json:"-"`
+	EmailVerifiedAt *time.Time `json:"emailVerifiedAt,omitempty"`
+	BaseCurrency    string     `json:"baseCurrency,omitempty"`
 }
+
+func (u User) IsEmailVerified() bool { return u.EmailVerifiedAt != nil }
 
 type AmountDisplayMode string
 
@@ -165,6 +168,7 @@ type Loan struct {
 	Timestamped
 	UserID           ID            `json:"userId"`
 	PortfolioID      ID            `json:"portfolioId"`
+	CustomerID       ID            `json:"customerId,omitempty"`
 	Counterparty     string        `json:"counterparty"`
 	Direction        LoanDirection `json:"direction"`
 	PrincipalInitial string        `json:"principalInitial"`
@@ -182,6 +186,16 @@ type Loan struct {
 	SettlementAccountID ID     `json:"settlementAccountId,omitempty"`
 }
 
+// Customer is a reusable counterparty owned by one Finora user. Loans retain
+// Counterparty for backwards-compatible display, but link to CustomerID.
+type Customer struct {
+	Timestamped
+	UserID         ID     `json:"userId"`
+	Name           string `json:"name"`
+	NormalizedName string `json:"-"`
+	Phone          string `json:"phone,omitempty"`
+}
+
 type LoanPayment struct {
 	Timestamped
 	UserID        ID        `json:"userId"`
@@ -190,6 +204,7 @@ type LoanPayment struct {
 	TransactionID ID        `json:"transactionId"`
 	Principal     string    `json:"principalAmount"`
 	Interest      string    `json:"interestAmount"`
+	InterestDays  int       `json:"interestDays"`
 	Fee           string    `json:"feeAmount"`
 	Waived        string    `json:"waivedAmount"`
 	OccurredAt    time.Time `json:"occurredAt"`

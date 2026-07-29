@@ -1,39 +1,35 @@
 <section class="max-w-md mx-auto my-16">
   <div class="m3-card p-8 shadow-md">
     <div class="text-center mb-6">
-      <img
-        src="assets/branding/wealthos-logo-01-ascending-w.png"
-        alt="WealthOS Logo"
-        class="h-14 w-auto object-contain mx-auto mb-3 filter drop-shadow-md"
-      />
-      <h2 class="text-2xl font-bold text-[var(--m3-on-surface)] tracking-tight">WealthOS Login</h2>
-      <p class="text-xs text-[var(--m3-on-surface-variant)] mt-1">Sign in to your personal finance & portfolio workspace</p>
+      <div class="brand-mark mx-auto mb-3" aria-hidden="true">F</div>
+      <h2 class="text-2xl font-bold text-[var(--text-main)] tracking-tight">Chào mừng trở lại</h2>
+      <p class="text-xs text-[var(--text-muted)] mt-1">Đăng nhập để quản lý tài chính của bạn</p>
     </div>
 
     <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
       <div>
-        <label class="m3-label block mb-1">Email / Tên đăng nhập</label>
-        <input formControlName="email" class="m3-input" placeholder="thanhoangz hoặc demo@wealthos.vn" />
+        <label class="m3-label block mb-1" for="login-email">Email / Tên đăng nhập</label>
+        <input id="login-email" formControlName="email" class="m3-input" autocomplete="username" placeholder="email@example.com" />
       </div>
 
       <div>
-        <label class="m3-label block mb-1">Password</label>
-        <input formControlName="password" type="password" class="m3-input" placeholder="Enter password" />
+        <label class="m3-label block mb-1" for="login-password">Mật khẩu</label>
+        <input id="login-password" formControlName="password" type="password" class="m3-input" autocomplete="current-password" placeholder="Nhập mật khẩu" />
       </div>
 
-      <button class="m3-btn m3-btn-primary w-full py-2.5 mt-2">
-        <app-icon name="login"></app-icon> Sign In
+      <button type="submit" class="m3-btn m3-btn-primary w-full py-2.5 mt-2">
+        <app-icon name="login"></app-icon> Đăng nhập
       </button>
     </form>
 
-    <p *ngIf="message" class="text-xs text-[var(--m3-danger)] bg-[var(--m3-danger-container)] p-3 rounded-xl mt-4 text-center">
+    <p *ngIf="message" role="alert" aria-live="assertive" class="text-xs text-[var(--m3-danger)] bg-[var(--m3-danger-container)] p-3 rounded-xl mt-4 text-center">
       {{ message }}
     </p>
 
     <div class="mt-6 pt-4 border-t border-[var(--m3-outline)] text-center">
-      <p class="text-xs text-[var(--m3-on-surface-variant)]">
-        Don't have an account?
-        <a class="text-[var(--m3-primary)] font-semibold hover:underline ml-1" routerLink="/register">Register new workspace</a>
+      <p class="text-xs text-[var(--text-muted)]">
+        Chưa có tài khoản?
+        <a class="text-[var(--m3-primary)] font-semibold hover:underline ml-1" routerLink="/register">Tạo không gian mới</a>
       </p>
     </div>
   </div>

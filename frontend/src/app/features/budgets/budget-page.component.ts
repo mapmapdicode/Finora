@@ -8,6 +8,7 @@ import { AuthService } from '../../core/services/auth.service';
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { normalizeVndAmount } from '../../shared/money-input';
 
 @Component({
   selector: 'app-budget-page',
@@ -18,8 +19,11 @@ import { IconComponent } from '../../shared/icons/icon.component';
 export class BudgetPageComponent implements OnInit {
   form!: FormGroup;
   summary: BudgetPeriod | null = null;
-  loading = false;
+  loading = true;
+  saving = false;
+  isCreating = false;
   statusMessage = '';
+  loadError = '';
 
   constructor(
     private fb: FormBuilder,
@@ -49,41 +53,57 @@ export class BudgetPageComponent implements OnInit {
 
   loadBudget() {
     const period = (this.form.value.period || '').trim();
-    if (!period) return;
+    if (!/^\d{4}-\d{2}$/.test(period)) {
+      this.loadError = 'Chọn kỳ ngân sách hợp lệ theo tháng.';
+      return;
+    }
     this.loading = true;
-    this.statusMessage = 'Đang tải budget...';
+    this.loadError = '';
     this.api.getBudget(period).subscribe({
       next: (res) => {
         this.summary = res;
         this.loading = false;
-        this.statusMessage = '';
       },
       error: () => {
         this.loading = false;
         this.summary = { period, workspaceId: '', asOfAt: '', rows: [] };
-        this.statusMessage = 'Không lấy được budget của kỳ này.';
+        this.loadError = 'Không thể tải ngân sách của kỳ này.';
       },
     });
   }
 
   submit() {
-    if (!this.auth.canMutate) return;
+    if (!this.auth.canMutate || this.saving) return;
     if (this.form.invalid) return;
     const period = (this.form.value.period || '').trim();
     const payload = {
       period,
       categoryId: this.form.value.categoryId || 'uncategorized',
-      limit: this.form.value.limit || '0',
+      limit: normalizeVndAmount(this.form.value.limit) || '0',
     };
 
+    this.saving = true;
     this.api.upsertBudget(period, payload).subscribe({
       next: () => {
         this.statusMessage = 'Đã lưu giới hạn chi tiêu.';
+        this.saving = false;
+        this.isCreating = false;
         this.router.navigateByUrl(`/budgets/${encodeURIComponent(period)}`).then(() => this.loadBudget());
       },
       error: () => {
-        this.statusMessage = 'Lưu budget thất bại.';
+        this.saving = false;
+        this.statusMessage = 'Không thể lưu giới hạn chi tiêu.';
       },
     });
+  }
+
+  openCreate() {
+    if (!this.auth.canMutate) return;
+    this.isCreating = true;
+    this.statusMessage = '';
+  }
+
+  closeCreate() {
+    if (!this.saving) this.isCreating = false;
   }
 }

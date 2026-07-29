@@ -8,11 +8,14 @@ import (
 
 type Store interface {
 	SeedDemoUser(email, name, password string) domain.ID
+	CreateUser(input domain.User) (domain.User, error)
 	CreateAuditLog(input domain.AuditLog) (domain.AuditLog, error)
 	ListAuditLogs(userID domain.ID) []domain.AuditLog
 	GetUser(id domain.ID) (*domain.User, bool)
 	GetUserByID(id domain.ID) (*domain.User, bool)
 	GetUserByEmail(email string) (*domain.User, bool)
+	CreateEmailVerificationToken(userID domain.ID, tokenHash string, expiresAt time.Time) error
+	VerifyEmail(email, tokenHash string, now time.Time) (*domain.User, error)
 	GetUserSettings(userID domain.ID) (*domain.UserSettings, error)
 	UpsertUserSettings(settings domain.UserSettings) (*domain.UserSettings, error)
 	EnsureUserPortfolio(name, baseCurrency string, userID domain.ID) (*domain.User, error)
@@ -40,6 +43,10 @@ type Store interface {
 
 	CreateTransfer(input domain.Transfer) (domain.Transfer, error)
 
+	CreateCustomer(input domain.Customer) (domain.Customer, error)
+	ListCustomers(userID domain.ID, query string, limit int) []domain.Customer
+	GetCustomer(id domain.ID) (*domain.Customer, bool)
+
 	GetLoan(id domain.ID) (*domain.Loan, bool)
 	UpdateLoan(id domain.ID, mutate func(*domain.Loan)) bool
 	CreateLoan(input domain.Loan) (domain.Loan, error)
@@ -47,6 +54,9 @@ type Store interface {
 	ListLoanPayments(userID domain.ID, loanID domain.ID) []domain.LoanPayment
 
 	CreateLoanPayment(input domain.LoanPayment) (domain.LoanPayment, error)
+	// SettleLoanPayment persists the ledger entry, loan balance change and payment
+	// record as one unit. Implementations must leave all three unchanged on error.
+	SettleLoanPayment(loanID domain.ID, expectedPrincipalBalance, nextPrincipalBalance string, nextStatus domain.LoanStatus, payment domain.LoanPayment, ledger domain.Transaction) (domain.LoanPayment, error)
 
 	GetProperty(id domain.ID) (*domain.Property, bool)
 	CreateProperty(input domain.Property) (domain.Property, error)

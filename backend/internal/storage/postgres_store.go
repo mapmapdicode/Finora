@@ -36,14 +36,32 @@ func (s *PostgresStore) SeedDemoUser(email, name string, password string) domain
 	}
 
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO users(email, name, password_hash)
-		VALUES($1, $2, $3)
+		INSERT INTO users(email, name, password_hash, email_verified_at)
+		VALUES($1, $2, $3, now())
 		RETURNING id
 	`, email, name, password).Scan(&id)
 	if err != nil {
 		return ""
 	}
 	return id
+}
+
+func (s *PostgresStore) CreateUser(input domain.User) (domain.User, error) {
+	var out domain.User
+	err := s.pool.QueryRow(context.Background(), `
+		INSERT INTO users(email, name, password_hash)
+		VALUES (LOWER(TRIM($1)), $2, $3)
+		RETURNING id, email, name, password_hash, email_verified_at, created_at, updated_at
+	`, input.Email, input.Name, input.Password).Scan(
+		&out.ID, &out.Email, &out.Name, &out.Password, &out.EmailVerifiedAt, &out.CreatedAt, &out.UpdatedAt,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "users_email_key") {
+			return domain.User{}, errors.New("email already exists")
+		}
+		return domain.User{}, err
+	}
+	return out, nil
 }
 
 func (s *PostgresStore) CreateAuditLog(input domain.AuditLog) (domain.AuditLog, error) {
@@ -109,11 +127,11 @@ func (s *PostgresStore) ListAuditLogs(userID domain.ID) []domain.AuditLog {
 
 func (s *PostgresStore) GetUser(id domain.ID) (*domain.User, bool) {
 	row := s.pool.QueryRow(context.Background(), `
-		SELECT id, email, name, password_hash, created_at, updated_at
+		SELECT id, email, name, password_hash, email_verified_at, created_at, updated_at
 		FROM users WHERE id=$1`, id)
 	var u domain.User
 	var pass string
-	if err := row.Scan(&u.ID, &u.Email, &u.Name, &pass, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Email, &u.Name, &pass, &u.EmailVerifiedAt, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, false
 	}
 	u.Password = pass
@@ -135,7 +153,7 @@ func (s *PostgresStore) GetUserByEmail(email string) (*domain.User, bool) {
 	}
 
 	row := s.pool.QueryRow(context.Background(), `
-		SELECT id, email, name, password_hash, created_at, updated_at
+		SELECT id, email, name, password_hash, email_verified_at, created_at, updated_at
 		FROM users
 		WHERE LOWER(TRIM(email)) = $1
 		   OR LOWER(TRIM(name)) = $1
@@ -143,11 +161,52 @@ func (s *PostgresStore) GetUserByEmail(email string) (*domain.User, bool) {
 		LIMIT 1`, cleanEmail, prefix)
 	var u domain.User
 	var pass string
-	if err := row.Scan(&u.ID, &u.Email, &u.Name, &pass, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Email, &u.Name, &pass, &u.EmailVerifiedAt, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, false
 	}
 	u.Password = pass
 	return &u, true
+}
+
+func (s *PostgresStore) CreateEmailVerificationToken(userID domain.ID, tokenHash string, expiresAt time.Time) error {
+	tx, err := s.pool.Begin(context.Background())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err := tx.Exec(context.Background(), `DELETE FROM email_verification_tokens WHERE user_id=$1 AND used_at IS NULL`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(context.Background(), `INSERT INTO email_verification_tokens(user_id, token_hash, expires_at) VALUES($1, $2, $3)`, userID, tokenHash, expiresAt); err != nil {
+		return err
+	}
+	return tx.Commit(context.Background())
+}
+
+func (s *PostgresStore) VerifyEmail(email, tokenHash string, at time.Time) (*domain.User, error) {
+	tx, err := s.pool.Begin(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	var user domain.User
+	err = tx.QueryRow(context.Background(), `
+		UPDATE users u SET email_verified_at=$3, updated_at=$3
+		FROM email_verification_tokens t
+		WHERE t.user_id=u.id AND LOWER(TRIM(u.email))=LOWER(TRIM($1))
+		  AND t.token_hash=$2 AND t.used_at IS NULL AND t.expires_at>$3
+		RETURNING u.id, u.email, u.name, u.password_hash, u.email_verified_at, u.created_at, u.updated_at
+	`, email, tokenHash, at.UTC()).Scan(&user.ID, &user.Email, &user.Name, &user.Password, &user.EmailVerifiedAt, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		return nil, errors.New("verification code is invalid or expired")
+	}
+	if _, err := tx.Exec(context.Background(), `UPDATE email_verification_tokens SET used_at=$2 WHERE token_hash=$1`, tokenHash, at.UTC()); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(context.Background()); err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (s *PostgresStore) GetUserSettings(userID domain.ID) (*domain.UserSettings, error) {
@@ -458,8 +517,13 @@ func (s *PostgresStore) ListTransactions(userID domain.ID, accountID domain.ID) 
 
 func (s *PostgresStore) CreateTransfer(input domain.Transfer) (domain.Transfer, error) {
 	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return domain.Transfer{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	var out domain.Transfer
-	err := s.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO transfers(user_id, from_account_id, to_account_id, amount, currency, note, occurred_at)
 		VALUES($1, $2, $3, CAST($4 as NUMERIC), $5, $6, $7)
 		RETURNING id, user_id, from_account_id, to_account_id, amount::text, currency, note, occurred_at, created_at, updated_at
@@ -469,16 +533,87 @@ func (s *PostgresStore) CreateTransfer(input domain.Transfer) (domain.Transfer, 
 	if err != nil {
 		return domain.Transfer{}, err
 	}
+	for _, entry := range []domain.Transaction{
+		{UserID: input.UserID, AccountID: input.FromAccountID, Type: domain.TransactionTypeTransfer, Amount: input.Amount, Currency: defaultCurrency(input.Currency), Note: "internal transfer - out: " + input.Note, OccurredAt: input.OccurredAt, Status: domain.TransactionStatusPosted, Source: "transfer"},
+		{UserID: input.UserID, AccountID: input.ToAccountID, Type: domain.TransactionTypeTransfer, Amount: input.Amount, Currency: defaultCurrency(input.Currency), Note: "internal transfer - in: " + input.Note, OccurredAt: input.OccurredAt, Status: domain.TransactionStatusPosted, Source: "transfer"},
+	} {
+		if _, err := tx.Exec(ctx, `INSERT INTO transactions(user_id, account_id, name, type, amount, currency, note, occurred_at, status, source) VALUES($1,$2,'',$3,CAST($4 AS NUMERIC),$5,$6,$7,$8,$9)`, entry.UserID, entry.AccountID, entry.Type, entry.Amount, entry.Currency, entry.Note, entry.OccurredAt.UTC(), entry.Status, entry.Source); err != nil {
+			return domain.Transfer{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Transfer{}, err
+	}
 	return out, nil
+}
+
+func (s *PostgresStore) CreateCustomer(input domain.Customer) (domain.Customer, error) {
+	input.Name = strings.TrimSpace(input.Name)
+	if input.UserID == "" || input.Name == "" {
+		return domain.Customer{}, errors.New("customer name is required")
+	}
+	input.NormalizedName = normalizeCustomerName(input.Name)
+	input.Phone = strings.TrimSpace(input.Phone)
+	var out domain.Customer
+	err := s.pool.QueryRow(context.Background(), `
+		INSERT INTO customers(user_id, name, normalized_name, phone)
+		VALUES($1, $2, $3, NULLIF($4, ''))
+		ON CONFLICT (user_id, normalized_name) DO UPDATE
+		SET phone = COALESCE(NULLIF(EXCLUDED.phone, ''), customers.phone), updated_at = now()
+		RETURNING id, user_id, name, normalized_name, COALESCE(phone, ''), created_at, updated_at
+	`, input.UserID, input.Name, input.NormalizedName, input.Phone).Scan(
+		&out.ID, &out.UserID, &out.Name, &out.NormalizedName, &out.Phone, &out.CreatedAt, &out.UpdatedAt,
+	)
+	if err != nil {
+		return domain.Customer{}, err
+	}
+	return out, nil
+}
+
+func (s *PostgresStore) ListCustomers(userID domain.ID, query string, limit int) []domain.Customer {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	needle := normalizeCustomerName(query)
+	rows, err := s.pool.Query(context.Background(), `
+		SELECT id, user_id, name, normalized_name, COALESCE(phone, ''), created_at, updated_at
+		FROM customers
+		WHERE user_id=$1 AND ($2='' OR normalized_name LIKE '%' || $2 || '%' OR phone LIKE '%' || $3 || '%')
+		ORDER BY updated_at DESC LIMIT $4
+	`, userID, needle, strings.TrimSpace(query), limit)
+	if err != nil {
+		return []domain.Customer{}
+	}
+	defer rows.Close()
+	out := make([]domain.Customer, 0)
+	for rows.Next() {
+		var customer domain.Customer
+		if rows.Scan(&customer.ID, &customer.UserID, &customer.Name, &customer.NormalizedName, &customer.Phone, &customer.CreatedAt, &customer.UpdatedAt) == nil {
+			out = append(out, customer)
+		}
+	}
+	return out
+}
+
+func (s *PostgresStore) GetCustomer(id domain.ID) (*domain.Customer, bool) {
+	var customer domain.Customer
+	err := s.pool.QueryRow(context.Background(), `
+		SELECT id, user_id, name, normalized_name, COALESCE(phone, ''), created_at, updated_at
+		FROM customers WHERE id=$1
+	`, id).Scan(&customer.ID, &customer.UserID, &customer.Name, &customer.NormalizedName, &customer.Phone, &customer.CreatedAt, &customer.UpdatedAt)
+	if err != nil {
+		return nil, false
+	}
+	return &customer, true
 }
 
 func (s *PostgresStore) GetLoan(id domain.ID) (*domain.Loan, bool) {
 	row := s.pool.QueryRow(context.Background(), `
-		SELECT id, user_id, portfolio_id, counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text,
+		SELECT id, user_id, portfolio_id, COALESCE(customer_id::text, ''), counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text,
 		       COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
 		FROM loans WHERE id=$1`, id)
 	var l domain.Loan
-	if err := row.Scan(&l.ID, &l.UserID, &l.PortfolioID, &l.Counterparty, &l.Direction,
+	if err := row.Scan(&l.ID, &l.UserID, &l.PortfolioID, &l.CustomerID, &l.Counterparty, &l.Direction,
 		&l.PrincipalInitial, &l.PrincipalBalance, &l.AnnualRate, &l.DayCountBasis, &l.StartAt, &l.DueAt,
 		&l.Status, &l.InterestCompound, &l.DailyRatePerMillion, &l.SettlementAccountID, &l.CreatedAt, &l.UpdatedAt); err != nil {
 		return nil, false
@@ -501,17 +636,18 @@ func (s *PostgresStore) UpdateLoan(id domain.ID, mutate func(*domain.Loan)) bool
 		    annual_rate=CAST($4 AS NUMERIC),
 		    day_count_basis=$5,
 		    direction=$6,
-		    counterparty=$7,
-		    status=$8,
-		    interest_compounding=$9,
-		    start_at=$10,
-		    due_at=$11,
-		    daily_rate_per_million=CAST($12 AS NUMERIC),
-		    settlement_account_id=NULLIF($13, '')::UUID,
+		    customer_id=NULLIF($7, '')::UUID,
+		    counterparty=$8,
+		    status=$9,
+		    interest_compounding=$10,
+		    start_at=$11,
+		    due_at=$12,
+		    daily_rate_per_million=CAST($13 AS NUMERIC),
+		    settlement_account_id=NULLIF($14, '')::UUID,
 		    updated_at=now()
 		WHERE id=$1
 	`, id, mutated.PrincipalBalance, mutated.PrincipalInitial, mutated.AnnualRate, mutated.DayCountBasis, mutated.Direction,
-		mutated.Counterparty, mutated.Status, mutated.InterestCompound, mutated.StartAt, mutated.DueAt, mutated.DailyRatePerMillion, mutated.SettlementAccountID)
+		mutated.CustomerID, mutated.Counterparty, mutated.Status, mutated.InterestCompound, mutated.StartAt, mutated.DueAt, mutated.DailyRatePerMillion, mutated.SettlementAccountID)
 	return err == nil
 }
 
@@ -522,12 +658,12 @@ func (s *PostgresStore) CreateLoan(input domain.Loan) (domain.Loan, error) {
 	}
 	var out domain.Loan
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO loans(user_id, portfolio_id, counterparty, direction, principal_initial, principal_balance, annual_rate, day_count_basis, start_at, due_at, status, interest_compounding, daily_rate_per_million, settlement_account_id)
-		VALUES($1, $2, $3, $4, CAST($5 AS NUMERIC), CAST($6 AS NUMERIC), CAST($7 AS NUMERIC), $8, $9, $10, $11, $12, CAST($13 AS NUMERIC), NULLIF($14, '')::UUID)
-		RETURNING id, user_id, portfolio_id, counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text, COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
-	`, input.UserID, nilUUID(input.PortfolioID), input.Counterparty, input.Direction, input.PrincipalInitial, input.PrincipalBalance,
+		INSERT INTO loans(user_id, portfolio_id, customer_id, counterparty, direction, principal_initial, principal_balance, annual_rate, day_count_basis, start_at, due_at, status, interest_compounding, daily_rate_per_million, settlement_account_id)
+		VALUES($1, $2, NULLIF($3, '')::UUID, $4, $5, CAST($6 AS NUMERIC), CAST($7 AS NUMERIC), CAST($8 AS NUMERIC), $9, $10, $11, $12, $13, CAST($14 AS NUMERIC), NULLIF($15, '')::UUID)
+		RETURNING id, user_id, portfolio_id, COALESCE(customer_id::text, ''), counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text, COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
+	`, input.UserID, nilUUID(input.PortfolioID), input.CustomerID, input.Counterparty, input.Direction, input.PrincipalInitial, input.PrincipalBalance,
 		input.AnnualRate, nullString(input.DayCountBasis), input.StartAt, input.DueAt, defaultLoanStatus(input.Status), input.InterestCompound, input.DailyRatePerMillion, input.SettlementAccountID).Scan(
-		&out.ID, &out.UserID, &out.PortfolioID, &out.Counterparty, &out.Direction,
+		&out.ID, &out.UserID, &out.PortfolioID, &out.CustomerID, &out.Counterparty, &out.Direction,
 		&out.PrincipalInitial, &out.PrincipalBalance, &out.AnnualRate, &out.DayCountBasis,
 		&out.StartAt, &out.DueAt, &out.Status, &out.InterestCompound, &out.DailyRatePerMillion, &out.SettlementAccountID, &out.CreatedAt, &out.UpdatedAt,
 	)
@@ -539,7 +675,7 @@ func (s *PostgresStore) CreateLoan(input domain.Loan) (domain.Loan, error) {
 
 func (s *PostgresStore) ListLoans(userID domain.ID) []domain.Loan {
 	rows, err := s.pool.Query(context.Background(), `
-		SELECT id, user_id, portfolio_id, counterparty, direction, principal_initial::text, principal_balance::text,
+		SELECT id, user_id, portfolio_id, COALESCE(customer_id::text, ''), counterparty, direction, principal_initial::text, principal_balance::text,
 		       annual_rate::text, COALESCE(day_count_basis,''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
 		FROM loans WHERE user_id=$1 ORDER BY created_at DESC`, userID)
 	if err != nil {
@@ -549,7 +685,7 @@ func (s *PostgresStore) ListLoans(userID domain.ID) []domain.Loan {
 	out := make([]domain.Loan, 0)
 	for rows.Next() {
 		var l domain.Loan
-		if err := rows.Scan(&l.ID, &l.UserID, &l.PortfolioID, &l.Counterparty, &l.Direction, &l.PrincipalInitial, &l.PrincipalBalance,
+		if err := rows.Scan(&l.ID, &l.UserID, &l.PortfolioID, &l.CustomerID, &l.Counterparty, &l.Direction, &l.PrincipalInitial, &l.PrincipalBalance,
 			&l.AnnualRate, &l.DayCountBasis, &l.StartAt, &l.DueAt, &l.Status, &l.InterestCompound, &l.DailyRatePerMillion, &l.SettlementAccountID, &l.CreatedAt, &l.UpdatedAt); err == nil {
 			out = append(out, l)
 		}
@@ -561,11 +697,11 @@ func (s *PostgresStore) CreateLoanPayment(input domain.LoanPayment) (domain.Loan
 	ctx := context.Background()
 	var out domain.LoanPayment
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO loan_payments(user_id, loan_id, account_id, transaction_id, principal_amount, interest_amount, fee_amount, waived_amount, occurred_at)
-		VALUES($1, $2, $3, NULLIF($4, ''), CAST($5 AS NUMERIC), CAST($6 AS NUMERIC), CAST($7 AS NUMERIC), CAST($8 AS NUMERIC), $9)
-		RETURNING id, user_id, loan_id, account_id, COALESCE(transaction_id::text, ''), principal_amount::text, interest_amount::text, fee_amount::text, waived_amount::text, occurred_at, created_at, updated_at
-	`, input.UserID, input.LoanID, nilUUID(input.AccountID), input.TransactionID, input.Principal, input.Interest, input.Fee, input.Waived, input.OccurredAt.UTC()).Scan(
-		&out.ID, &out.UserID, &out.LoanID, &out.AccountID, &out.TransactionID, &out.Principal, &out.Interest, &out.Fee, &out.Waived,
+		INSERT INTO loan_payments(user_id, loan_id, account_id, transaction_id, principal_amount, interest_amount, interest_days, fee_amount, waived_amount, occurred_at)
+		VALUES($1, $2, $3, NULLIF($4, ''), CAST($5 AS NUMERIC), CAST($6 AS NUMERIC), $7, CAST($8 AS NUMERIC), CAST($9 AS NUMERIC), $10)
+		RETURNING id, user_id, loan_id, account_id, COALESCE(transaction_id::text, ''), principal_amount::text, interest_amount::text, interest_days, fee_amount::text, waived_amount::text, occurred_at, created_at, updated_at
+	`, input.UserID, input.LoanID, nilUUID(input.AccountID), input.TransactionID, input.Principal, input.Interest, input.InterestDays, input.Fee, input.Waived, input.OccurredAt.UTC()).Scan(
+		&out.ID, &out.UserID, &out.LoanID, &out.AccountID, &out.TransactionID, &out.Principal, &out.Interest, &out.InterestDays, &out.Fee, &out.Waived,
 		&out.OccurredAt, &out.CreatedAt, &out.UpdatedAt,
 	)
 	if err != nil {
@@ -574,9 +710,48 @@ func (s *PostgresStore) CreateLoanPayment(input domain.LoanPayment) (domain.Loan
 	return out, nil
 }
 
+func (s *PostgresStore) SettleLoanPayment(loanID domain.ID, expectedPrincipalBalance, nextPrincipalBalance string, nextStatus domain.LoanStatus, payment domain.LoanPayment, ledger domain.Transaction) (domain.LoanPayment, error) {
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return domain.LoanPayment{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var transactionID domain.ID
+	err = tx.QueryRow(ctx, `
+		INSERT INTO transactions(user_id, account_id, portfolio_id, name, type, amount, currency, note, occurred_at, status, source)
+		VALUES($1,$2,NULLIF($3,'')::UUID,'',$4,CAST($5 AS NUMERIC),$6,$7,$8,$9,$10)
+		RETURNING id`, ledger.UserID, ledger.AccountID, ledger.PortfolioID, ledger.Type, ledger.Amount, ledger.Currency, ledger.Note, ledger.OccurredAt.UTC(), ledger.Status, ledger.Source).Scan(&transactionID)
+	if err != nil {
+		return domain.LoanPayment{}, err
+	}
+	result, err := tx.Exec(ctx, `
+		UPDATE loans SET principal_balance=CAST($3 AS NUMERIC), status=$4, updated_at=now()
+		WHERE id=$1 AND principal_balance=CAST($2 AS NUMERIC)`, loanID, expectedPrincipalBalance, nextPrincipalBalance, nextStatus)
+	if err != nil {
+		return domain.LoanPayment{}, err
+	}
+	if result.RowsAffected() != 1 {
+		return domain.LoanPayment{}, errors.New("loan balance changed; retry payment")
+	}
+	var out domain.LoanPayment
+	err = tx.QueryRow(ctx, `
+		INSERT INTO loan_payments(user_id, loan_id, account_id, transaction_id, principal_amount, interest_amount, interest_days, fee_amount, waived_amount, occurred_at)
+		VALUES($1,$2,$3,$4,CAST($5 AS NUMERIC),CAST($6 AS NUMERIC),$7,CAST($8 AS NUMERIC),CAST($9 AS NUMERIC),$10)
+		RETURNING id,user_id,loan_id,account_id,transaction_id::text,principal_amount::text,interest_amount::text,interest_days,fee_amount::text,waived_amount::text,occurred_at,created_at,updated_at`,
+		payment.UserID, loanID, payment.AccountID, transactionID, payment.Principal, payment.Interest, payment.InterestDays, payment.Fee, payment.Waived, payment.OccurredAt.UTC()).Scan(&out.ID, &out.UserID, &out.LoanID, &out.AccountID, &out.TransactionID, &out.Principal, &out.Interest, &out.InterestDays, &out.Fee, &out.Waived, &out.OccurredAt, &out.CreatedAt, &out.UpdatedAt)
+	if err != nil {
+		return domain.LoanPayment{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.LoanPayment{}, err
+	}
+	return out, nil
+}
+
 func (s *PostgresStore) ListLoanPayments(userID domain.ID, loanID domain.ID) []domain.LoanPayment {
 	query := `
-		SELECT id, user_id, loan_id, account_id, COALESCE(transaction_id::text, ''), principal_amount::text, interest_amount::text, fee_amount::text, waived_amount::text, occurred_at, created_at, updated_at
+		SELECT id, user_id, loan_id, account_id, COALESCE(transaction_id::text, ''), principal_amount::text, interest_amount::text, interest_days, fee_amount::text, waived_amount::text, occurred_at, created_at, updated_at
 		FROM loan_payments
 		WHERE user_id=$1`
 	args := []any{userID}
@@ -593,7 +768,7 @@ func (s *PostgresStore) ListLoanPayments(userID domain.ID, loanID domain.ID) []d
 	out := make([]domain.LoanPayment, 0)
 	for rows.Next() {
 		var p domain.LoanPayment
-		if err := rows.Scan(&p.ID, &p.UserID, &p.LoanID, &p.AccountID, &p.TransactionID, &p.Principal, &p.Interest, &p.Fee, &p.Waived, &p.OccurredAt, &p.CreatedAt, &p.UpdatedAt); err == nil {
+		if err := rows.Scan(&p.ID, &p.UserID, &p.LoanID, &p.AccountID, &p.TransactionID, &p.Principal, &p.Interest, &p.InterestDays, &p.Fee, &p.Waived, &p.OccurredAt, &p.CreatedAt, &p.UpdatedAt); err == nil {
 			out = append(out, p)
 		}
 	}
@@ -1499,11 +1674,11 @@ func (s *PostgresStore) CreateAssistantCommand(input domain.AssistantCommand) (d
 		input.ApprovalExpiresAt = time.Now().UTC().Add(10 * time.Minute)
 	}
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO assistant_commands(user_id, user_id, command, status, plan, approval_id, approval_expires_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7)
-		RETURNING id, user_id, user_id, command, status, plan, approval_id, approval_expires_at, approval_used_at, created_at, updated_at
-	`, input.UserID, input.UserID, input.Command, input.Status, input.Plan, input.ApprovalID, nullTime(input.ApprovalExpiresAt)).Scan(
-		&out.ID, &out.UserID, &out.UserID, &out.Command, &out.Status, &out.Plan,
+		INSERT INTO assistant_commands(user_id, command, status, plan, approval_id, approval_expires_at)
+		VALUES($1,$2,$3,$4,$5,$6)
+		RETURNING id, user_id, command, status, plan, approval_id, approval_expires_at, approval_used_at, created_at, updated_at
+	`, input.UserID, input.Command, input.Status, input.Plan, input.ApprovalID, nullTime(input.ApprovalExpiresAt)).Scan(
+		&out.ID, &out.UserID, &out.Command, &out.Status, &out.Plan,
 		&out.ApprovalID, &out.ApprovalExpiresAt, &out.ApprovalUsedAt, &out.CreatedAt, &out.UpdatedAt,
 	)
 	return out, err
@@ -1511,10 +1686,10 @@ func (s *PostgresStore) CreateAssistantCommand(input domain.AssistantCommand) (d
 
 func (s *PostgresStore) GetAssistantCommand(id domain.ID) (*domain.AssistantCommand, bool) {
 	row := s.pool.QueryRow(context.Background(), `
-		SELECT id, user_id, user_id, command, status, plan, approval_id, approval_expires_at, approval_used_at, created_at, updated_at
+		SELECT id, user_id, command, status, plan, approval_id, approval_expires_at, approval_used_at, created_at, updated_at
 		FROM assistant_commands WHERE id=$1`, id)
 	var c domain.AssistantCommand
-	if err := row.Scan(&c.ID, &c.UserID, &c.UserID, &c.Command, &c.Status, &c.Plan,
+	if err := row.Scan(&c.ID, &c.UserID, &c.Command, &c.Status, &c.Plan,
 		&c.ApprovalID, &c.ApprovalExpiresAt, &c.ApprovalUsedAt, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return nil, false
 	}
@@ -1523,7 +1698,7 @@ func (s *PostgresStore) GetAssistantCommand(id domain.ID) (*domain.AssistantComm
 
 func (s *PostgresStore) ListAssistantCommands(userID domain.ID) []domain.AssistantCommand {
 	rows, err := s.pool.Query(context.Background(), `
-		SELECT id, user_id, user_id, command, status, plan, approval_id, approval_expires_at, approval_used_at, created_at, updated_at
+		SELECT id, user_id, command, status, plan, approval_id, approval_expires_at, approval_used_at, created_at, updated_at
 		FROM assistant_commands WHERE user_id=$1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return []domain.AssistantCommand{}
@@ -1532,7 +1707,7 @@ func (s *PostgresStore) ListAssistantCommands(userID domain.ID) []domain.Assista
 	out := make([]domain.AssistantCommand, 0)
 	for rows.Next() {
 		var c domain.AssistantCommand
-		if err := rows.Scan(&c.ID, &c.UserID, &c.UserID, &c.Command, &c.Status, &c.Plan, &c.ApprovalID, &c.ApprovalExpiresAt, &c.ApprovalUsedAt, &c.CreatedAt, &c.UpdatedAt); err == nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Command, &c.Status, &c.Plan, &c.ApprovalID, &c.ApprovalExpiresAt, &c.ApprovalUsedAt, &c.CreatedAt, &c.UpdatedAt); err == nil {
 			out = append(out, c)
 		}
 	}
@@ -1552,10 +1727,10 @@ func (s *PostgresStore) UpdateAssistantCommand(id domain.ID, mutate func(*domain
 	mutate(&cp)
 	_, err := s.pool.Exec(ctx, `
 		UPDATE assistant_commands
-		SET user_id=$2, user_id=$3, command=$4, status=$5, plan=$6,
-			approval_id=$7, approval_expires_at=$8, approval_used_at=$9, updated_at=now()
+		SET user_id=$2, command=$3, status=$4, plan=$5,
+			approval_id=$6, approval_expires_at=$7, approval_used_at=$8, updated_at=now()
 		WHERE id=$1
-	`, id, cp.UserID, cp.UserID, cp.Command, cp.Status, cp.Plan,
+	`, id, cp.UserID, cp.Command, cp.Status, cp.Plan,
 		cp.ApprovalID, nullTime(cp.ApprovalExpiresAt), nullTimePtr(cp.ApprovalUsedAt))
 	if err != nil {
 		return nil, err

@@ -9,12 +9,14 @@
     <!-- Filters & Action Bar -->
     <div class="flex flex-wrap items-center gap-3 bg-[var(--bg-surface)] p-2 rounded-xl border border-[var(--border-subtle)]">
       <div class="flex items-center gap-2 px-2 text-xs">
-        <span class="text-[var(--text-muted)] font-semibold">Action:</span>
+        <span class="text-[var(--text-muted)] font-semibold">Hành động:</span>
         <select
+          id="audit-action-filter"
+          aria-label="Lọc theo hành động"
           class="w-select w-select-sm text-xs"
           (change)="onActionFilterChange($event)"
         >
-          <option value="">All Actions</option>
+          <option value="">Tất cả hành động</option>
           @for (action of uniqueActions(); track action) {
             <option [value]="action">{{ action }}</option>
           }
@@ -24,12 +26,14 @@
       <div class="h-4 w-px bg-[var(--border-strong)]"></div>
 
       <div class="flex items-center gap-2 px-2 text-xs">
-        <span class="text-[var(--text-muted)] font-semibold">Target:</span>
+        <span class="text-[var(--text-muted)] font-semibold">Đối tượng:</span>
         <select
+          id="audit-target-filter"
+          aria-label="Lọc theo đối tượng"
           class="w-select w-select-sm text-xs"
           (change)="onTargetFilterChange($event)"
         >
-          <option value="">All Targets</option>
+          <option value="">Tất cả đối tượng</option>
           @for (target of uniqueTargets(); track target) {
             <option [value]="target">{{ target }}</option>
           }
@@ -47,7 +51,7 @@
   </div>
 
   <div *ngIf="loading" class="p-8 text-center text-xs text-[var(--text-muted)] flex items-center justify-center gap-2 w-card">
-    <app-icon name="history" class="animate-spin"></app-icon> Loading audit log journal...
+    <app-icon name="history" class="animate-spin"></app-icon> Đang tải nhật ký hoạt động…
   </div>
 
   <div *ngIf="error" class="p-4 rounded-xl bg-rose-50 text-rose-700 text-xs border border-rose-200 font-medium">
@@ -59,11 +63,11 @@
     <div class="m3-card-header">
       <div>
         <h3 class="m3-card-title flex items-center gap-2">
-          <app-icon name="history" class="text-[var(--accent-primary)]"></app-icon> Security Audit Events
+          <app-icon name="history" class="text-[var(--accent-primary)]"></app-icon> Nhật ký bảo mật
         </h3>
-        <p class="m3-card-subtitle">Showing {{ filteredLogs.length }} recorded events</p>
+        <p class="m3-card-subtitle">{{ filteredLogs.length }} sự kiện đã ghi nhận</p>
       </div>
-      <span class="w-badge w-badge-neutral">{{ filteredLogs.length }} Events</span>
+      <span class="w-badge w-badge-neutral">{{ filteredLogs.length }} sự kiện</span>
     </div>
 
     <!-- Empty State -->
@@ -71,22 +75,22 @@
       <div class="w-empty-icon">
         <app-icon name="history"></app-icon>
       </div>
-      <p class="w-empty-title">No Audit Events Logged</p>
-      <p class="w-empty-desc">No security or state modification events have been recorded for this workspace filter.</p>
+      <p class="w-empty-title">Chưa có sự kiện</p>
+      <p class="w-empty-desc">Các thay đổi bảo mật hoặc dữ liệu của bộ lọc này sẽ xuất hiện tại đây.</p>
     </div>
 
     <!-- Audit Logs Table -->
     <div *ngIf="filteredLogs.length > 0" class="w-table-container">
-      <table class="w-table">
+      <table class="w-table audit-table">
         <thead>
           <tr>
-            <th>Timestamp</th>
-            <th>Actor</th>
-            <th>Action</th>
-            <th>Target</th>
+            <th>Thời điểm</th>
+            <th>Người thực hiện</th>
+            <th>Hành động</th>
+            <th class="audit-col--technical">Đối tượng</th>
             <th>Policy / Result</th>
-            <th>Method & Path</th>
-            <th>Trace Identifiers</th>
+            <th class="audit-col--technical">Phương thức & đường dẫn</th>
+            <th class="audit-col--technical">Mã truy vết</th>
           </tr>
         </thead>
         <tbody>
@@ -94,7 +98,7 @@
             <tr class="align-top">
               <td class="font-semibold text-xs whitespace-nowrap">{{ formatAsDate(item.createdAt) }}</td>
               <td>
-                <div class="font-bold text-xs text-[var(--text-main)]">{{ item.actorId || 'System' }}</div>
+                <div class="font-bold text-xs text-[var(--text-main)]">{{ item.actorId || 'Hệ thống' }}</div>
                 <div class="text-[10px] text-[var(--text-muted)] uppercase font-semibold">{{ item.actorRole || '-' }}</div>
               </td>
               <td>
@@ -102,36 +106,36 @@
                   {{ item.action }}
                 </span>
               </td>
-              <td class="font-mono text-xs">
+              <td class="font-mono text-xs audit-col--technical">
                 {{ item.targetType }}{{ item.targetId ? `:${item.targetId}` : '' }}
               </td>
               <td>
                 <span class="w-badge w-badge-neutral text-[10px]">
-                  {{ item.policyDecision }} / {{ item.result }}
+                  {{ item.policyDecision || '—' }} / {{ item.result || '—' }}
                 </span>
               </td>
-              <td>
+              <td class="audit-col--technical">
                 <span class="font-mono text-[10px] uppercase font-bold text-[var(--accent-primary)]">{{ item.method }}</span>
                 <div class="text-xs text-[var(--text-muted)] truncate max-w-[180px] font-medium">{{ item.path }}</div>
               </td>
-              <td>
+              <td class="audit-col--technical">
                 <div class="text-[10px] font-mono text-[var(--text-muted)]" title="{{ item.requestId }}">Req: {{ item.requestId || '-' }}</div>
                 <div class="text-[10px] font-mono text-[var(--text-muted)]" title="{{ item.correlationId }}">Trace: {{ item.correlationId || '-' }}</div>
               </td>
             </tr>
             <tr class="bg-[var(--bg-subtle)] text-xs border-b border-[var(--border-subtle)]">
-              <td class="font-bold text-[var(--text-muted)] px-4 py-2">Details</td>
+              <td class="font-bold text-[var(--text-muted)] px-4 py-2">Chi tiết</td>
               <td colspan="6" class="px-4 py-2">
-                <div class="text-xs text-[var(--text-muted)] mb-1 font-medium">Reason: {{ item.reason || 'None specified' }}</div>
+                <div class="text-xs text-[var(--text-muted)] mb-1 font-medium">Lý do: {{ item.reason || 'Chưa nêu' }}</div>
                 <details class="cursor-pointer">
-                  <summary class="text-xs font-bold text-[var(--accent-primary)]">Inspect JSON Payload Diffs</summary>
+                  <summary class="text-xs font-bold text-[var(--accent-primary)]">Xem khác biệt dữ liệu JSON</summary>
                   <div class="grid grid-cols-2 gap-2 mt-2">
                     <div>
-                      <span class="text-[10px] font-bold text-[var(--text-muted)] uppercase">State Before</span>
+                      <span class="text-[10px] font-bold text-[var(--text-muted)] uppercase">Trước thay đổi</span>
                       <pre class="whitespace-pre-wrap text-[10px] font-mono text-[var(--text-main)] bg-[var(--bg-surface)] p-2 rounded-lg border border-[var(--border-strong)] overflow-auto max-h-32">{{ prettyJson(item.beforeJson) }}</pre>
                     </div>
                     <div>
-                      <span class="text-[10px] font-bold text-[var(--text-muted)] uppercase">State After</span>
+                      <span class="text-[10px] font-bold text-[var(--text-muted)] uppercase">Sau thay đổi</span>
                       <pre class="whitespace-pre-wrap text-[10px] font-mono text-[var(--text-main)] bg-[var(--bg-surface)] p-2 rounded-lg border border-[var(--border-strong)] overflow-auto max-h-32">{{ prettyJson(item.afterJson) }}</pre>
                     </div>
                   </div>

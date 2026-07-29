@@ -21,6 +21,8 @@ export class AssistantCommandsComponent implements OnInit {
   selectedCommandId: string | null = null;
   approvalInputs: Record<string, string> = {};
   loading = false;
+  commandsLoading = true;
+  isComposing = false;
 
   constructor(
     private api: ApiService,
@@ -38,11 +40,14 @@ export class AssistantCommandsComponent implements OnInit {
   }
 
   reload() {
+    this.commandsLoading = true;
     this.api.listAssistantCommands().subscribe({
       next: (items) => {
         this.commands = items;
+        this.commandsLoading = false;
       },
       error: () => {
+        this.commandsLoading = false;
         this.statusMessage = 'Không thể tải danh sách assistant commands.';
       },
     });
@@ -62,14 +67,15 @@ export class AssistantCommandsComponent implements OnInit {
           this.loading = false;
           this.approvalInputs[item.id] = item.approvalId || '';
           this.statusMessage = item.status === 'awaiting_approval'
-            ? 'Đã gửi command và nhận token phê duyệt.'
-            : 'Đã gửi command cho assistant.';
+            ? 'Đã gửi yêu cầu và nhận mã phê duyệt.'
+            : 'Đã gửi yêu cầu cho trợ lý.';
           this.form.reset({ command: '', plan: '' });
+          this.isComposing = false;
           this.reload();
         },
         error: () => {
           this.loading = false;
-          this.statusMessage = 'Gửi command thất bại.';
+          this.statusMessage = 'Gửi yêu cầu thất bại.';
         },
       });
   }
@@ -84,7 +90,7 @@ export class AssistantCommandsComponent implements OnInit {
         }
       },
       error: () => {
-        this.statusMessage = 'Không thể làm mới command.';
+        this.statusMessage = 'Không thể làm mới yêu cầu.';
       },
     });
   }
@@ -99,7 +105,7 @@ export class AssistantCommandsComponent implements OnInit {
         this.refreshOne(id);
       },
       error: () => {
-        this.statusMessage = 'Phê duyệt command thất bại.';
+        this.statusMessage = 'Phê duyệt yêu cầu thất bại.';
       },
     });
   }
@@ -126,10 +132,34 @@ export class AssistantCommandsComponent implements OnInit {
   }
 
   inspect(item: AssistantCommand) {
-    this.selectedCommandId = item.id;
+    this.selectedCommandId = this.selectedCommandId === item.id ? null : item.id;
+  }
+
+  openComposer() {
+    if (!this.auth.canMutate) return;
+    this.isComposing = true;
+    this.statusMessage = '';
+  }
+
+  closeComposer() {
+    if (!this.loading) this.isComposing = false;
   }
 
   setApprovalInput(id: string, value: string) {
     this.approvalInputs[id] = value;
+  }
+
+  statusLabel(status: string | undefined) {
+    const labels: Record<string, string> = {
+      received: 'Đã nhận',
+      ready: 'Sẵn sàng',
+      pending_approval: 'Chờ phê duyệt',
+      awaiting_approval: 'Chờ phê duyệt',
+      approved: 'Đã phê duyệt',
+      executed: 'Đã thực thi',
+      cancelled: 'Đã huỷ',
+      rejected: 'Đã từ chối',
+    };
+    return labels[status || ''] || status || 'Chưa xác định';
   }
 }

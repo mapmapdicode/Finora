@@ -1,4 +1,4 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, HostListener, OnDestroy } from '@angular/core';
 import { RouterLink, RouterOutlet, RouterLinkActive, Router } from '@angular/router';
 import { AsyncPipe, NgClass, NgForOf, NgIf } from '@angular/common';
 import { Observable, Subscription } from 'rxjs';
@@ -13,6 +13,14 @@ import { IconComponent } from './shared/icons/icon.component';
 
 type NavItem = { path: string; labelKey: string; icon: string };
 
+export function toastRole(type: ToastMessage['type']): 'alert' | 'status' {
+  return type === 'error' ? 'alert' : 'status';
+}
+
+export function shouldCloseSidebarOnEscape(sidebarOpen: boolean, viewportWidth: number): boolean {
+  return sidebarOpen && viewportWidth < 768;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -25,10 +33,11 @@ export class AppComponent implements OnDestroy {
   workspaces: Workspace[] = [];
   selectedWorkspaceId: string | null = null;
   toasts$: Observable<ToastMessage[]>;
-  sidebarOpen = true;
+  // Desktop benefits from a persistent rail; on phones an open drawer must be an explicit action.
+  sidebarOpen = typeof window === 'undefined' || window.innerWidth >= 768;
   isDarkMode = false;
   private tokenSub: Subscription | null = null;
-  private readonly viewerMessage = 'This workspace is read-only. You can only view data.';
+  private readonly viewerMessage = 'Không gian làm việc này chỉ cho phép xem dữ liệu.';
   private readonly roleMessageShown = new Set<string>();
 
   navItems: NavItem[] = [
@@ -55,6 +64,14 @@ export class AppComponent implements OnDestroy {
     public langService: LanguageService,
   ) {
     this.toasts$ = this.toastService.toasts$;
+    const savedAmountMode = localStorage.getItem('finora.amountDisplayMode');
+    if (savedAmountMode === 'compact' || savedAmountMode === 'full') {
+      this.amountDisplayMode = savedAmountMode;
+    }
+    if (localStorage.getItem('finora.theme') === 'dark') {
+      this.isDarkMode = true;
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
     this.tokenSub = this.auth.token$.subscribe((token) => {
       this.isAuthenticated = !!token;
       if (!token) {
@@ -79,6 +96,26 @@ export class AppComponent implements OnDestroy {
     this.sidebarOpen = !this.sidebarOpen;
   }
 
+  closeSidebarOnMobile() {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      this.sidebarOpen = false;
+    }
+  }
+
+  @HostListener('window:resize')
+  onViewportResize() {
+    // A viewport change (rotation, split-screen, desktop resize) must not leave
+    // an invisible mobile drawer with its backdrop still intercepting touch.
+    this.sidebarOpen = window.innerWidth >= 768;
+  }
+
+  @HostListener('window:keydown.escape')
+  onEscapeKey() {
+    if (typeof window !== 'undefined' && shouldCloseSidebarOnEscape(this.sidebarOpen, window.innerWidth)) {
+      this.sidebarOpen = false;
+    }
+  }
+
   changeLanguage(event: Event) {
     const lang = (event.target as HTMLSelectElement).value as SupportedLanguage;
     this.langService.setLanguage(lang);
@@ -90,21 +127,21 @@ export class AppComponent implements OnDestroy {
     this.isDarkMode = !this.isDarkMode;
     if (this.isDarkMode) {
       document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('finora.theme', 'dark');
     } else {
       document.documentElement.removeAttribute('data-theme');
+      localStorage.removeItem('finora.theme');
     }
   }
 
   toggleAmountDisplayMode() {
     this.amountDisplayMode = this.amountDisplayMode === 'full' ? 'compact' : 'full';
-    this.api.request('PUT', '/user/settings', { amountDisplayMode: this.amountDisplayMode }).subscribe({
-      next: () => {
-        this.toastService.showSuccess(
-          `Đã chuyển chế độ hiển thị số tiền sang: ${this.amountDisplayMode === 'compact' ? 'Viết tắt (100)' : 'Đầy đủ (100.000 VND)'}`
-        );
-      },
-      error: () => {}
-    });
+    // Display preference is deliberately local until the API exposes a user-settings endpoint.
+    // Do not send this to an undocumented route: a UI preference must not surface as a failed request.
+    localStorage.setItem('finora.amountDisplayMode', this.amountDisplayMode);
+    this.toastService.success(
+      `Đã chuyển chế độ hiển thị số tiền sang: ${this.amountDisplayMode === 'compact' ? 'Viết tắt' : 'Đầy đủ'}`
+    );
   }
 
   toastClass(type: 'info' | 'success' | 'error') {
@@ -115,6 +152,10 @@ export class AppComponent implements OnDestroy {
       return 'bg-rose-50 text-rose-900 border-rose-300';
     }
     return 'bg-sky-50 text-sky-900 border-sky-300';
+  }
+
+  toastRole(type: ToastMessage['type']) {
+    return toastRole(type);
   }
 
   closeToast(id: number) {

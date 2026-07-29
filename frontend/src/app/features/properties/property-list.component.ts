@@ -7,6 +7,7 @@ import { AuthService } from '../../core/services/auth.service';
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { normalizeVndAmount } from '../../shared/money-input';
 
 @Component({
   selector: 'app-property-list',
@@ -20,6 +21,10 @@ export class PropertyListComponent implements OnInit {
   propertyForm: FormGroup;
   valuationForm: FormGroup;
   selectedPropertyId: string | null = null;
+  propertiesLoading = true;
+  isCreating = false;
+  propertySaving = false;
+  valuationSaving = false;
 
   constructor(private api: ApiService, private fb: FormBuilder, public auth: AuthService) {
     this.propertyForm = this.fb.group({
@@ -41,11 +46,15 @@ export class PropertyListComponent implements OnInit {
   }
 
   reload() {
+    this.propertiesLoading = true;
+    this.statusMessage = '';
     this.api.listProperties().subscribe({
       next: (items) => {
         this.properties = items;
+        this.propertiesLoading = false;
       },
       error: () => {
+        this.propertiesLoading = false;
         this.statusMessage = 'Không lấy được danh sách tài sản bất động sản.';
       },
     });
@@ -54,6 +63,7 @@ export class PropertyListComponent implements OnInit {
   submitProperty() {
     if (!this.auth.canMutate) return;
     if (this.propertyForm.invalid) return;
+    this.propertySaving = true;
     const payload = {
       name: this.propertyForm.value.name,
       address: this.propertyForm.value.address,
@@ -63,12 +73,26 @@ export class PropertyListComponent implements OnInit {
     this.api.createProperty(payload).subscribe({
       next: () => {
         this.propertyForm.reset({ name: '', address: '', areaM2: '0', portfolioId: '' });
+        this.propertySaving = false;
+        this.isCreating = false;
+        this.statusMessage = 'Đã tạo bất động sản.';
         this.reload();
       },
       error: () => {
+        this.propertySaving = false;
         this.statusMessage = 'Không thể tạo tài sản bất động sản.';
       },
     });
+  }
+
+  openCreate() {
+    if (!this.auth.canMutate) return;
+    this.isCreating = true;
+    this.statusMessage = '';
+  }
+
+  closeCreate() {
+    if (!this.propertySaving) this.isCreating = false;
   }
 
   openValuation(propertyId: string) {
@@ -86,9 +110,10 @@ export class PropertyListComponent implements OnInit {
   submitValuation() {
     if (!this.auth.canMutate) return;
     if (!this.selectedPropertyId || this.valuationForm.invalid) return;
+    this.valuationSaving = true;
     this.api
       .addPropertyValuation(this.selectedPropertyId, {
-        valuationAmount: this.valuationForm.value.valuationAmount || '',
+        valuationAmount: normalizeVndAmount(this.valuationForm.value.valuationAmount),
         currency: this.valuationForm.value.currency || 'VND',
         source: this.valuationForm.value.source || 'self_declared',
         effectiveAt: this.valuationForm.value.effectiveAt || undefined,
@@ -97,8 +122,10 @@ export class PropertyListComponent implements OnInit {
         next: () => {
           this.statusMessage = 'Đã thêm định giá tài sản.';
           this.selectedPropertyId = null;
+          this.valuationSaving = false;
         },
         error: () => {
+          this.valuationSaving = false;
           this.statusMessage = 'Không thể thêm định giá.';
         },
       });

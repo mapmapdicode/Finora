@@ -5,33 +5,44 @@
       <h1 class="m3-page-title">{{ 'portfolios.title' | translate }}</h1>
       <p class="m3-page-subtitle">{{ 'portfolios.subtitle' | translate }}</p>
     </div>
+    <button type="button" class="w-btn w-btn-primary" (click)="openCreate()" [disabled]="!auth.canMutate">
+      <app-icon name="add"></app-icon> Tạo danh mục
+    </button>
+  </div>
+
+  <p *ngIf="notice" class="text-xs font-semibold text-emerald-700">{{ notice }}</p>
+  <div *ngIf="error" class="p-3.5 rounded-xl bg-rose-50 text-rose-800 text-xs flex items-center gap-2 border border-rose-200 font-medium" role="alert">
+    <app-icon name="error"></app-icon><span>{{ error }}</span>
+    <button type="button" class="ml-auto font-bold underline" (click)="reloadPortfolios()">Thử lại</button>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <!-- Create Portfolio Card -->
-    <div class="w-card">
+    <div *ngIf="showCreate || !portfolios.length" class="w-card">
       <div class="m3-card-header">
         <div>
           <h3 class="m3-card-title flex items-center gap-2">
             <app-icon name="donut_large" class="text-[var(--accent-primary)]"></app-icon> {{ 'portfolios.create_title' | translate }}
           </h3>
-          <p class="m3-card-subtitle">Set up a new portfolio group with a base reporting currency.</p>
+          <p class="m3-card-subtitle">Tạo một nhóm danh mục mới cùng đơn vị tiền tệ báo cáo.</p>
         </div>
+        <button *ngIf="portfolios.length" type="button" class="app-icon-button" (click)="closeCreate()" aria-label="Đóng biểu mẫu tạo danh mục"><app-icon name="close"></app-icon></button>
       </div>
 
       <form class="space-y-4" [formGroup]="form" (ngSubmit)="createPortfolio()">
         <div>
-          <label class="w-label">Portfolio Name</label>
+          <label class="w-label" for="portfolio-name">Tên danh mục</label>
           <input
+            id="portfolio-name"
             formControlName="name"
             class="w-input"
-            placeholder="e.g. Main Household, Investment Fund"
+            placeholder="Ví dụ: Tài chính gia đình"
           />
         </div>
 
         <div>
-          <label class="w-label">{{ 'portfolios.base_currency' | translate }}</label>
-          <select formControlName="baseCurrency" class="w-select">
+          <label class="w-label" for="portfolio-currency">{{ 'portfolios.base_currency' | translate }}</label>
+          <select id="portfolio-currency" formControlName="baseCurrency" class="w-select">
             <option *ngFor="let currency of baseCurrencies" [value]="currency">
               {{ currency }}
             </option>
@@ -39,6 +50,7 @@
         </div>
 
         <div class="flex justify-end pt-1">
+          <button type="button" *ngIf="portfolios.length" class="w-btn w-btn-ghost" (click)="closeCreate()">Hủy</button>
           <button
             type="submit"
             class="w-btn w-btn-primary"
@@ -53,30 +65,31 @@
       <p *ngIf="!auth.canMutate" class="mt-3 text-xs text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-200 font-medium flex items-center gap-1.5">
         <app-icon name="lock"></app-icon> {{ 'common.readonly_warning' | translate }}
       </p>
-      <p *ngIf="error" class="mt-3 text-xs text-rose-700 bg-rose-50 p-3 rounded-xl border border-rose-200 font-medium">{{ error }}</p>
     </div>
 
     <!-- Active Portfolios List Card -->
-    <div class="w-card">
+    <div class="w-card" [class.md:col-span-2]="!showCreate && portfolios.length">
       <div class="m3-card-header">
         <div>
           <h3 class="m3-card-title flex items-center gap-2">
-            <app-icon name="folder_special" class="text-[var(--accent-primary)]"></app-icon> Active Portfolios
+            <app-icon name="folder_special" class="text-[var(--accent-primary)]"></app-icon> Danh mục đang dùng
           </h3>
-          <p class="m3-card-subtitle">Select a portfolio to review valuation history.</p>
+          <p class="m3-card-subtitle">Chọn danh mục để xem lịch sử định giá.</p>
         </div>
-        <span class="w-badge w-badge-neutral">{{ portfolios.length }} Portfolios</span>
+        <span class="w-badge w-badge-neutral">{{ portfolios.length }} danh mục</span>
       </div>
 
-      <div *ngIf="!portfolios.length" class="w-empty-state py-6">
+      <div *ngIf="portfoliosLoading" class="w-empty-state py-6"><div class="w-empty-icon"><app-icon name="progress_activity"></app-icon></div><p class="w-empty-desc">Đang tải danh mục…</p></div>
+
+      <div *ngIf="!portfoliosLoading && !portfolios.length" class="w-empty-state py-6">
         <div class="w-empty-icon">
           <app-icon name="donut_large"></app-icon>
         </div>
-        <p class="w-empty-title">No Portfolios Found</p>
-        <p class="w-empty-desc">Create your first portfolio using the form on the left.</p>
+        <p class="w-empty-title">Chưa có danh mục</p>
+        <p class="w-empty-desc">Tạo danh mục đầu tiên để nhóm tài khoản và theo dõi giá trị ròng.</p>
       </div>
 
-      <div *ngIf="portfolios.length" class="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+      <div *ngIf="!portfoliosLoading && portfolios.length" class="space-y-2 max-h-[340px] overflow-y-auto pr-1">
         <button
           *ngFor="let item of portfolios"
           type="button"
@@ -102,8 +115,8 @@
     <div *ngIf="latestNetWorth() as nw">
       <div class="m3-card-header">
         <div>
-          <h3 class="m3-card-title">Portfolio Overview: {{ getSelectedPortfolioName() }}</h3>
-          <p class="m3-card-subtitle">As of {{ nw.asOfAt | date: 'medium' }}</p>
+          <h3 class="m3-card-title">Tổng quan: {{ getSelectedPortfolioName() }}</h3>
+          <p class="m3-card-subtitle">Ghi nhận lúc {{ nw.asOfAt | date: 'medium' }}</p>
         </div>
       </div>
 
@@ -121,7 +134,7 @@
           <p class="text-2xl font-bold mt-1 text-rose-700">{{ nw.liabilities }} {{ nw.baseCurrency }}</p>
         </div>
         <div class="p-4 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-subtle)]">
-          <span class="text-xs text-[var(--text-muted)] font-medium">Recent Valuation Change</span>
+          <span class="text-xs text-[var(--text-muted)] font-medium">Thay đổi định giá gần nhất</span>
           <p class="text-2xl font-bold mt-1 text-[var(--accent-primary)]">{{ formatChange(nw.netWorthChange) }} {{ nw.baseCurrency }}</p>
         </div>
       </div>
@@ -130,22 +143,22 @@
     <!-- Snapshots Table -->
     <div>
       <h4 class="font-bold text-sm mb-3 flex items-center gap-2 text-[var(--text-main)]">
-        <app-icon name="history" class="text-[var(--accent-primary)]"></app-icon> Portfolio Snapshot History
+        <app-icon name="history" class="text-[var(--accent-primary)]"></app-icon> Lịch sử định giá
       </h4>
 
       <div *ngIf="!snapshots.length" class="w-empty-state py-6">
         <div class="w-empty-icon">
           <app-icon name="history"></app-icon>
         </div>
-        <p class="w-empty-title">No Snapshot Records</p>
-        <p class="w-empty-desc">No historical snapshot data recorded for this portfolio yet.</p>
+        <p class="w-empty-title">Chưa có lịch sử định giá</p>
+        <p class="w-empty-desc">Finora sẽ hiển thị lịch sử sau khi danh mục có dữ liệu định giá.</p>
       </div>
 
       <div *ngIf="snapshots.length" class="w-table-container">
         <table class="w-table">
           <thead>
             <tr>
-              <th>Timestamp (As-Of)</th>
+              <th>Thời điểm chốt số</th>
               <th>Net Worth</th>
               <th>Cash</th>
               <th>Liabilities</th>

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -24,6 +25,7 @@ import (
 	"wealthos-backend/internal/auth"
 	"wealthos-backend/internal/config"
 	"wealthos-backend/internal/domain"
+	"wealthos-backend/internal/email"
 	"wealthos-backend/internal/http/dto"
 	"wealthos-backend/internal/integration/sepay"
 	"wealthos-backend/internal/metrics"
@@ -185,17 +187,19 @@ var (
 )
 
 type WealthHandler struct {
-	service        *service.WealthService
-	store          storage.Store
-	secret         string
-	telegramSecret string
-	hermesSecret   string
-	jwtSecret      string
-	jwtTTL         time.Duration
-	bankHub        sepay.BankHubLinkClient
-	bankHubCompany string
-	bankHubAPIKey  string
-	pilotBanks     map[string]struct{}
+	service            *service.WealthService
+	store              storage.Store
+	secret             string
+	telegramSecret     string
+	hermesSecret       string
+	jwtSecret          string
+	jwtTTL             time.Duration
+	verificationSecret string
+	verificationSender email.VerificationSender
+	bankHub            sepay.BankHubLinkClient
+	bankHubCompany     string
+	bankHubAPIKey      string
+	pilotBanks         map[string]struct{}
 }
 
 func NewWealthHandler(store storage.Store, svc *service.WealthService, cfg *config.Config) *WealthHandler {
@@ -217,6 +221,10 @@ func NewWealthHandler(store storage.Store, svc *service.WealthService, cfg *conf
 			jwtTTL = cfg.JWTTTL
 		}
 	}
+	verificationSecret := jwtSecret
+	if verificationSecret == "" {
+		verificationSecret = "local-dev-verification-secret"
+	}
 	var bankHub sepay.BankHubLinkClient
 	bankHubCompany := ""
 	bankHubAPIKey := ""
@@ -233,17 +241,19 @@ func NewWealthHandler(store storage.Store, svc *service.WealthService, cfg *conf
 		}
 	}
 	return &WealthHandler{
-		service:        svcRef,
-		store:          store,
-		secret:         secret,
-		telegramSecret: telegramSecret,
-		hermesSecret:   hermesSecret,
-		jwtSecret:      jwtSecret,
-		jwtTTL:         jwtTTL,
-		bankHub:        bankHub,
-		bankHubCompany: strings.TrimSpace(bankHubCompany),
-		bankHubAPIKey:  strings.TrimSpace(bankHubAPIKey),
-		pilotBanks:     pilotBanks,
+		service:            svcRef,
+		store:              store,
+		secret:             secret,
+		telegramSecret:     telegramSecret,
+		hermesSecret:       hermesSecret,
+		jwtSecret:          jwtSecret,
+		jwtTTL:             jwtTTL,
+		verificationSecret: verificationSecret,
+		verificationSender: email.NewVerificationSender(cfg),
+		bankHub:            bankHub,
+		bankHubCompany:     strings.TrimSpace(bankHubCompany),
+		bankHubAPIKey:      strings.TrimSpace(bankHubAPIKey),
+		pilotBanks:         pilotBanks,
 	}
 }
 
@@ -261,7 +271,7 @@ func (h *WealthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
 		return
 	}
-	user, err := h.service.RegisterUser(body.Email, body.Password, body.Name)
+	user, err := h.service.RegisterUser(body.Email, body.Password, body.ConfirmPassword, body.Name)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "REGISTER_FAIL", "message": err.Error()})
 		return
@@ -270,9 +280,13 @@ func (h *WealthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": "PORTFOLIO_CREATE_FAIL", "message": "unable to create default portfolio"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"user":  user,
-		"token": h.issueAuthToken(string(user.ID)),
+	if err := h.sendVerificationCode(c, user); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": "EMAIL_DELIVERY_FAILED", "message": "unable to send verification email"})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{
+		"user":                      user,
+		"emailVerificationRequired": true,
 	})
 }
 
@@ -284,11 +298,75 @@ func (h *WealthHandler) Login(c *gin.Context) {
 	}
 	result, err := h.service.Authenticate(body.Email, body.Password)
 	if err != nil {
+		if err.Error() == "email verification required" {
+			c.JSON(http.StatusForbidden, gin.H{"code": "EMAIL_NOT_VERIFIED", "message": "email verification required", "email": strings.TrimSpace(body.Email)})
+			return
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"code": "INVALID_CREDENTIALS", "message": err.Error()})
 		return
 	}
 	result.Token = h.issueAuthToken(string(result.User.ID))
 	c.JSON(http.StatusOK, result)
+}
+
+func (h *WealthHandler) VerifyEmail(c *gin.Context) {
+	var body dto.VerifyEmailRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+	code := strings.TrimSpace(body.Code)
+	if len(code) != 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_VERIFICATION_CODE", "message": "verification code must contain 6 digits"})
+		return
+	}
+	user, err := h.store.VerifyEmail(strings.TrimSpace(body.Email), h.verificationCodeHash(code), time.Now().UTC())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_VERIFICATION_CODE", "message": "verification code is invalid or expired"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"user": user, "token": h.issueAuthToken(string(user.ID))})
+}
+
+func (h *WealthHandler) ResendVerificationEmail(c *gin.Context) {
+	var body dto.ResendVerificationEmailRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+	user, ok := h.store.GetUserByEmail(strings.TrimSpace(body.Email))
+	if !ok {
+		// Do not disclose whether an email address is registered.
+		c.JSON(http.StatusAccepted, gin.H{"message": "if the account needs verification, a code has been sent"})
+		return
+	}
+	if user.IsEmailVerified() {
+		c.JSON(http.StatusOK, gin.H{"message": "email is already verified"})
+		return
+	}
+	if err := h.sendVerificationCode(c, *user); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": "EMAIL_DELIVERY_FAILED", "message": "unable to send verification email"})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"message": "verification email sent"})
+}
+
+func (h *WealthHandler) sendVerificationCode(c *gin.Context, user domain.User) error {
+	raw := make([]byte, 4)
+	if _, err := rand.Read(raw); err != nil {
+		return err
+	}
+	code := fmt.Sprintf("%06d", (uint32(raw[0])<<24|uint32(raw[1])<<16|uint32(raw[2])<<8|uint32(raw[3]))%1000000)
+	if err := h.store.CreateEmailVerificationToken(user.ID, h.verificationCodeHash(code), time.Now().UTC().Add(15*time.Minute)); err != nil {
+		return err
+	}
+	return h.verificationSender.SendVerificationCode(c.Request.Context(), user.Email, code)
+}
+
+func (h *WealthHandler) verificationCodeHash(code string) string {
+	sum := hmac.New(sha256.New, []byte(h.verificationSecret))
+	_, _ = sum.Write([]byte(code))
+	return hex.EncodeToString(sum.Sum(nil))
 }
 
 func (h *WealthHandler) Healthz(c *gin.Context) {
@@ -375,6 +453,29 @@ func (h *WealthHandler) GetPortfolioNetWorth(c *gin.Context) {
 		AmountDisplayMode: mode,
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// GetCurrentNetWorth returns the user's consolidated position across every
+// portfolio. The dashboard must use this endpoint rather than picking an
+// arbitrary portfolio, otherwise newly added accounts can be omitted.
+func (h *WealthHandler) GetCurrentNetWorth(c *gin.Context) {
+	wsID, ok := h.requireUserOrReject(c)
+	if !ok {
+		return
+	}
+	nw, err := h.service.CurrentNetWorth(wsID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, dto.PortfolioNetWorthResponse{
+		AsOfAt:            nw.AsOfAt,
+		BaseCurrency:      nw.BaseCurrency,
+		NetWorth:          nw.NetWorth,
+		Cash:              nw.Cash,
+		Liabilities:       nw.Liabilities,
+		AmountDisplayMode: h.getAmountDisplayMode(c),
+	})
 }
 
 func (h *WealthHandler) requireEditorRole(c *gin.Context) bool {
@@ -489,6 +590,17 @@ func (h *WealthHandler) CreateAccount(c *gin.Context) {
 	if pID == "" {
 		pID = h.getOrCreatePrimaryPortfolio(wsID).ID
 	}
+	openingBalance := strings.TrimSpace(body.InitialBalance)
+	if openingBalance == "" {
+		openingBalance = strings.TrimSpace(body.Balance)
+	}
+	if openingBalance != "" {
+		amount, parseErr := strconv.ParseFloat(openingBalance, 64)
+		if parseErr != nil || !(amount > 0) {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_INITIAL_BALANCE", "message": "initial balance must be greater than 0"})
+			return
+		}
+	}
 	account, err := h.store.CreateAccount(domain.Account{
 		UserID:      wsID,
 		PortfolioID: pID,
@@ -499,6 +611,25 @@ func (h *WealthHandler) CreateAccount(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
 		return
+	}
+	if openingBalance != "" {
+		_, err = h.service.CreateTransaction(domain.Transaction{
+			UserID:      wsID,
+			AccountID:   account.ID,
+			PortfolioID: pID,
+			CategoryID:  "uncategorized",
+			Name:        "Số dư đầu kỳ",
+			Type:        domain.TransactionTypeIncome,
+			Amount:      openingBalance,
+			Currency:    account.Currency,
+			Note:        "Số dư được ghi nhận khi tạo tài khoản",
+			Status:      domain.TransactionStatusPosted,
+			OccurredAt:  time.Now().UTC(),
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_INITIAL_BALANCE", "message": err.Error()})
+			return
+		}
 	}
 	h.recordAudit(c, "", "account", account.ID, nil, account, "success", "")
 	c.JSON(http.StatusCreated, account)
@@ -663,10 +794,16 @@ func (h *WealthHandler) DeleteLoan(c *gin.Context) {
 	}
 	id := domain.ID(c.Param("id"))
 	wsID := domain.ID(h.requireUserID(c))
+	loan, found := h.store.GetLoan(id)
+	if !found || loan.UserID != wsID {
+		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "loan not found"})
+		return
+	}
 	if err := h.store.DeleteLoan(wsID, id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
 		return
 	}
+	h.recordAudit(c, "", "loan", id, loan, nil, "success", "deleted loan")
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 
@@ -903,6 +1040,35 @@ func (h *WealthHandler) ListLoans(c *gin.Context) {
 	c.JSON(http.StatusOK, h.store.ListLoans(domain.ID(wsID)))
 }
 
+func (h *WealthHandler) ListCustomers(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	c.JSON(http.StatusOK, h.store.ListCustomers(
+		domain.ID(h.requireUserID(c)), c.Query("q"), limit,
+	))
+}
+
+func (h *WealthHandler) CreateCustomer(c *gin.Context) {
+	if !h.requireEditorRole(c) {
+		return
+	}
+	var body dto.CustomerCreateRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+	customer, err := h.store.CreateCustomer(domain.Customer{
+		UserID: domain.ID(h.requireUserID(c)),
+		Name:   body.Name,
+		Phone:  body.Phone,
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	h.recordAudit(c, "", "customer", customer.ID, nil, customer, "success", "")
+	c.JSON(http.StatusCreated, customer)
+}
+
 func (h *WealthHandler) GetLoanPortfolioSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, h.service.LoanPortfolioSummary(domain.ID(h.requireUserID(c))))
 }
@@ -936,10 +1102,32 @@ func (h *WealthHandler) CreateLoan(c *gin.Context) {
 			return
 		}
 	}
+	userID := domain.ID(h.requireUserID(c))
+	customerID := domain.ID(body.CustomerID)
+	counterparty := strings.TrimSpace(body.Counterparty)
+	if customerID != "" {
+		customer, found := h.store.GetCustomer(customerID)
+		if !found || customer.UserID != userID {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "customer not found"})
+			return
+		}
+		counterparty = customer.Name
+	} else if counterparty != "" {
+		customer, err := h.store.CreateCustomer(domain.Customer{UserID: userID, Name: counterparty})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+			return
+		}
+		customerID = customer.ID
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "customer is required"})
+		return
+	}
 	lo, err := h.store.CreateLoan(domain.Loan{
-		UserID:              domain.ID(h.requireUserID(c)),
+		UserID:              userID,
 		PortfolioID:         domain.ID(body.PortfolioID),
-		Counterparty:        body.Counterparty,
+		CustomerID:          customerID,
+		Counterparty:        counterparty,
 		Direction:           domain.LoanDirection(body.Direction),
 		PrincipalInitial:    body.PrincipalInitial,
 		PrincipalBalance:    body.PrincipalInitial,
@@ -1023,13 +1211,14 @@ func (h *WealthHandler) CreateLoanPayment(c *gin.Context) {
 		return
 	}
 	payment, err := h.service.CreateLoanPayment(loanID, domain.LoanPayment{
-		UserID:     loan.UserID,
-		Principal:  body.Principal,
-		Interest:   body.Interest,
-		Fee:        body.Fee,
-		Waived:     body.Waived,
-		AccountID:  domain.ID(firstNonEmpty(body.AccountID, string(loan.SettlementAccountID))),
-		OccurredAt: nowOrUTC(body.OccurredAt.Time),
+		UserID:       loan.UserID,
+		Principal:    body.Principal,
+		Interest:     body.Interest,
+		InterestDays: body.InterestDays,
+		Fee:          body.Fee,
+		Waived:       body.Waived,
+		AccountID:    domain.ID(firstNonEmpty(body.AccountID, string(loan.SettlementAccountID))),
+		OccurredAt:   nowOrUTC(body.OccurredAt.Time),
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
@@ -1037,6 +1226,23 @@ func (h *WealthHandler) CreateLoanPayment(c *gin.Context) {
 	}
 	h.recordAudit(c, "", "loan_payment", payment.ID, nil, payment, "success", "")
 	c.JSON(http.StatusCreated, payment)
+}
+
+func (h *WealthHandler) ListLoanPayments(c *gin.Context) {
+	loanID := domain.ID(strings.TrimSpace(c.Param("id")))
+	if loanID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "loanId is required"})
+		return
+	}
+	loan, found := h.store.GetLoan(loanID)
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": "loan not found"})
+		return
+	}
+	if !h.requireUserMatch(c, loan.UserID) {
+		return
+	}
+	c.JSON(http.StatusOK, h.store.ListLoanPayments(loan.UserID, loanID))
 }
 
 func (h *WealthHandler) ListProperties(c *gin.Context) {
@@ -3024,7 +3230,14 @@ func (h *WealthHandler) recordAudit(c *gin.Context, action string, targetType st
 	if strings.TrimSpace(entry.Result) == "" {
 		entry.Result = "success"
 	}
-	_, _ = h.store.CreateAuditLog(entry)
+	// Audit must never hold up the request path. The complete, immutable audit
+	// payload is captured above, then persisted by an independent worker goroutine.
+	store := h.store
+	go func(item domain.AuditLog) {
+		if _, err := store.CreateAuditLog(item); err != nil {
+			log.Printf("audit persistence failed: action=%s target=%s err=%v", item.Action, item.TargetID, err)
+		}
+	}(entry)
 }
 
 func (h *WealthHandler) resolveAuditUserID(c *gin.Context, targetID domain.ID) domain.ID {

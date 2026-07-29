@@ -5,7 +5,6 @@ import { Account, NetWorthSummary, Portfolio, PortfolioSnapshotPage, Transaction
 
 import { AuthService } from '../../core/services/auth.service';
 import { RouterLink } from '@angular/router';
-import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { IconComponent } from '../../shared/icons/icon.component';
 
 import { forkJoin, of } from 'rxjs';
@@ -14,7 +13,7 @@ import { catchError } from 'rxjs/operators';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, TranslatePipe, IconComponent, RouterLink],
+  imports: [CommonModule, IconComponent, RouterLink],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css',
 })
@@ -22,6 +21,7 @@ export class DashboardComponent implements OnInit {
   loading = signal(true);
   hideBalance = signal(false);
   summary = signal('Chưa kết nối dữ liệu');
+  dashboardError = '';
 
   toggleBalanceVisibility() {
     this.hideBalance.update((v) => !v);
@@ -37,6 +37,7 @@ export class DashboardComponent implements OnInit {
   snapshotLoading = false;
 
   trendSvgPath = '';
+  trendAreaPath = '';
   trendDotPositions: Array<{ x: number; y: number; value: number; asOf: string }> = [];
   trendMin = 0;
   trendMax = 0;
@@ -77,6 +78,23 @@ export class DashboardComponent implements OnInit {
   };
   selectedSnapshotNetWorth: NetWorthSummary | null = null;
 
+  get assetBreakdown() {
+    const assets = this.drillDownSnapshot().assets;
+    if (!assets) return [];
+    const entries = [
+      { label: 'Tiền mặt', amount: assets.cash, color: '#5e2d91' },
+      { label: 'Khoản phải thu', amount: assets.receivables, color: '#078847' },
+      { label: 'Bất động sản', amount: assets.property, color: '#fc7728' },
+      { label: 'Tài sản khác', amount: assets.otherAssets, color: '#8d0052' },
+      { label: 'Lãi tích lũy', amount: assets.accruedInterest, color: '#5c6b85' },
+    ].map((item) => ({ ...item, numericAmount: Number.parseFloat(item.amount) || 0 }));
+    const total = entries.reduce((sum, item) => sum + Math.max(0, item.numericAmount), 0);
+    if (!total) return [];
+    return entries
+      .filter((item) => item.numericAmount > 0)
+      .map(({ numericAmount, ...item }) => ({ ...item, percentage: Math.round((numericAmount / total) * 100) }));
+  }
+
   constructor(private api: ApiService, public auth: AuthService) {}
 
   ngOnInit() {
@@ -85,6 +103,7 @@ export class DashboardComponent implements OnInit {
 
   public refresh() {
     this.loading.set(true);
+    this.dashboardError = '';
     forkJoin({
       portfolios: this.api.getPortfolios().pipe(catchError(() => of([]))),
       accounts: this.api.getAccounts().pipe(catchError(() => of([]))),
@@ -119,6 +138,7 @@ export class DashboardComponent implements OnInit {
       },
       error: () => {
         this.loading.set(false);
+        this.dashboardError = 'Không thể tải dữ liệu tổng quan. Kiểm tra kết nối rồi thử lại.';
         this.summary.set('Không lấy được dữ liệu tổng quan.');
       },
     });
@@ -151,6 +171,7 @@ export class DashboardComponent implements OnInit {
         this.netWorth = nw;
         this.loading.set(false);
         this.asOfError = '';
+        this.dashboardError = '';
         this.selectedSnapshotNetWorth = shouldUseAsOf ? nw : null;
         this.summary.set(this.buildSummary(nw, requestedMode, asOfAt || nw.asOfAt));
       },
@@ -158,6 +179,9 @@ export class DashboardComponent implements OnInit {
         this.loading.set(false);
         this.netWorth = this.defaultEmptyNetWorth();
         this.selectedSnapshotNetWorth = null;
+        this.dashboardError = shouldUseAsOf
+          ? 'Không thể tải giá trị ròng tại thời điểm đã chọn.'
+          : 'Không thể tải giá trị ròng hiện tại.';
         this.summary.set(
           shouldUseAsOf
             ? 'Không lấy được dữ liệu tài sản ròng cho thời điểm đã chọn.'
@@ -184,6 +208,8 @@ export class DashboardComponent implements OnInit {
       error: () => {
         this.snapshotLoading = false;
         this.snapshotCursor = '';
+        this.trendSvgPath = '';
+        this.trendAreaPath = '';
       },
     });
   }
@@ -258,6 +284,21 @@ export class DashboardComponent implements OnInit {
     return new Date(data.asOfAt).toLocaleString();
   }
 
+  formatAmount(value: string | number | undefined): string {
+    const amount = Number.parseFloat(String(value ?? 0));
+    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number.isFinite(amount) ? amount : 0);
+  }
+
+  formatDate(value: string | undefined): string {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+  }
+
+  transactionLabel(transaction: Transaction): string {
+    return transaction.name || transaction.note || (transaction.type === 'income' ? 'Khoản thu' : transaction.type === 'transfer' ? 'Chuyển tiền' : 'Khoản chi');
+  }
+
   private toIsoDate(raw: string): string {
     if (!raw || !raw.trim()) {
       return '';
@@ -282,6 +323,7 @@ export class DashboardComponent implements OnInit {
       .filter((value) => Number.isFinite(value));
     if (values.length < 2) {
       this.trendSvgPath = '';
+      this.trendAreaPath = '';
       this.trendDotPositions = [];
       return;
     }
@@ -312,6 +354,8 @@ export class DashboardComponent implements OnInit {
       .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
       .join(' ');
     this.trendSvgPath = d;
+    const baseline = this.trendHeight - this.trendPadding;
+    this.trendAreaPath = `${d} L ${dots[dots.length - 1].x.toFixed(2)} ${baseline} L ${dots[0].x.toFixed(2)} ${baseline} Z`;
   }
 
   private defaultEmptyNetWorth(): NetWorthSummary {

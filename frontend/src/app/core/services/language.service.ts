@@ -10,7 +10,7 @@ export interface TranslationDictionary {
 const VI_DICTIONARY: TranslationDictionary = {
   common: {
     search: 'Tìm kiếm...',
-    workspace: 'Workspace',
+    workspace: 'Không gian làm việc',
     logout: 'Đăng xuất',
     login: 'Đăng nhập',
     register: 'Đăng ký',
@@ -32,7 +32,7 @@ const VI_DICTIONARY: TranslationDictionary = {
     account: 'Tài khoản',
     portfolio: 'Danh mục',
     category: 'Hạng mục',
-    snapshot: 'Lấy Snapshot',
+    snapshot: 'Lấy bản chụp số liệu',
     reset: 'Đặt lại',
     loading: 'Đang tải...',
     readonly_warning: 'Chế độ chỉ xem: Các hành vi thay đổi dữ liệu bị vô hiệu hóa.',
@@ -73,7 +73,7 @@ const VI_DICTIONARY: TranslationDictionary = {
     chart_hint: 'Bấm vào điểm mốc để soi chi tiết lịch sử danh mục.',
     asset_distribution: 'Phân bổ lớp tài sản',
     attribution_quality: 'Nguồn gốc biến động & Độ tin cậy',
-    snapshot_records: 'Lịch sử Snapshot tài sản',
+    snapshot_records: 'Lịch sử bản chụp tài sản',
     cash_deposits: 'Tiền gửi ngân hàng & Tiền mặt',
     receivables_loans: 'Khoản cho vay & Phải thu',
     properties: 'Bất động sản',

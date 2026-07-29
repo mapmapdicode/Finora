@@ -24,14 +24,14 @@ func UserContextMiddleware(staticToken, jwtSecret string) gin.HandlerFunc {
 		if strings.HasPrefix(token, "token-") {
 			userID := strings.TrimPrefix(token, "token-")
 			if userID != "" {
-				c.Set("user_id", userID)
+				setAuthenticatedUser(c, userID)
 				c.Next()
 				return
 			}
 		}
 
 		if staticToken != "" && token == staticToken {
-			c.Set("user_id", "demo-user")
+			setAuthenticatedUser(c, "demo-user")
 			c.Next()
 			return
 		}
@@ -39,7 +39,7 @@ func UserContextMiddleware(staticToken, jwtSecret string) gin.HandlerFunc {
 		if token != "" && jwtSecret != "" {
 			userID, err := auth.ParseToken(jwtSecret, token)
 			if err == nil && strings.TrimSpace(userID) != "" {
-				c.Set("user_id", userID)
+				setAuthenticatedUser(c, userID)
 				c.Next()
 				return
 			}
@@ -48,4 +48,12 @@ func UserContextMiddleware(staticToken, jwtSecret string) gin.HandlerFunc {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "missing or invalid authentication"})
 		c.Abort()
 	}
+}
+
+// Local and single-user sessions own their workspace. Keeping the role in the
+// request context makes all editor-protected endpoints usable by the mobile
+// client until multi-workspace membership is introduced.
+func setAuthenticatedUser(c *gin.Context, userID string) {
+	c.Set("user_id", userID)
+	c.Set("user_role", "owner")
 }

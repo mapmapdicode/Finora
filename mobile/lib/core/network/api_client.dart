@@ -41,13 +41,19 @@ class ApiClient {
           message.toString().isEmpty
               ? 'Yêu cầu thất bại (${response.statusCode})'
               : message.toString(),
+          code: data is Map ? data['code']?.toString() : null,
         );
       }
       return data;
     } on SocketException {
       throw ApiException(
-        'Không kết nối được backend tại ${AppEnvironment.apiBase}. '
-        'Kiểm tra API_BASE và server :8080.',
+        'Không thể kết nối tới Finora. Vui lòng kiểm tra mạng và thử lại.',
+        code: 'NETWORK_UNAVAILABLE',
+      );
+    } on HttpException {
+      throw const ApiException(
+        'Không thể kết nối tới Finora. Vui lòng thử lại sau ít phút.',
+        code: 'NETWORK_UNAVAILABLE',
       );
     } finally {
       client.close(force: true);

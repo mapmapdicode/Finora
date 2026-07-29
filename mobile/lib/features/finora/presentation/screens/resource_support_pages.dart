@@ -47,13 +47,17 @@ class _ReadonlyPageState extends State<ReadonlyPage> {
   }
 
   Future<void> load() async {
+    setState(() {
+      loading = true;
+      err = null;
+    });
     try {
       final response = await widget.api.request('GET', widget.path);
       data = response is List
           ? response
           : ((response as Map)['items'] as List? ?? []);
     } catch (error) {
-      err = error.toString();
+      err = presentableError(error);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -63,14 +67,27 @@ class _ReadonlyPageState extends State<ReadonlyPage> {
   Widget build(BuildContext context) => PageFrame(
     title: widget.title,
     action: IconButton(
+      tooltip: 'Tải lại ${widget.title.toLowerCase()}',
       onPressed: load,
-      icon: const Icon(Icons.refresh_rounded, color: Color(0xfffbbf24)),
+      icon: const Icon(Icons.refresh_rounded, color: FinoraColors.primary),
     ),
     child: loading
         ? const Center(
-            child: CircularProgressIndicator(color: Color(0xfffbbf24)),
+            child: CircularProgressIndicator(color: FinoraColors.primary),
+          )
+        : (err != null && data.isEmpty)
+        ? FinoraEmptyState(
+            title: 'Chưa thể tải ${widget.title.toLowerCase()}',
+            message: 'Kiểm tra kết nối rồi thử lại.',
+            icon: Icons.cloud_off_rounded,
+            action: FilledButton.icon(
+              onPressed: load,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Thử lại'),
+            ),
           )
         : ListView(
+            padding: const EdgeInsets.only(bottom: FinoraSpace.xxl),
             children: [
               const _ScreenIntro(
                 'Dấu vết hoạt động được lưu để đảm bảo minh bạch.',
@@ -78,12 +95,12 @@ class _ReadonlyPageState extends State<ReadonlyPage> {
               if (err != null) ErrorBox(err!),
               ...data.map((item) {
                 if (item is Map) {
-                  final action =
-                      item['action']?.toString() ??
-                      item['entityType']?.toString() ??
-                      'Hoạt động hệ thống';
+                  final action = _activityActionLabel(
+                    item['action']?.toString() ??
+                        item['entityType']?.toString(),
+                  );
                   final date = _formatDate(item['createdAt']?.toString());
-                  final status = item['status']?.toString() ?? 'Thành công';
+                  final status = _activityStatusLabel(item['status']);
                   return FinoraListTile(
                     icon: Icons.history_toggle_off_rounded,
                     title: action,
@@ -96,12 +113,58 @@ class _ReadonlyPageState extends State<ReadonlyPage> {
                 return FinoraSurface(
                   child: Text(
                     item.toString(),
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    style: FinoraTypography.bodySmall.copyWith(
+                      color: FinoraColors.textPrimary,
+                    ),
                   ),
                 );
               }),
-              if (data.isEmpty) const EmptyState('Chưa có dữ liệu'),
+              if (data.isEmpty)
+                FinoraEmptyState(
+                  title: 'Chưa có dữ liệu',
+                  message: 'Các hoạt động mới sẽ xuất hiện tại đây.',
+                  icon: Icons.history_toggle_off_rounded,
+                ),
             ],
           ),
   );
+}
+
+String _activityStatusLabel(dynamic value) {
+  return switch (value?.toString()) {
+    'success' || 'completed' || 'done' => 'Hoàn tất',
+    'pending' || 'running' => 'Đang xử lý',
+    'failed' || 'error' => 'Thất bại',
+    null || '' => 'Đã ghi nhận',
+    _ => 'Trạng thái: ${value.toString()}',
+  };
+}
+
+String _activityActionLabel(String? value) {
+  const labels = {
+    'create': 'Tạo mới',
+    'created': 'Tạo mới',
+    'update': 'Cập nhật',
+    'updated': 'Cập nhật',
+    'delete': 'Xoá',
+    'deleted': 'Xoá',
+    'approve': 'Phê duyệt',
+    'approved': 'Phê duyệt',
+    'login': 'Đăng nhập',
+    'logout': 'Đăng xuất',
+    'account': 'Tài khoản',
+    'transaction': 'Giao dịch',
+    'loan': 'Khoản vay',
+    'asset': 'Tài sản',
+    'property': 'Bất động sản',
+  };
+  final raw = value?.trim() ?? '';
+  if (raw.isEmpty) return 'Hoạt động hệ thống';
+  final normalized = raw.toLowerCase().replaceAll(RegExp(r'[_-]+'), ' ');
+  for (final entry in labels.entries) {
+    if (normalized == entry.key || normalized.contains(entry.key)) {
+      return entry.value;
+    }
+  }
+  return raw;
 }

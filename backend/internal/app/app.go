@@ -51,18 +51,17 @@ func Run(ctx context.Context) error {
 		store = storage.NewInMemoryStore()
 	}
 
-	seedUserID := store.SeedDemoUser("thanhoangz", "Than Hoang Z", "HoangThanZ6^")
-	_ = store.SeedDemoUser("demo@wealthos.vn", "Demo User", "demo-pass")
-	if _, err := store.EnsureUserPortfolio("", "VND", seedUserID); err != nil {
-		return err
-	}
-
 	appService := service.NewWealthService(store, redisCache)
-
-	appService.SeedDemoData(seedUserID, seedUserID)
-
-	// Auto-seed thanhoangz account with 180M Bank account
-	seedUserThanHoangZ(store, appService)
+	if cfg.SeedDemoData {
+		seedUserID := store.SeedDemoUser("thanhoangz", "Than Hoang Z", "HoangThanZ6^")
+		_ = store.SeedDemoUser("demo@wealthos.vn", "Demo User", "demo-pass")
+		if _, err := store.EnsureUserPortfolio("", "VND", seedUserID); err != nil {
+			return err
+		}
+		appService.SeedDemoData(seedUserID, seedUserID)
+		// Auto-seed thanhoangz account with 180M Bank account.
+		seedUserThanHoangZ(store, appService)
+	}
 
 	srv, err := httpapi.NewServer(cfg, store, appService)
 	if err != nil {

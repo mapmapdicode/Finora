@@ -10,12 +10,27 @@ flutter run
 Mặc định app chọn API theo nền tảng:
 
 - Android emulator: `http://10.0.2.2:8080`
-- iOS simulator/macOS: `http://127.0.0.1:8080`
+- iOS device debug: `http://Hoangs-Mac-mini.local:8080` (Mac và iPhone phải cùng Wi-Fi)
+- macOS: `http://127.0.0.1:8080`
 
 Với thiết bị thật hoặc khi backend chạy máy khác, chỉ định địa chỉ máy chạy backend:
 
 ```bash
 flutter run --dart-define=API_BASE=http://192.168.1.10:8080
+```
+
+Khi chạy iPhone thật tại máy Mac này, có thể dùng mặc định ở trên hoặc chạy
+với địa chỉ IP LAN hiện tại:
+
+```bash
+flutter run -d <iphone-id> --dart-define=API_BASE=http://192.168.1.4:8080
+```
+
+Backend Go đã lắng nghe tại `:8080` (mọi network interface). Khởi động nó
+trước khi mở app:
+
+```bash
+cd ../backend && go run ./cmd/server
 ```
 
 Ứng dụng bao gồm: xác thực, user, dashboard tài sản ròng, tài khoản, giao dịch, khoản vay, tài sản, bất động sản, ngân sách, dự báo, danh mục, SePay/ngân hàng, tự động hóa, trợ lý và audit log.
