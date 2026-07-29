@@ -903,6 +903,15 @@ func (h *WealthHandler) ListLoans(c *gin.Context) {
 	c.JSON(http.StatusOK, h.store.ListLoans(domain.ID(wsID)))
 }
 
+func (h *WealthHandler) GetLoanPortfolioSummary(c *gin.Context) {
+	c.JSON(http.StatusOK, h.service.LoanPortfolioSummary(domain.ID(h.requireUserID(c))))
+}
+
+func (h *WealthHandler) GetLoanSchedule(c *gin.Context) {
+	months, _ := strconv.Atoi(c.DefaultQuery("months", "3"))
+	c.JSON(http.StatusOK, h.service.LoanSchedule(domain.ID(h.requireUserID(c)), months))
+}
+
 func (h *WealthHandler) CreateLoan(c *gin.Context) {
 	if !h.requireEditorRole(c) {
 		return
@@ -920,22 +929,47 @@ func (h *WealthHandler) CreateLoan(c *gin.Context) {
 	if dueAt.IsZero() {
 		dueAt = startAt.AddDate(0, 1, 0)
 	}
+	if body.SettlementAccountID != "" {
+		account, found := h.store.GetAccount(domain.ID(body.SettlementAccountID))
+		if !found || account.UserID != domain.ID(h.requireUserID(c)) {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "settlement account not found"})
+			return
+		}
+	}
 	lo, err := h.store.CreateLoan(domain.Loan{
-		UserID:           domain.ID(h.requireUserID(c)),
-		PortfolioID:      domain.ID(body.PortfolioID),
-		Counterparty:     body.Counterparty,
-		Direction:        domain.LoanDirection(body.Direction),
-		PrincipalInitial: body.PrincipalInitial,
-		PrincipalBalance: body.PrincipalInitial,
-		AnnualRate:       body.AnnualRate,
-		DayCountBasis:    body.DayCountBasis,
-		StartAt:          startAt,
-		DueAt:            dueAt,
-		InterestCompound: body.InterestCompounding,
+		UserID:              domain.ID(h.requireUserID(c)),
+		PortfolioID:         domain.ID(body.PortfolioID),
+		Counterparty:        body.Counterparty,
+		Direction:           domain.LoanDirection(body.Direction),
+		PrincipalInitial:    body.PrincipalInitial,
+		PrincipalBalance:    body.PrincipalInitial,
+		AnnualRate:          body.AnnualRate,
+		DailyRatePerMillion: firstNonEmpty(body.DailyRatePerMillion, "0"),
+		SettlementAccountID: domain.ID(body.SettlementAccountID),
+		DayCountBasis:       body.DayCountBasis,
+		StartAt:             startAt,
+		DueAt:               dueAt,
+		Status:              domain.LoanStatusActive,
+		InterestCompound:    body.InterestCompounding,
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
 		return
+	}
+	// Disbursement is a movement from cash to a receivable, not an expense.
+	// Keep this ledger entry separate from normal spending so net-worth remains
+	// unchanged when money is lent out.
+	if lo.Direction == domain.LoanDirectionReceivable && lo.SettlementAccountID != "" {
+		account, _ := h.store.GetAccount(lo.SettlementAccountID)
+		if _, err := h.service.CreateTransaction(domain.Transaction{
+			UserID: lo.UserID, AccountID: account.ID, PortfolioID: account.PortfolioID,
+			Type: domain.TransactionTypeLoanDisbursement, Amount: lo.PrincipalInitial,
+			Currency: account.Currency, Name: "Loan disbursement", Note: "loan principal: " + string(lo.ID),
+			OccurredAt: lo.StartAt, Status: domain.TransactionStatusPosted, Source: "loan_disbursement",
+		}); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+			return
+		}
 	}
 	h.recordAudit(c, "", "loan", lo.ID, nil, lo, "success", "")
 	c.JSON(http.StatusCreated, lo)
@@ -994,6 +1028,7 @@ func (h *WealthHandler) CreateLoanPayment(c *gin.Context) {
 		Interest:   body.Interest,
 		Fee:        body.Fee,
 		Waived:     body.Waived,
+		AccountID:  domain.ID(firstNonEmpty(body.AccountID, string(loan.SettlementAccountID))),
 		OccurredAt: nowOrUTC(body.OccurredAt.Time),
 	})
 	if err != nil {

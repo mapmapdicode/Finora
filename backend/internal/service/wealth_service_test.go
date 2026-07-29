@@ -92,6 +92,25 @@ func TestProcessSePayIncoming_OutboundRequiresReview(t *testing.T) {
 	}
 }
 
+func TestDailyRateLoanAccrualAndMonthEndSchedule(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ws, portfolioID, err := setupDemoUser(store)
+	if err != nil { t.Fatal(err) }
+	start := time.Date(2026, time.January, 31, 0, 0, 0, 0, time.UTC)
+	loan, err := store.CreateLoan(domain.Loan{
+		UserID: ws.ID, PortfolioID: portfolioID, Counterparty: "Anh Minh",
+		Direction: domain.LoanDirectionReceivable, PrincipalInitial: "100000000", PrincipalBalance: "100000000",
+		AnnualRate: "0", DailyRatePerMillion: "3000", StartAt: start, DueAt: start.AddDate(0, 1, 0), Status: domain.LoanStatusActive,
+	})
+	if err != nil { t.Fatal(err) }
+	svc := NewWealthService(store, nil)
+	rows, total := svc.loanAccrualsByLoan(loan, start.AddDate(0, 0, 10))
+	if len(rows) != 1 || total.TotalAccrued != 3000000 { t.Fatalf("expected 3,000,000 accrued after 10 days, got %#v / %v", rows, total.TotalAccrued) }
+	next := nextMonthlyPaymentDate(start, start)
+	if want := time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC); !next.Equal(want) { t.Fatalf("expected month-end payment %s, got %s", want, next) }
+	if got := loanDailyInterest(loan); got != 300000 { t.Fatalf("expected 300,000 daily interest, got %v", got) }
+}
+
 func TestEnqueueAndProcessSePayEvent(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ws, _, err := setupDemoUser(store)

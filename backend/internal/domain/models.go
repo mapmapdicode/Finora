@@ -175,6 +175,11 @@ type Loan struct {
 	DueAt            time.Time     `json:"dueAt"`
 	Status           LoanStatus    `json:"status"`
 	InterestCompound bool          `json:"interestCompounding"`
+	// DailyRatePerMillion is VND interest earned for every VND 1,000,000 of
+	// outstanding principal per calendar day.  When present it takes precedence
+	// over AnnualRate, preserving compatibility with legacy annual-rate loans.
+	DailyRatePerMillion string `json:"dailyRatePerMillion,omitempty"`
+	SettlementAccountID ID     `json:"settlementAccountId,omitempty"`
 }
 
 type LoanPayment struct {

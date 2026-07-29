@@ -109,6 +109,8 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 		userRequired.POST("/transfers", middleware.IdempotencyGuard(store), h.CreateTransfer)
 
 		userRequired.GET("/loans", h.ListLoans)
+		userRequired.GET("/loans/summary", h.GetLoanPortfolioSummary)
+		userRequired.GET("/loans/schedule", h.GetLoanSchedule)
 		userRequired.POST("/loans", middleware.IdempotencyGuard(store), h.CreateLoan)
 		userRequired.DELETE("/loans/:id", h.DeleteLoan)
 		userRequired.GET("/loans/:id/accruals", h.GetLoanAccruals)

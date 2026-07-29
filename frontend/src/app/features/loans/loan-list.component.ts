@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
-import { Account, Loan, LoanAccruals, LoanPayment, LoanPaymentRequest } from '../../shared/models';
+import { Account, Loan, LoanAccruals, LoanPayment, LoanPaymentRequest, LoanPortfolioSummary, LoanScheduleItem } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
 import { IconComponent } from '../../shared/icons/icon.component';
 
@@ -19,6 +19,8 @@ export class LoanListComponent implements OnInit {
   accounts: Account[] = [];
   accrualsMap: Record<string, LoanAccruals> = {};
   paymentRequests: Record<string, LoanPaymentRequest | null> = {};
+  summary: LoanPortfolioSummary = { activePrincipal: '0', dailyInterest: '0', accruedInterest: '0', paidInterest: '0' };
+  schedule: LoanScheduleItem[] = [];
   creationForm: FormGroup;
   paymentForm: FormGroup;
   requestForm: FormGroup;
@@ -29,9 +31,11 @@ export class LoanListComponent implements OnInit {
   constructor(private api: ApiService, private fb: FormBuilder, public auth: AuthService) {
     this.creationForm = this.fb.group({
       counterparty: ['', Validators.required],
-      direction: ['payable', Validators.required],
+      direction: ['receivable', Validators.required],
       principalInitial: ['', Validators.required],
       annualRate: ['0', Validators.required],
+	  dailyRatePerMillion: ['', Validators.required],
+	  settlementAccountId: ['', Validators.required],
       dayCountBasis: ['ACT_365'],
       portfolioId: [''],
       interestCompounding: [false],
@@ -46,6 +50,7 @@ export class LoanListComponent implements OnInit {
       feeAmount: ['0'],
       waivedAmount: ['0'],
       occurredAt: [''],
+	  accountId: ['', Validators.required],
     });
 
     this.requestForm = this.fb.group({
@@ -57,9 +62,7 @@ export class LoanListComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.api.getLoans().subscribe((items: Loan[]) => {
-      this.loans = items;
-    });
+    this.reload();
     this.api.getAccounts().subscribe((items) => (this.accounts = items));
   }
 
@@ -71,6 +74,8 @@ export class LoanListComponent implements OnInit {
       direction: this.creationForm.value.direction,
       principalInitial: this.creationForm.value.principalInitial,
       annualRate: this.creationForm.value.annualRate,
+	  dailyRatePerMillion: this.creationForm.value.dailyRatePerMillion,
+	  settlementAccountId: this.creationForm.value.settlementAccountId,
       dayCountBasis: this.creationForm.value.dayCountBasis || 'ACT_365',
       portfolioId: this.creationForm.value.portfolioId || '',
       interestCompounding: !!this.creationForm.value.interestCompounding,
@@ -82,9 +87,11 @@ export class LoanListComponent implements OnInit {
         this.statusMessage = 'Tạo khoản vay thành công.';
         this.creationForm.reset({
           counterparty: '',
-          direction: 'payable',
+          direction: 'receivable',
           principalInitial: '',
           annualRate: '0',
+		  dailyRatePerMillion: '',
+		  settlementAccountId: '',
           dayCountBasis: 'ACT_365',
           portfolioId: '',
           interestCompounding: false,
@@ -100,7 +107,12 @@ export class LoanListComponent implements OnInit {
   }
 
   reload() {
-    this.api.getLoans().subscribe((items: Loan[]) => (this.loans = items));
+	this.api.getLoans().subscribe((items: Loan[]) => {
+	  this.loans = items;
+	  items.forEach((loan) => this.api.getLoanAccruals(loan.id).subscribe((accrual) => this.accrualsMap[loan.id] = accrual));
+	});
+	this.api.getLoanSummary().subscribe((summary) => this.summary = summary);
+	this.api.getLoanSchedule().subscribe((schedule) => this.schedule = schedule);
   }
 
   loadAccruals(loanId: string) {
@@ -127,6 +139,7 @@ export class LoanListComponent implements OnInit {
       feeAmount: '0',
       waivedAmount: '0',
       occurredAt: '',
+	  accountId: '',
     });
   }
 
@@ -144,6 +157,7 @@ export class LoanListComponent implements OnInit {
       feeAmount: this.paymentForm.value.feeAmount || '0',
       waivedAmount: this.paymentForm.value.waivedAmount || '0',
       occurredAt: this.paymentForm.value.occurredAt || undefined,
+	  accountId: this.paymentForm.value.accountId,
     };
     this.api.createLoanPayment(loanId, payload).subscribe({
       next: (_result: LoanPayment) => {

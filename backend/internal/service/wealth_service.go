@@ -160,11 +160,31 @@ type LoanAccrualResponse struct {
 	PrincipalInitial     string           `json:"principalInitial"`
 	PrincipalBalance     string           `json:"principalBalance"`
 	AnnualRate           string           `json:"annualRate"`
+	DailyRatePerMillion  string           `json:"dailyRatePerMillion"`
+	DailyInterest        string           `json:"dailyInterest"`
+	LastInterestPaidDate time.Time        `json:"lastInterestPaidDate,omitempty"`
+	NextPaymentDate      time.Time        `json:"nextPaymentDate"`
 	DayCountBasis        string           `json:"dayCountBasis"`
 	TotalAccruedInterest string           `json:"totalAccruedInterest"`
 	TotalPaidInterest    string           `json:"totalPaidInterest"`
 	UnpaidInterest       string           `json:"unpaidInterest"`
 	Rows                 []LoanAccrualRow `json:"accruals"`
+}
+
+type LoanPortfolioSummary struct {
+	ActivePrincipal string `json:"activePrincipal"`
+	DailyInterest   string `json:"dailyInterest"`
+	AccruedInterest string `json:"accruedInterest"`
+	PaidInterest    string `json:"paidInterest"`
+}
+
+type LoanScheduleItem struct {
+	LoanID           string    `json:"loanId"`
+	Borrower         string    `json:"borrower"`
+	PaymentDate      time.Time `json:"paymentDate"`
+	CycleDays        int       `json:"cycleDays"`
+	ExpectedInterest string    `json:"expectedInterest"`
+	Status           string    `json:"status"`
 }
 
 type LoanAccrualSummary struct {
@@ -596,6 +616,7 @@ func (s *WealthService) loanAccrualsByLoan(loan domain.Loan, asOf time.Time) ([]
 	}
 
 	annualRate := parseAmountWithFallback(loan.AnnualRate)
+	dailyRatePerMillion := parseAmountWithFallback(loan.DailyRatePerMillion)
 	if annualRate > 1.0 {
 		annualRate = annualRate / 100.0
 	}
@@ -627,7 +648,9 @@ func (s *WealthService) loanAccrualsByLoan(loan domain.Loan, asOf time.Time) ([]
 		days := elapsedDays(cursor, payment.OccurredAt)
 		accrued := 0.0
 		paidInterest := parseAmountWithFallback(payment.Interest)
-		if principal > 0 && days > 0 && annualRate > 0 {
+		if principal > 0 && days > 0 && dailyRatePerMillion > 0 {
+			accrued = principal / 1000000 * dailyRatePerMillion * float64(days)
+		} else if principal > 0 && days > 0 && annualRate > 0 {
 			accrued = principal * annualRate * float64(days) / float64(daysPerYear)
 		}
 		unpaid := accrued - paidInterest
@@ -658,7 +681,9 @@ func (s *WealthService) loanAccrualsByLoan(loan domain.Loan, asOf time.Time) ([]
 	if asOf.After(cursor) {
 		days := elapsedDays(cursor, asOf)
 		accrued := 0.0
-		if principal > 0 && days > 0 && annualRate > 0 {
+		if principal > 0 && days > 0 && dailyRatePerMillion > 0 {
+			accrued = principal / 1000000 * dailyRatePerMillion * float64(days)
+		} else if principal > 0 && days > 0 && annualRate > 0 {
 			accrued = principal * annualRate * float64(days) / float64(daysPerYear)
 		}
 		if days > 0 {
@@ -712,12 +737,107 @@ func (s *WealthService) GetLoanAccruals(loanID string) (LoanAccrualResponse, err
 		PrincipalInitial:     loan.PrincipalInitial,
 		PrincipalBalance:     loan.PrincipalBalance,
 		AnnualRate:           loan.AnnualRate,
+		DailyRatePerMillion:  loan.DailyRatePerMillion,
+		DailyInterest:        formatMoney(loanDailyInterest(*loan)),
+		LastInterestPaidDate: lastInterestPaymentDate(s.store.ListLoanPayments(loan.UserID, loan.ID)),
+		NextPaymentDate:      nextMonthlyPaymentDate(loan.StartAt, asOf),
 		DayCountBasis:        firstNonEmpty(loan.DayCountBasis, "365"),
 		TotalAccruedInterest: formatMoney(summary.TotalAccrued),
 		TotalPaidInterest:    formatMoney(summary.TotalPaid),
 		UnpaidInterest:       formatMoney(unpaid),
 		Rows:                 rows,
 	}, nil
+}
+
+func loanDailyInterest(loan domain.Loan) float64 {
+	principal := parseAmountWithFallback(loan.PrincipalBalance)
+	if rate := parseAmountWithFallback(loan.DailyRatePerMillion); rate > 0 {
+		return principal / 1000000 * rate
+	}
+	rate := parseAmountWithFallback(loan.AnnualRate)
+	if rate > 1 {
+		rate /= 100
+	}
+	return principal * rate / float64(parseDayCountBasis(loan.DayCountBasis))
+}
+
+func lastInterestPaymentDate(payments []domain.LoanPayment) time.Time {
+	for _, p := range payments {
+		if parseAmountWithFallback(p.Interest) > 0 {
+			return p.OccurredAt
+		}
+	}
+	return time.Time{}
+}
+
+// nextMonthlyPaymentDate keeps the original day-of-month; when absent it uses
+// the final day in the relevant month (for example 31 Jan -> 28/29 Feb).
+func nextMonthlyPaymentDate(start, after time.Time) time.Time {
+	if start.IsZero() {
+		return time.Time{}
+	}
+	if after.Before(start) {
+		return start
+	}
+	loc := start.Location()
+	if loc == nil {
+		loc = time.UTC
+	}
+	for n := 1; n < 1200; n++ {
+		month := time.Date(start.Year(), start.Month()+time.Month(n), 1, start.Hour(), start.Minute(), start.Second(), 0, loc)
+		last := time.Date(month.Year(), month.Month()+1, 0, start.Hour(), start.Minute(), start.Second(), 0, loc).Day()
+		day := start.Day()
+		if day > last {
+			day = last
+		}
+		candidate := time.Date(month.Year(), month.Month(), day, start.Hour(), start.Minute(), start.Second(), 0, loc)
+		if candidate.After(after) {
+			return candidate
+		}
+	}
+	return time.Time{}
+}
+
+func (s *WealthService) LoanPortfolioSummary(userID domain.ID) LoanPortfolioSummary {
+	var principal, daily, accrued, paid float64
+	for _, loan := range s.store.ListLoans(userID) {
+		if loan.Direction != domain.LoanDirectionReceivable || loan.Status == domain.LoanStatusClosed || loan.Status == domain.LoanStatusCancelled {
+			continue
+		}
+		principal += parseAmountWithFallback(loan.PrincipalBalance)
+		daily += loanDailyInterest(loan)
+		_, totals := s.loanAccrualsByLoan(loan, nowUTC())
+		accrued += math.Max(0, totals.TotalAccrued-totals.TotalPaid)
+		paid += totals.TotalPaid
+	}
+	return LoanPortfolioSummary{formatMoney(principal), formatMoney(daily), formatMoney(accrued), formatMoney(paid)}
+}
+
+func (s *WealthService) LoanSchedule(userID domain.ID, months int) []LoanScheduleItem {
+	if months <= 0 {
+		months = 3
+	}
+	if months > 24 {
+		months = 24
+	}
+	now := nowUTC()
+	end := now.AddDate(0, months, 0)
+	out := []LoanScheduleItem{}
+	for _, loan := range s.store.ListLoans(userID) {
+		if loan.Direction != domain.LoanDirectionReceivable || loan.Status == domain.LoanStatusClosed || loan.Status == domain.LoanStatusCancelled {
+			continue
+		}
+		for due := nextMonthlyPaymentDate(loan.StartAt, now.Add(-time.Nanosecond)); !due.IsZero() && !due.After(end); due = nextMonthlyPaymentDate(loan.StartAt, due) {
+			prev := due.AddDate(0, -1, 0)
+			days := elapsedDays(prev, due)
+			status := "upcoming"
+			if due.Before(now) {
+				status = "overdue"
+			}
+			out = append(out, LoanScheduleItem{string(loan.ID), loan.Counterparty, due, days, formatMoney(loanDailyInterest(loan) * float64(days)), status})
+		}
+	}
+	return out
 }
 
 func elapsedDays(start, end time.Time) int {
@@ -1090,6 +1210,9 @@ func (s *WealthService) CreateLoanPayment(loanID string, payment domain.LoanPaym
 
 	// Auto-post a loan payment ledger line when an account is provided or a default account exists.
 	postingAccountID := payment.AccountID
+	if postingAccountID == "" && loan.SettlementAccountID != "" {
+		postingAccountID = loan.SettlementAccountID
+	}
 	if postingAccountID == "" {
 		if accID := s.findFirstAccountID(loan.UserID, ""); accID != "" {
 			postingAccountID = accID

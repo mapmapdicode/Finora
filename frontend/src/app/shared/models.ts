@@ -167,6 +167,8 @@ export interface Loan {
   startAt?: string;
   dueAt?: string;
   annualRate: string;
+	  dailyRatePerMillion?: string;
+	  settlementAccountId?: string;
   dayCountBasis?: string;
   status: string;
 }
@@ -193,6 +195,10 @@ export interface LoanAccruals {
   principalInitial: string;
   principalBalance: string;
   annualRate: string;
+	  dailyRatePerMillion?: string;
+	  dailyInterest?: string;
+	  lastInterestPaidDate?: string;
+	  nextPaymentDate?: string;
   dayCountBasis: string;
   totalAccruedInterest: string;
   totalPaidInterest: string;
@@ -207,6 +213,22 @@ export interface LoanAccruals {
     remainingPrincipal: string;
     days: number;
   }>;
+}
+
+export interface LoanPortfolioSummary {
+  activePrincipal: string;
+  dailyInterest: string;
+  accruedInterest: string;
+  paidInterest: string;
+}
+
+export interface LoanScheduleItem {
+  loanId: string;
+  borrower: string;
+  paymentDate: string;
+  cycleDays: number;
+  expectedInterest: string;
+  status: string;
 }
 
 export interface BudgetRow {

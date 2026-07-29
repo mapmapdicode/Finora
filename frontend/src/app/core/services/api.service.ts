@@ -16,6 +16,8 @@ import {
   LoanAccruals,
   LoanPayment,
   LoanPaymentRequest,
+  LoanPortfolioSummary,
+  LoanScheduleItem,
   NetWorthSummary,
   Portfolio,
   PortfolioSnapshotPage,
@@ -159,6 +161,14 @@ export class ApiService {
     return this.http.get<Loan[]>(this.baseURL('/loans'));
   }
 
+  getLoanSummary(): Observable<LoanPortfolioSummary> {
+    return this.http.get<LoanPortfolioSummary>(this.baseURL('/loans/summary'));
+  }
+
+  getLoanSchedule(months = 3): Observable<LoanScheduleItem[]> {
+    return this.http.get<LoanScheduleItem[]>(this.baseURL(`/loans/schedule?months=${months}`));
+  }
+
   getLoanAccruals(loanId: string): Observable<LoanAccruals> {
     return this.http.get<LoanAccruals>(this.baseURL(`/loans/${loanId}/accruals`));
   }
@@ -172,6 +182,7 @@ export class ApiService {
     interestAmount: string;
     feeAmount: string;
     waivedAmount: string;
+    accountId?: string;
     occurredAt?: string;
   }) {
     return this.postWithIdempotency<LoanPayment>(`/loans/${loanId}/payments`, payload, 'create-loan-payment');

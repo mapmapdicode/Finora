@@ -188,6 +188,8 @@ type LoanCreateRequest struct {
 	StartAt             FlexibleTime `json:"startAt"`
 	DueAt               FlexibleTime `json:"dueAt"`
 	InterestCompounding bool         `json:"interestCompounding"`
+	DailyRatePerMillion string       `json:"dailyRatePerMillion"`
+	SettlementAccountID string       `json:"settlementAccountId"`
 }
 
 type LoanPaymentRequest struct {
@@ -197,6 +199,7 @@ type LoanPaymentRequest struct {
 	Fee        string       `json:"feeAmount"`
 	Waived     string       `json:"waivedAmount"`
 	OccurredAt FlexibleTime `json:"occurredAt"`
+	AccountID  string       `json:"accountId"`
 }
 
 type PropertyCreateRequest struct {

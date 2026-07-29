@@ -475,12 +475,12 @@ func (s *PostgresStore) CreateTransfer(input domain.Transfer) (domain.Transfer, 
 func (s *PostgresStore) GetLoan(id domain.ID) (*domain.Loan, bool) {
 	row := s.pool.QueryRow(context.Background(), `
 		SELECT id, user_id, portfolio_id, counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text,
-		       COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, created_at, updated_at
+		       COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
 		FROM loans WHERE id=$1`, id)
 	var l domain.Loan
 	if err := row.Scan(&l.ID, &l.UserID, &l.PortfolioID, &l.Counterparty, &l.Direction,
 		&l.PrincipalInitial, &l.PrincipalBalance, &l.AnnualRate, &l.DayCountBasis, &l.StartAt, &l.DueAt,
-		&l.Status, &l.InterestCompound, &l.CreatedAt, &l.UpdatedAt); err != nil {
+		&l.Status, &l.InterestCompound, &l.DailyRatePerMillion, &l.SettlementAccountID, &l.CreatedAt, &l.UpdatedAt); err != nil {
 		return nil, false
 	}
 	return &l, true
@@ -506,25 +506,30 @@ func (s *PostgresStore) UpdateLoan(id domain.ID, mutate func(*domain.Loan)) bool
 		    interest_compounding=$9,
 		    start_at=$10,
 		    due_at=$11,
+		    daily_rate_per_million=CAST($12 AS NUMERIC),
+		    settlement_account_id=NULLIF($13, '')::UUID,
 		    updated_at=now()
 		WHERE id=$1
 	`, id, mutated.PrincipalBalance, mutated.PrincipalInitial, mutated.AnnualRate, mutated.DayCountBasis, mutated.Direction,
-		mutated.Counterparty, mutated.Status, mutated.InterestCompound, mutated.StartAt, mutated.DueAt)
+		mutated.Counterparty, mutated.Status, mutated.InterestCompound, mutated.StartAt, mutated.DueAt, mutated.DailyRatePerMillion, mutated.SettlementAccountID)
 	return err == nil
 }
 
 func (s *PostgresStore) CreateLoan(input domain.Loan) (domain.Loan, error) {
 	ctx := context.Background()
+	if strings.TrimSpace(input.DailyRatePerMillion) == "" {
+		input.DailyRatePerMillion = "0"
+	}
 	var out domain.Loan
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO loans(user_id, portfolio_id, counterparty, direction, principal_initial, principal_balance, annual_rate, day_count_basis, start_at, due_at, status, interest_compounding)
-		VALUES($1, $2, $3, $4, CAST($5 AS NUMERIC), CAST($6 AS NUMERIC), CAST($7 AS NUMERIC), $8, $9, $10, $11, $12)
-		RETURNING id, user_id, portfolio_id, counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text, COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, created_at, updated_at
+		INSERT INTO loans(user_id, portfolio_id, counterparty, direction, principal_initial, principal_balance, annual_rate, day_count_basis, start_at, due_at, status, interest_compounding, daily_rate_per_million, settlement_account_id)
+		VALUES($1, $2, $3, $4, CAST($5 AS NUMERIC), CAST($6 AS NUMERIC), CAST($7 AS NUMERIC), $8, $9, $10, $11, $12, CAST($13 AS NUMERIC), NULLIF($14, '')::UUID)
+		RETURNING id, user_id, portfolio_id, counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text, COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
 	`, input.UserID, nilUUID(input.PortfolioID), input.Counterparty, input.Direction, input.PrincipalInitial, input.PrincipalBalance,
-		input.AnnualRate, nullString(input.DayCountBasis), input.StartAt, input.DueAt, defaultLoanStatus(input.Status), input.InterestCompound).Scan(
+		input.AnnualRate, nullString(input.DayCountBasis), input.StartAt, input.DueAt, defaultLoanStatus(input.Status), input.InterestCompound, input.DailyRatePerMillion, input.SettlementAccountID).Scan(
 		&out.ID, &out.UserID, &out.PortfolioID, &out.Counterparty, &out.Direction,
 		&out.PrincipalInitial, &out.PrincipalBalance, &out.AnnualRate, &out.DayCountBasis,
-		&out.StartAt, &out.DueAt, &out.Status, &out.InterestCompound, &out.CreatedAt, &out.UpdatedAt,
+		&out.StartAt, &out.DueAt, &out.Status, &out.InterestCompound, &out.DailyRatePerMillion, &out.SettlementAccountID, &out.CreatedAt, &out.UpdatedAt,
 	)
 	if err != nil {
 		return domain.Loan{}, err
@@ -535,7 +540,7 @@ func (s *PostgresStore) CreateLoan(input domain.Loan) (domain.Loan, error) {
 func (s *PostgresStore) ListLoans(userID domain.ID) []domain.Loan {
 	rows, err := s.pool.Query(context.Background(), `
 		SELECT id, user_id, portfolio_id, counterparty, direction, principal_initial::text, principal_balance::text,
-		       annual_rate::text, COALESCE(day_count_basis,''), start_at, due_at, status, interest_compounding, created_at, updated_at
+		       annual_rate::text, COALESCE(day_count_basis,''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
 		FROM loans WHERE user_id=$1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return []domain.Loan{}
@@ -545,7 +550,7 @@ func (s *PostgresStore) ListLoans(userID domain.ID) []domain.Loan {
 	for rows.Next() {
 		var l domain.Loan
 		if err := rows.Scan(&l.ID, &l.UserID, &l.PortfolioID, &l.Counterparty, &l.Direction, &l.PrincipalInitial, &l.PrincipalBalance,
-			&l.AnnualRate, &l.DayCountBasis, &l.StartAt, &l.DueAt, &l.Status, &l.InterestCompound, &l.CreatedAt, &l.UpdatedAt); err == nil {
+			&l.AnnualRate, &l.DayCountBasis, &l.StartAt, &l.DueAt, &l.Status, &l.InterestCompound, &l.DailyRatePerMillion, &l.SettlementAccountID, &l.CreatedAt, &l.UpdatedAt); err == nil {
 			out = append(out, l)
 		}
 	}

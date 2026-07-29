@@ -44,21 +44,21 @@
         </div>
 
         <div>
-          <label class="w-label">{{ 'loans.annual_rate' | translate }} (%)</label>
-          <input formControlName="annualRate" placeholder="e.g. 7.5" class="w-input" />
+          <label class="w-label">Lãi / 1 triệu / ngày (VND)</label>
+          <input formControlName="dailyRatePerMillion" placeholder="Ví dụ: 3000" class="w-input" />
         </div>
 
         <div>
           <label class="w-label">{{ 'loans.direction' | translate }}</label>
           <select formControlName="direction" class="w-select">
-            <option value="borrowed">Borrowed (Liability / Payee)</option>
-            <option value="lent">Lent Out (Asset / Receivable)</option>
+            <option value="receivable">Cho vay (phải thu)</option>
+            <option value="payable">Đi vay (phải trả)</option>
           </select>
         </div>
 
         <div>
-          <label class="w-label">Linked Settlement Account ID</label>
-          <select formControlName="accountId" class="w-select">
+          <label class="w-label">Tài khoản giải ngân / nhận tiền</label>
+          <select formControlName="settlementAccountId" class="w-select">
             <option value="">-- Linked Account --</option>
             <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
           </select>
@@ -79,6 +79,20 @@
   </div>
 
   <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium">{{ statusMessage }}</p>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="w-card"><p class="text-xs text-[var(--text-muted)]">Gốc đang cho vay</p><p class="font-bold">{{ summary.activePrincipal }}</p></div>
+    <div class="w-card"><p class="text-xs text-[var(--text-muted)]">Lãi/ngày</p><p class="font-bold">{{ summary.dailyInterest }}</p></div>
+    <div class="w-card"><p class="text-xs text-[var(--text-muted)]">Lãi chưa thu</p><p class="font-bold">{{ summary.accruedInterest }}</p></div>
+    <div class="w-card"><p class="text-xs text-[var(--text-muted)]">Lãi đã thu</p><p class="font-bold">{{ summary.paidInterest }}</p></div>
+  </div>
+
+  <form *ngIf="selectedLoanForPayment" (ngSubmit)="submitPayment()" [formGroup]="paymentForm" class="w-card grid grid-cols-1 md:grid-cols-4 gap-3">
+    <div><label class="w-label">Tiền lãi đã nhận</label><input class="w-input" formControlName="interestAmount" /></div>
+    <div><label class="w-label">Gốc thu hồi</label><input class="w-input" formControlName="principalAmount" /></div>
+    <div><label class="w-label">Tài khoản nhận</label><select class="w-select" formControlName="accountId"><option value="">-- Chọn tài khoản --</option><option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option></select></div>
+    <div class="flex gap-2 items-end"><button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">Xác nhận thu</button><button type="button" class="w-btn w-btn-outline" (click)="closePayment()">Hủy</button></div>
+  </form>
 
   <!-- Loans List Card -->
   <div class="w-card">
@@ -108,7 +122,8 @@
             <th>{{ 'loans.direction' | translate }}</th>
             <th>{{ 'loans.principal' | translate }}</th>
             <th>Remaining Balance</th>
-            <th>{{ 'loans.annual_rate' | translate }}</th>
+            <th>Lãi/ngày</th>
+			<th>Kỳ thu kế tiếp</th>
             <th>Accrued Interest</th>
             <th>{{ 'common.status' | translate }}</th>
             <th class="text-right">{{ 'common.actions' | translate }}</th>
@@ -129,7 +144,8 @@
             </td>
             <td class="font-bold text-xs">{{ item.principalInitial }}</td>
             <td class="font-bold text-xs text-[var(--text-main)]">{{ item.principalBalance }}</td>
-            <td class="font-mono text-xs font-bold text-[var(--accent-primary)]">{{ item.annualRate }}%</td>
+            <td class="font-mono text-xs font-bold text-[var(--accent-primary)]">{{ accrualsMap[item.id]?.dailyInterest || '0' }}</td>
+			<td class="text-xs">{{ accrualsMap[item.id]?.nextPaymentDate | date:'dd/MM/yyyy' }}</td>
             <td class="font-semibold text-xs text-amber-700">
               {{ accrualsMap[item.id]?.totalAccruedInterest || '0.00' }}
             </td>
@@ -150,6 +166,14 @@
           </tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <div *ngIf="schedule.length" class="w-card">
+    <h3 class="font-bold mb-3">Lịch tiền lãi dự kiến</h3>
+    <div class="text-sm space-y-2" *ngFor="let item of schedule">
+      <span class="font-semibold">{{ item.paymentDate | date:'dd/MM/yyyy' }}</span> — {{ item.borrower }} — {{ item.expectedInterest }} ({{ item.cycleDays }} ngày)
+      <span class="w-badge" [ngClass]="item.status === 'overdue' ? 'w-badge-danger' : 'w-badge-neutral'">{{ item.status === 'overdue' ? 'Quá hạn' : 'Chưa đến kỳ' }}</span>
     </div>
   </div>
 </section>
