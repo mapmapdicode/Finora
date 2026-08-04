@@ -17,6 +17,7 @@ import { ForbiddenComponent } from './features/forbidden/forbidden.component';
 import { NotFoundComponent } from './features/not-found/not-found.component';
 import { PortfolioListComponent } from './features/portfolios/portfolio-list.component';
 import { AuditLogsComponent } from './features/audit/audit-logs.component';
+import { ProfileComponent } from './features/profile/profile.component';
 
 export const appRoutes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
@@ -35,6 +36,7 @@ export const appRoutes: Routes = [
   { path: 'automation', component: AutomationRulesComponent, canActivate: [authGuard] },
   { path: 'assistant', component: AssistantCommandsComponent, canActivate: [authGuard] },
   { path: 'audit-logs', component: AuditLogsComponent, canActivate: [authGuard] },
+  { path: 'profile', component: ProfileComponent, canActivate: [authGuard] },
   { path: 'forbidden', component: ForbiddenComponent, canActivate: [authGuard] },
   { path: 'portfolios', component: PortfolioListComponent, canActivate: [authGuard] },
   { path: '**', component: NotFoundComponent },

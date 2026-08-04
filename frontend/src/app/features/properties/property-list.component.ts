@@ -134,4 +134,15 @@ export class PropertyListComponent implements OnInit {
   closeValuation() {
     this.selectedPropertyId = null;
   }
+
+  remove(item: Property) {
+    if (!this.auth.canMutate || !window.confirm(`Xóa bất động sản “${item.name}”?`)) return;
+    this.api.deleteProperty(item.id).subscribe({
+      next: () => {
+        this.statusMessage = `Đã xóa bất động sản “${item.name}”.`;
+        this.reload();
+      },
+      error: () => (this.statusMessage = 'Không thể xóa bất động sản có dữ liệu liên kết.'),
+    });
+  }
 }

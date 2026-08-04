@@ -12,6 +12,7 @@ import { TranslatePipe } from './shared/pipes/translate.pipe';
 import { IconComponent } from './shared/icons/icon.component';
 
 type NavItem = { path: string; labelKey: string; icon: string };
+type CommandItem = NavItem & { description: string; queryParams?: Record<string, string> };
 
 export function toastRole(type: ToastMessage['type']): 'alert' | 'status' {
   return type === 'error' ? 'alert' : 'status';
@@ -24,7 +25,7 @@ export function shouldCloseSidebarOnEscape(sidebarOpen: boolean, viewportWidth: 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgForOf, NgIf, NgClass, AsyncPipe, TranslatePipe, IconComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgForOf, NgIf, NgClass, AsyncPipe, TranslatePipe],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
 })
@@ -36,6 +37,8 @@ export class AppComponent implements OnDestroy {
   // Desktop benefits from a persistent rail; on phones an open drawer must be an explicit action.
   sidebarOpen = typeof window === 'undefined' || window.innerWidth >= 768;
   isDarkMode = false;
+  commandPaletteOpen = false;
+  commandQuery = '';
   private tokenSub: Subscription | null = null;
   private readonly viewerMessage = 'Không gian làm việc này chỉ cho phép xem dữ liệu.';
   private readonly roleMessageShown = new Set<string>();
@@ -54,6 +57,7 @@ export class AppComponent implements OnDestroy {
     { path: '/sepay', labelKey: 'nav.sepay', icon: 'inbox' },
     { path: '/automation', labelKey: 'nav.automation', icon: 'auto_awesome' },
     { path: '/assistant', labelKey: 'nav.assistant', icon: 'smart_toy' },
+    { path: '/profile', labelKey: 'Cá nhân', icon: 'person' },
   ];
 
   constructor(
@@ -80,6 +84,13 @@ export class AppComponent implements OnDestroy {
         this.router.navigateByUrl('/login');
         return;
       }
+
+      this.api.getUserSettings().subscribe({
+        next: (settings) => {
+          this.amountDisplayMode = settings.amountDisplayMode;
+          localStorage.setItem('finora.amountDisplayMode', settings.amountDisplayMode);
+        },
+      });
 
       if (this.auth.workspaceId) {
         this.selectedWorkspaceId = this.auth.workspaceId;
@@ -111,9 +122,56 @@ export class AppComponent implements OnDestroy {
 
   @HostListener('window:keydown.escape')
   onEscapeKey() {
+    if (this.commandPaletteOpen) {
+      this.closeCommandPalette();
+      return;
+    }
     if (typeof window !== 'undefined' && shouldCloseSidebarOnEscape(this.sidebarOpen, window.innerWidth)) {
       this.sidebarOpen = false;
     }
+  }
+
+  @HostListener('window:keydown.control.k', ['$event'])
+  @HostListener('window:keydown.meta.k', ['$event'])
+  onCommandShortcut(event: Event) {
+    if (!this.isAuthenticated) return;
+    event.preventDefault();
+    this.openCommandPalette();
+  }
+
+  get commandItems(): CommandItem[] {
+    return [
+      { path: '/transactions', labelKey: 'Ghi giao dịch mới', description: 'Thêm khoản thu, chi hoặc chuyển tiền', icon: 'add', queryParams: { entry: '1' } },
+      ...this.navItems.map((item) => ({ ...item, description: this.commandDescription(item.path) })),
+    ];
+  }
+
+  get filteredCommands(): CommandItem[] {
+    const query = this.commandQuery.trim().toLocaleLowerCase('vi-VN');
+    if (!query) return this.commandItems;
+    return this.commandItems.filter((item) =>
+      `${item.labelKey} ${item.description}`.toLocaleLowerCase('vi-VN').includes(query)
+    );
+  }
+
+  openCommandPalette() {
+    this.commandQuery = '';
+    this.commandPaletteOpen = true;
+  }
+
+  closeCommandPalette() {
+    this.commandPaletteOpen = false;
+    this.commandQuery = '';
+  }
+
+  updateCommandQuery(event: Event) {
+    this.commandQuery = (event.target as HTMLInputElement).value;
+  }
+
+  runCommand(item: CommandItem) {
+    this.closeCommandPalette();
+    this.router.navigate([item.path], { queryParams: item.queryParams });
+    this.closeSidebarOnMobile();
   }
 
   changeLanguage(event: Event) {
@@ -135,13 +193,15 @@ export class AppComponent implements OnDestroy {
   }
 
   toggleAmountDisplayMode() {
-    this.amountDisplayMode = this.amountDisplayMode === 'full' ? 'compact' : 'full';
-    // Display preference is deliberately local until the API exposes a user-settings endpoint.
-    // Do not send this to an undocumented route: a UI preference must not surface as a failed request.
-    localStorage.setItem('finora.amountDisplayMode', this.amountDisplayMode);
-    this.toastService.success(
-      `Đã chuyển chế độ hiển thị số tiền sang: ${this.amountDisplayMode === 'compact' ? 'Viết tắt' : 'Đầy đủ'}`
-    );
+    const next = this.amountDisplayMode === 'full' ? 'compact' : 'full';
+    this.api.updateUserSettings({ amountDisplayMode: next }).subscribe({
+      next: (settings) => {
+        this.amountDisplayMode = settings.amountDisplayMode;
+        localStorage.setItem('finora.amountDisplayMode', settings.amountDisplayMode);
+        this.toastService.success(`Đã chuyển chế độ hiển thị số tiền sang: ${settings.amountDisplayMode === 'compact' ? 'Viết tắt' : 'Đầy đủ'}`);
+      },
+      error: () => this.toastService.error('Không thể lưu lựa chọn hiển thị số tiền.'),
+    });
   }
 
   toastClass(type: 'info' | 'success' | 'error') {
@@ -213,5 +273,24 @@ export class AppComponent implements OnDestroy {
   logout() {
     this.auth.clearToken();
     this.router.navigateByUrl('/login');
+  }
+
+  private commandDescription(path: string): string {
+    const descriptions: Record<string, string> = {
+      '/dashboard': 'Xem sức khỏe tài chính và hoạt động gần đây',
+      '/accounts': 'Quản lý các tài khoản tiền và ngân hàng',
+      '/transactions': 'Tìm kiếm và theo dõi giao dịch',
+      '/loans': 'Theo dõi khoản vay và nghĩa vụ nợ',
+      '/assets': 'Quản lý tài sản đầu tư',
+      '/properties': 'Quản lý bất động sản',
+      '/budgets': 'Lập ngân sách theo tháng',
+      '/forecast': 'Dự báo tài chính',
+      '/portfolios': 'Quản lý danh mục',
+      '/audit-logs': 'Xem lịch sử hoạt động',
+      '/sepay': 'Kết nối giao dịch ngân hàng',
+      '/automation': 'Thiết lập quy tắc tự động',
+      '/assistant': 'Nhận hỗ trợ từ trợ lý AI',
+    };
+    return descriptions[path] || '';
   }
 }

@@ -1,0 +1,56 @@
+<section class="space-y-6 max-w-5xl">
+  <header class="m3-page-header">
+    <div>
+      <h1 class="m3-page-title">Cá nhân</h1>
+      <p class="m3-page-subtitle">Hồ sơ, cách hiển thị và các kết nối tài chính của bạn.</p>
+    </div>
+    <button type="button" class="w-btn w-btn-outline" (click)="refresh()" [disabled]="loading">
+      <app-icon name="refresh" [class.animate-spin]="loading"></app-icon> Làm mới
+    </button>
+  </header>
+
+  <p *ngIf="notice" class="p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200" aria-live="polite">{{ notice }}</p>
+  <div *ngIf="error" class="p-3 rounded-xl bg-rose-50 text-rose-800 text-xs flex gap-2 border border-rose-200 font-medium" role="alert">
+    <app-icon name="error"></app-icon><span>{{ error }}</span>
+  </div>
+
+  <article class="w-card overflow-hidden bg-gradient-to-br from-[#5e2d91] to-[#8b5cf6] text-white border-0">
+    <div class="flex flex-wrap gap-5 justify-between items-center">
+      <div class="flex items-center gap-4">
+        <span class="w-14 h-14 rounded-full bg-white/15 grid place-items-center"><app-icon name="person" class="text-2xl"></app-icon></span>
+        <div><p class="font-bold text-xl">Hồ sơ Finora</p><p class="text-sm text-white/75 mt-1">Không gian tài chính cá nhân của bạn</p></div>
+      </div>
+      <p class="text-sm font-semibold bg-white/15 rounded-full px-4 py-2">{{ linkedAccounts.length ? 'Dữ liệu đang được cập nhật' : 'Sẵn sàng thiết lập' }}</p>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-6">
+      <div class="rounded-xl bg-white/10 p-3"><b class="text-xl">{{ linkedAccounts.length }}</b><span class="block text-xs text-white/70 mt-1">ngân hàng liên kết</span></div>
+      <div class="rounded-xl bg-white/10 p-3"><b class="text-xl">{{ mappedCount }}</b><span class="block text-xs text-white/70 mt-1">tài khoản đã ánh xạ</span></div>
+      <div class="rounded-xl bg-white/10 p-3 col-span-2 sm:col-span-1"><b class="text-sm">{{ relativeSync() }}</b><span class="block text-xs text-white/70 mt-1">trạng thái đồng bộ</span></div>
+    </div>
+  </article>
+
+  <article class="w-card">
+    <div class="m3-card-header"><div><h2 class="m3-card-title">Tổng quan kết nối</h2><p class="m3-card-subtitle">SePay đồng bộ các tài khoản ngân hàng bạn đã cấp quyền.</p></div><a routerLink="/sepay" class="w-btn w-btn-primary">Quản lý kết nối <app-icon name="chevron_right"></app-icon></a></div>
+    <div *ngIf="loading" class="w-empty-state py-6"><div class="w-empty-icon"><app-icon name="progress_activity"></app-icon></div><p class="w-empty-desc">Đang tải trạng thái kết nối…</p></div>
+    <div *ngIf="!loading && !linkedAccounts.length" class="w-empty-state py-6"><div class="w-empty-icon"><app-icon name="account_balance"></app-icon></div><p class="w-empty-title">Chưa liên kết ngân hàng</p><p class="w-empty-desc">Kết nối SePay để đối soát giao dịch ngân hàng trong Finora.</p></div>
+    <div *ngIf="!loading && linkedAccounts.length" class="grid sm:grid-cols-2 gap-3">
+      <div *ngFor="let account of linkedAccounts" class="p-3.5 rounded-xl border border-[var(--border-subtle)] flex items-center gap-3">
+        <span class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] grid place-items-center"><app-icon name="account_balance"></app-icon></span>
+        <div class="min-w-0"><b class="block text-sm truncate">{{ account.bankName || account.accountName || 'Tài khoản ngân hàng' }}</b><span class="text-xs text-[var(--text-muted)]">{{ account.accountNumber || 'Đã liên kết' }} · {{ account.mapping?.accountId ? 'Đã ánh xạ' : 'Chưa ánh xạ' }}</span></div>
+      </div>
+    </div>
+  </article>
+
+  <article class="w-card">
+    <div class="m3-card-header"><div><h2 class="m3-card-title">Thiết lập cá nhân</h2><p class="m3-card-subtitle">Các lựa chọn hiển thị được lưu an toàn vào hồ sơ của bạn.</p></div></div>
+    <button type="button" class="w-full text-left p-3 rounded-xl hover:bg-[var(--bg-subtle)] flex gap-3 items-center" (click)="toggleAmountDisplay()">
+      <span class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] grid place-items-center"><app-icon name="tune"></app-icon></span>
+      <span class="flex-1"><b class="block text-sm">Hiển thị số tiền</b><small class="text-[var(--text-muted)]">Chọn chế độ đầy đủ hoặc rút gọn cho các số liệu tài chính.</small></span><app-icon name="chevron_right"></app-icon>
+    </button>
+  </article>
+
+  <article class="w-card">
+    <div class="m3-card-header"><div><h2 class="m3-card-title">Hỗ trợ & bảo mật</h2><p class="m3-card-subtitle">Finora chỉ dùng dữ liệu cần thiết để cung cấp các tính năng tài chính.</p></div></div>
+    <div class="flex flex-wrap gap-3"><a routerLink="/audit-logs" class="w-btn w-btn-outline"><app-icon name="history"></app-icon> Nhật ký hoạt động</a><button type="button" class="w-btn w-btn-outline text-rose-700 border-rose-200 hover:bg-rose-50" (click)="logout()"><app-icon name="logout"></app-icon> Đăng xuất</button></div>
+  </article>
+</section>

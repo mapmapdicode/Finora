@@ -14,6 +14,28 @@ export interface AuthResponse {
   workspace?: Workspace;
 }
 
+export interface RegistrationResponse {
+  user: User;
+  emailVerificationRequired: boolean;
+}
+
+export interface UserSettings {
+  userId: string;
+  amountDisplayMode: 'full' | 'compact';
+  updatedAt?: string;
+}
+
+export interface MySePaySummary {
+  profile?: { lastSyncedAt?: string };
+  bankAccounts?: Array<{
+    id: string;
+    bankName?: string;
+    accountName?: string;
+    accountNumber?: string;
+    mapping?: { accountId?: string };
+  }>;
+}
+
 export interface Workspace {
   id: string;
   name: string;

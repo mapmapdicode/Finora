@@ -3,6 +3,33 @@ import 'package:mobile/core/theme/finora_colors.dart';
 import 'package:mobile/core/theme/finora_tokens.dart';
 import 'package:mobile/core/theme/finora_typography.dart';
 
+/// Centers wide-screen content without changing the layout of phone screens.
+/// Feature pages keep ownership of their own scrolling and padding; this only
+/// prevents cards and forms from stretching across an entire tablet display.
+class FinoraContentWidth extends StatelessWidget {
+  const FinoraContentWidth({
+    super.key,
+    required this.child,
+    this.maxWidth = 1040,
+  });
+
+  final Widget child;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: constraints.maxWidth >= 700 ? maxWidth : double.infinity,
+        ),
+        child: child,
+      ),
+    ),
+  );
+}
+
 class FinoraCard extends StatelessWidget {
   const FinoraCard({
     super.key,
@@ -53,12 +80,13 @@ class FinoraMoney extends StatelessWidget {
 
   String get _value {
     if (compact && amount.abs() >= 1000000) {
-      return '${(amount / 1000000).toStringAsFixed(amount % 1000000 == 0 ? 0 : 1)}M';
+      final unit = currency.toUpperCase() == 'VND' ? 'tr' : 'M';
+      return '${(amount / 1000000).toStringAsFixed(amount % 1000000 == 0 ? 0 : 1)}$unit';
     }
     final digits = amount.abs().round().toString();
     final grouped = StringBuffer();
     for (var index = 0; index < digits.length; index++) {
-      if (index > 0 && (digits.length - index) % 3 == 0) grouped.write(',');
+      if (index > 0 && (digits.length - index) % 3 == 0) grouped.write('.');
       grouped.write(digits[index]);
     }
     return '${amount < 0 ? '-' : ''}$grouped';

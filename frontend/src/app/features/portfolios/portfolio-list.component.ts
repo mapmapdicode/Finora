@@ -109,6 +109,18 @@ export class PortfolioListComponent implements OnInit {
     if (!this.createInProgress) this.showCreate = false;
   }
 
+  remove(item: Portfolio, event: Event) {
+    event.stopPropagation();
+    if (!this.auth.canMutate || !window.confirm(`Xóa danh mục “${item.name}”?`)) return;
+    this.api.deletePortfolio(item.id).subscribe({
+      next: () => {
+        this.notice = `Đã xóa danh mục “${item.name}”.`;
+        this.reloadPortfolios();
+      },
+      error: () => (this.error = 'Không thể xóa danh mục có dữ liệu liên kết.'),
+    });
+  }
+
   loadSnapshots(portfolioId: string, cursor = '', replace = true) {
     if (!portfolioId) return;
     this.snapshotLoading = true;

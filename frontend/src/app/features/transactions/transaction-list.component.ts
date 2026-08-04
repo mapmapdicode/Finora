@@ -42,6 +42,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   totalFiltered = 0;
   submitInFlight = false;
   entryOpen = false;
+  filtersExpanded = false;
   selectedTransactionIds = new Set<string>();
   accountNameById = new Map<string, string>();
 
@@ -395,6 +396,13 @@ export class TransactionListComponent implements OnInit, OnDestroy {
 
   accountLabel(accountId: string) {
     return this.accountNameById.get(accountId) || accountId;
+  }
+
+  formatAmount(value: string | number | undefined) {
+    const amount = Number.parseFloat(String(value ?? 0));
+    return (Number.isFinite(amount) ? amount : 0).toLocaleString('vi-VN', {
+      maximumFractionDigits: 0,
+    });
   }
 
   private resetForm() {

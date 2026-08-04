@@ -108,6 +108,69 @@ void main() {
     expect(find.text('Cá nhân'), findsAtLeastNWidgets(1));
   });
 
+  testWidgets(
+    '3:2 tablet uses a navigation rail and keeps all pages reachable',
+    (tester) async {
+      final view = tester.view;
+      final originalPhysicalSize = view.physicalSize;
+      final originalDevicePixelRatio = view.devicePixelRatio;
+      // Xiaomi Pad 8 Pro: 3:2 display. This is the portrait logical viewport.
+      view.physicalSize = const Size(854, 1280);
+      view.devicePixelRatio = 1;
+      addTearDown(() {
+        view.physicalSize = originalPhysicalSize;
+        view.devicePixelRatio = originalDevicePixelRatio;
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomePage(
+            api: _FakeApiClient(),
+            loginBuilder: (_) => const SizedBox.shrink(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.bySemanticsLabel('Thao tác nhanh'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.grid_view_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tất cả tiện ích'), findsOneWidget);
+      expect(find.text('Bất động sản'), findsOneWidget);
+    },
+  );
+
+  testWidgets('iPad landscape shows the full catalogue beside content', (
+    tester,
+  ) async {
+    final view = tester.view;
+    final originalPhysicalSize = view.physicalSize;
+    final originalDevicePixelRatio = view.devicePixelRatio;
+    view.physicalSize = const Size(1024, 768);
+    view.devicePixelRatio = 1;
+    addTearDown(() {
+      view.physicalSize = originalPhysicalSize;
+      view.devicePixelRatio = originalDevicePixelRatio;
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomePage(
+          api: _FakeApiClient(),
+          loginBuilder: (_) => const SizedBox.shrink(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('DANH MỤC TIỆN ÍCH'), findsOneWidget);
+    expect(find.byType(NavigationRail), findsNothing);
+    expect(find.text('Tài sản và nghĩa vụ'), findsOneWidget);
+  });
+
   testWidgets('quick action opens the internal transfer form', (tester) async {
     final view = tester.view;
     final originalPhysicalSize = view.physicalSize;
@@ -275,7 +338,14 @@ void main() {
     await tester.tap(searchButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('Thao tác nhanh'), findsOneWidget);
+    expect(find.text('Tìm nhanh'), findsOneWidget);
+    expect(find.text('Ghi giao dịch mới'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).last, 'ngân sách');
+    await tester.pump();
+
+    expect(find.text('Ngân sách'), findsAtLeastNWidgets(1));
+    expect(find.text('Ghi giao dịch mới'), findsNothing);
     expect(controller.mode, ThemeMode.light);
   });
 }

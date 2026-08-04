@@ -59,7 +59,10 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 	// Standard SePay Webhooks (the dashboard product) use camelCase payloads
 	// and the configured HMAC secret. Bank Hub IPN is a distinct API/product.
 	r.POST("/hooks/sepay-webhook", h.WebhookSePay)
-	r.POST("/public/v1/accounts/:id/transactions", h.BotCreateTransaction)
+	// Public write endpoints are deliberately account-scoped.  Their secret is
+	// a credential for that account only, rather than a user-wide API key.
+	r.POST("/public/v1/accounts/:id/transactions", middleware.IdempotencyGuard(store), h.BotCreateTransaction)
+	r.POST("/public/v1/accounts/:id/loans", middleware.IdempotencyGuard(store), h.BotCreateLoan)
 	r.GET("/public/v1/accounts/:id/transactions/history", h.BotListTransactions)
 	// Stable provider-facing path. Keep this outside /api/v1 so a deployed
 	// webhook URL remains short and does not change with API versioning.

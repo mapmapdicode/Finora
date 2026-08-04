@@ -5,7 +5,6 @@ import { Account, NetWorthSummary, Portfolio, PortfolioSnapshotPage, Transaction
 
 import { AuthService } from '../../core/services/auth.service';
 import { RouterLink } from '@angular/router';
-import { IconComponent } from '../../shared/icons/icon.component';
 
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -13,7 +12,7 @@ import { catchError } from 'rxjs/operators';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, IconComponent, RouterLink],
+  imports: [CommonModule, RouterLink],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css',
 })

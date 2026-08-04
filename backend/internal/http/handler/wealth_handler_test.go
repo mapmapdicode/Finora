@@ -153,6 +153,53 @@ func TestBotPublicAPIRequiresAccountSecretAndScopesHistory(t *testing.T) {
 	}
 }
 
+func TestBotPublicAPICreatesAccountScopedLoan(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("bot-loan@example.test", "Bot Loan", "hash")
+	ws, err := store.EnsureUserPortfolio("Bot Loan", "VND", userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portfolio, err := store.CreatePortfolio(domain.Portfolio{UserID: ws.ID, Name: "Main", BaseCurrency: "VND"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := store.CreateAccount(domain.Account{UserID: ws.ID, PortfolioID: portfolio.ID, Name: "Bot cash", Type: "cash", Currency: "VND"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := "finora_bot_loan_secret"
+	digest := sha256.Sum256([]byte(secret))
+	if _, err := store.UpsertBotAccountKey(domain.BotAccountKey{AccountID: account.ID, SecretHash: hex.EncodeToString(digest[:]), Prefix: "finora_bot_loan"}); err != nil {
+		t.Fatal(err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/public/v1/accounts/"+string(account.ID)+"/loans", strings.NewReader(`{"counterparty":"Nguyễn Văn A","direction":"receivable","principalInitial":"100000000","annualRate":"12","startAt":"2026-07-30","dueAt":"2026-10-30"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("X-Finora-Account-Key", secret)
+	c.Params = gin.Params{{Key: "id", Value: string(account.ID)}}
+	h.BotCreateLoan(c)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Loan        domain.Loan        `json:"loan"`
+		Transaction domain.Transaction `json:"transaction"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Loan.SettlementAccountID != account.ID || response.Loan.PortfolioID != portfolio.ID {
+		t.Fatalf("loan escaped account scope: %+v", response.Loan)
+	}
+	if response.Loan.Direction != domain.LoanDirectionReceivable || response.Transaction.Type != domain.TransactionTypeLoanDisbursement {
+		t.Fatalf("unexpected loan response: %+v", response)
+	}
+}
+
 func (f *fakeBankHub) Configured() bool { return true }
 func (f *fakeBankHub) CreateLink(context.Context, string, string) (sepay.LinkSession, error) {
 	return sepay.LinkSession{}, nil

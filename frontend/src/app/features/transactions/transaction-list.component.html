@@ -17,35 +17,35 @@
   <!-- KPI Metrics Overview Banner -->
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
     <!-- Total Income Card -->
-    <div class="bg-white border border-emerald-200/80 p-4.5 rounded-2xl flex items-center gap-3.5 shadow-md shadow-slate-200/50">
-      <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+    <div class="transaction-kpi transaction-kpi--income">
+      <div class="transaction-kpi__icon">
         <app-icon name="arrow_downward" class="text-xl font-bold"></app-icon>
       </div>
       <div>
-        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Thu</p>
+        <p class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Tổng Thu</p>
         <p class="text-xl font-black text-emerald-600 mt-0.5 tracking-tight">{{ incomeTotalText }}</p>
       </div>
     </div>
 
     <!-- Total Expense Card -->
-    <div class="bg-white border border-rose-200/80 p-4.5 rounded-2xl flex items-center gap-3.5 shadow-md shadow-slate-200/50">
-      <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+    <div class="transaction-kpi transaction-kpi--expense">
+      <div class="transaction-kpi__icon">
         <app-icon name="arrow_upward" class="text-xl font-bold"></app-icon>
       </div>
       <div>
-        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Chi</p>
+        <p class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Tổng Chi</p>
         <p class="text-xl font-black text-rose-600 mt-0.5 tracking-tight">{{ expenseTotalText }}</p>
       </div>
     </div>
 
     <!-- Net Cashflow Card -->
-    <div [class]="netCashFlow >= 0 ? 'bg-white border border-emerald-200/80 p-4.5 rounded-2xl flex items-center gap-3.5 shadow-md shadow-slate-200/50' : 'bg-white border border-rose-200/80 p-4.5 rounded-2xl flex items-center gap-3.5 shadow-md shadow-slate-200/50'">
-      <div [class]="netCashFlow >= 0 ? 'w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100' : 'w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100'">
+    <div class="transaction-kpi" [class.transaction-kpi--income]="netCashFlow >= 0" [class.transaction-kpi--expense]="netCashFlow < 0">
+      <div class="transaction-kpi__icon">
         <app-icon [name]="netCashFlow >= 0 ? 'trending_up' : 'trending_down'" class="text-xl font-bold"></app-icon>
       </div>
       <div>
-        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Dòng Tiền Ròng</p>
-        <p [class]="netCashFlow >= 0 && !hasMultipleCurrencies ? 'text-xl font-black text-emerald-600 mt-0.5 tracking-tight' : 'text-xl font-black text-[var(--text-main)] mt-0.5 tracking-tight'">
+        <p class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Dòng Tiền Ròng</p>
+        <p class="text-xl font-black mt-0.5 tracking-tight" [class.text-emerald-600]="netCashFlow >= 0 && !hasMultipleCurrencies">
           {{ netCashFlowText }}
         </p>
       </div>
@@ -221,11 +221,44 @@
           <option value="transfer">Chuyển khoản</option>
         </select>
 
+        <button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="filtersExpanded = !filtersExpanded" [attr.aria-expanded]="filtersExpanded">
+          <app-icon name="tune"></app-icon>
+          {{ filtersExpanded ? 'Thu gọn' : 'Bộ lọc' }}
+        </button>
+
         <button type="button" class="w-btn w-btn-ghost text-xs h-8 px-2" (click)="clearFilters()">
           {{ 'common.reset' | translate }}
         </button>
       </form>
     </div>
+
+    <form *ngIf="filtersExpanded" [formGroup]="filterForm" (ngSubmit)="applyFilters()" class="transaction-advanced-filters">
+      <label>
+        <span>Tìm kiếm</span>
+        <input formControlName="search" class="w-input" placeholder="Tên, ghi chú hoặc hạng mục" />
+      </label>
+      <label>
+        <span>Trạng thái</span>
+        <select formControlName="status" class="w-select" (change)="applyFilters()">
+          <option value="">Tất cả trạng thái</option>
+          <option value="posted">Đã ghi sổ</option>
+          <option value="pending">Đang chờ</option>
+          <option value="cancelled">Đã hủy</option>
+        </select>
+      </label>
+      <label>
+        <span>Hạng mục</span>
+        <input formControlName="categoryId" class="w-input" placeholder="Ví dụ: Ăn uống" (change)="applyFilters()" />
+      </label>
+      <label>
+        <span>Từ ngày</span>
+        <input type="date" formControlName="from" class="w-input" (change)="applyFilters()" />
+      </label>
+      <label>
+        <span>Đến ngày</span>
+        <input type="date" formControlName="to" class="w-input" (change)="applyFilters()" />
+      </label>
+    </form>
 
     <!-- Empty State -->
     <div *ngIf="loading" class="w-empty-state"><div class="w-empty-icon"><app-icon name="progress_activity"></app-icon></div><p class="w-empty-desc">Đang tải giao dịch…</p></div>
@@ -268,7 +301,7 @@
             </td>
             <td class="text-xs font-medium">{{ item.note || '-' }}</td>
             <td class="font-bold text-sm" [class.text-rose-600]="item.type === 'expense'" [class.text-emerald-600]="item.type === 'income'">
-              {{ item.amount }} {{ item.currency || 'VND' }}
+              {{ formatAmount(item.amount) }} {{ item.currency || 'VND' }}
             </td>
             <td>
               <span class="w-badge w-badge-neutral text-[10px]">

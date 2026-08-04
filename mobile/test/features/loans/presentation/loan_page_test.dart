@@ -141,13 +141,17 @@ void main() {
     expect(amountInput.keyboardType, TextInputType.number);
     expect(amountInput.controller!.text, '50000');
 
+    await tester.tap(find.text('3 ngày'));
+    await tester.pump();
+    expect(amountInput.controller!.text, '150000');
+
     await tester.tap(find.byIcon(Icons.add_circle_outline));
     await tester.pump();
-    expect(amountInput.controller!.text, '100000');
+    expect(amountInput.controller!.text, '200000');
     await tester.tap(find.text('Lưu khoản thu'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Thu lãi · 2 ngày · 100,000 VND'), findsOneWidget);
+    expect(find.text('Thu lãi · 4 ngày · 200,000 VND'), findsOneWidget);
     // The borrower overview loads two histories for its aggregate; the detail
     // then loads its own timeline once and keeps the saved receipt locally.
     expect(repository.paymentHistoryReads, 3);

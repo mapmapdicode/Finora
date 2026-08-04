@@ -84,7 +84,7 @@ class _ForecastPageState extends State<ForecastPage> {
 
   String _money(double amount) {
     final parts = amount.toStringAsFixed(0).split('.');
-    return parts.first.replaceAllRegExp(RegExp(r'\B(?=(\d{3})+(?!\d))'), ',');
+    return parts.first.replaceAllRegExp(RegExp(r'\B(?=(\d{3})+(?!\d))'), '.');
   }
 
   @override

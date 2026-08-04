@@ -28,6 +28,8 @@ import {
   Transaction,
   TransactionListPage,
   Workspace,
+  UserSettings,
+  MySePaySummary,
 } from '../../shared/models';
 
 @Injectable({ providedIn: 'root' })
@@ -97,6 +99,10 @@ export class ApiService {
 
   createAccount(payload: Partial<Account>) {
     return this.postWithIdempotency<Account>('/accounts', payload, 'create-account');
+  }
+
+  deleteAccount(id: string) {
+    return this.http.delete(this.baseURL(`/accounts/${id}`));
   }
 
   createTransfer(payload: {
@@ -177,6 +183,10 @@ export class ApiService {
     return this.postWithIdempotency<Loan>('/loans', payload, 'create-loan');
   }
 
+  deleteLoan(id: string) {
+    return this.http.delete(this.baseURL(`/loans/${id}`));
+  }
+
   createLoanPayment(loanId: string, payload: {
     principalAmount: string;
     interestAmount: string;
@@ -194,6 +204,10 @@ export class ApiService {
 
   createProperty(payload: Partial<Property>) {
     return this.postWithIdempotency<Property>('/properties', payload, 'create-property');
+  }
+
+  deleteProperty(id: string) {
+    return this.http.delete(this.baseURL(`/properties/${id}`));
   }
 
   addPropertyValuation(propertyId: string, payload: {
@@ -215,6 +229,10 @@ export class ApiService {
 
   createAsset(payload: Partial<Asset>) {
     return this.postWithIdempotency<Asset>('/assets', payload, 'create-asset');
+  }
+
+  deleteAsset(id: string) {
+    return this.http.delete(this.baseURL(`/assets/${id}`));
   }
 
   addAssetValuation(assetId: string, payload: {
@@ -245,6 +263,18 @@ export class ApiService {
 
   listSePayConnections(): Observable<unknown[]> {
     return this.http.get<unknown[]>(this.baseURL('/bank-connections'));
+  }
+
+  getUserSettings(): Observable<UserSettings> {
+    return this.http.get<UserSettings>(this.baseURL('/user/settings'));
+  }
+
+  updateUserSettings(payload: Pick<UserSettings, 'amountDisplayMode'>): Observable<UserSettings> {
+    return this.http.put<UserSettings>(this.baseURL('/user/settings'), payload);
+  }
+
+  getMySePaySummary(): Observable<MySePaySummary> {
+    return this.http.get<MySePaySummary>(this.baseURL('/me/sepay'));
   }
 
   listBankConnections(): Observable<BankConnection[]> {
@@ -361,5 +391,9 @@ export class ApiService {
 
   listAuditLogs(): Observable<AuditLog[]> {
     return this.http.get<AuditLog[]>(this.baseURL('/audit-logs'));
+  }
+
+  deletePortfolio(id: string) {
+    return this.http.delete(this.baseURL(`/portfolios/${id}`));
   }
 }

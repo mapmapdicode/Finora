@@ -6,10 +6,15 @@
       <p class="text-xs text-[var(--text-muted)] mt-1">Thiết lập không gian quản lý tài chính của bạn</p>
     </div>
 
-    <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
+    <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4" *ngIf="!verificationRequired; else verification">
       <div>
         <label class="m3-label block mb-1" for="register-name">Họ và tên</label>
         <input id="register-name" formControlName="name" class="m3-input" autocomplete="name" placeholder="Ví dụ: Nguyễn An" />
+      </div>
+
+      <div>
+        <label class="m3-label block mb-1" for="register-confirm-password">Nhập lại mật khẩu</label>
+        <input id="register-confirm-password" formControlName="confirmPassword" type="password" class="m3-input" autocomplete="new-password" placeholder="Nhập lại mật khẩu" />
       </div>
 
       <div>
@@ -22,10 +27,18 @@
         <input id="register-password" formControlName="password" type="password" class="m3-input" autocomplete="new-password" placeholder="Tạo mật khẩu" />
       </div>
 
-      <button type="submit" class="m3-btn m3-btn-primary w-full py-2.5 mt-2">
+      <button type="submit" class="m3-btn m3-btn-primary w-full py-2.5 mt-2" [disabled]="submitting">
         <app-icon name="person_add"></app-icon> Tạo tài khoản
       </button>
     </form>
+
+    <ng-template #verification>
+      <form [formGroup]="form" (ngSubmit)="verifyEmail()" class="space-y-4">
+        <div><label class="m3-label block mb-1" for="register-verification-code">Mã xác thực gồm 6 chữ số</label><input id="register-verification-code" formControlName="code" class="m3-input tracking-[.35em] text-center" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" /></div>
+        <button type="submit" class="m3-btn m3-btn-primary w-full py-2.5" [disabled]="submitting"><app-icon name="verified"></app-icon> Hoàn tất xác thực</button>
+        <button type="button" (click)="resendCode()" class="w-btn w-btn-ghost w-full">Gửi lại mã</button>
+      </form>
+    </ng-template>
 
     <p *ngIf="message" role="alert" aria-live="assertive" class="text-xs text-[var(--m3-danger)] bg-[var(--m3-danger-container)] p-3 rounded-xl mt-4 text-center">
       {{ message }}

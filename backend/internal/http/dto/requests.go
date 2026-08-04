@@ -86,6 +86,22 @@ type BotTransactionCreateRequest struct {
 	OccurredAt string `json:"occurredAt"`
 }
 
+// BotLoanCreateRequest is intentionally scoped to the account selected in the
+// public API path.  In particular, it has no settlementAccountId or
+// portfolioId fields, so a bot account key cannot move money in another
+// account or portfolio.
+type BotLoanCreateRequest struct {
+	Counterparty        string `json:"counterparty"`
+	Direction           string `json:"direction"`
+	PrincipalInitial    string `json:"principalInitial"`
+	AnnualRate          string `json:"annualRate"`
+	DailyRatePerMillion string `json:"dailyRatePerMillion"`
+	DayCountBasis       string `json:"dayCountBasis"`
+	StartAt             string `json:"startAt"`
+	DueAt               string `json:"dueAt"`
+	InterestCompounding bool   `json:"interestCompounding"`
+}
+
 type FlexibleTime struct {
 	time.Time
 }

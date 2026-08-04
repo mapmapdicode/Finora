@@ -134,6 +134,17 @@ export class AssetListComponent implements OnInit {
     this.statusMessage = '';
   }
 
+  remove(item: Asset) {
+    if (!this.auth.canMutate || !window.confirm(`Xóa tài sản “${item.name}”?`)) return;
+    this.api.deleteAsset(item.id).subscribe({
+      next: () => {
+        this.statusMessage = `Đã xóa tài sản “${item.name}”.`;
+        this.reload();
+      },
+      error: () => (this.statusMessage = 'Không thể xóa tài sản có dữ liệu liên kết.'),
+    });
+  }
+
   assetTypeLabel(assetType: string | undefined) {
     const labels: Record<string, string> = {
       investment: 'Đầu tư',

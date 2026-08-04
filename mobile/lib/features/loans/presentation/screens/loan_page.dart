@@ -6,7 +6,9 @@ import 'package:mobile/core/theme/finora_tokens.dart';
 import 'package:mobile/core/theme/finora_typography.dart';
 import 'package:mobile/core/utils/vietnamese_money_input.dart';
 import 'package:mobile/core/widgets/finora_core_widgets.dart';
+import 'package:mobile/features/loans/data/services/loan_reminder_service.dart';
 import 'package:mobile/features/loans/domain/entities/loan.dart';
+import 'package:mobile/features/loans/domain/entities/loan_reminder.dart';
 import 'package:mobile/features/loans/presentation/view_models/loan_view_model.dart';
 
 class LoanPage extends StatefulWidget {
@@ -82,16 +84,9 @@ class _LoanPageState extends State<LoanPage> {
       appBar: AppBar(
         backgroundColor: FinoraColors.background,
         foregroundColor: FinoraColors.textPrimary,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Khoản vay', style: FinoraTypography.h3),
-            Text(
-              'Đầu mối và các khoản phải thu',
-              style: FinoraTypography.caption,
-            ),
-          ],
-        ),
+        // The page can be rendered inside a narrow split view. Keep the
+        // toolbar title compact so its actions remain reachable.
+        title: const Text('Khoản vay', style: FinoraTypography.h3),
         actions: [
           IconButton(
             tooltip: 'Quy đổi lãi suất',
@@ -123,7 +118,7 @@ class _LoanPageState extends State<LoanPage> {
                 label: const Text('Thử lại'),
               ),
             )
-          : _LoanList(viewModel: model),
+          : FinoraContentWidth(child: _LoanList(viewModel: model)),
     );
   }
 }
@@ -389,40 +384,44 @@ class _BorrowerDetailPageState extends State<_BorrowerDetailPage> {
       foregroundColor: FinoraColors.textPrimary,
       title: Text(widget.group.name),
     ),
-    body: ListView(
-      padding: const EdgeInsets.all(FinoraSpace.md),
-      children: [
-        FutureBuilder<_BorrowerLoanMetrics>(
-          future: _metrics,
-          builder: (context, snapshot) {
-            final metrics =
-                snapshot.data ??
-                _BorrowerLoanMetrics.fromLoans(widget.group.loans, const []);
-            return _BorrowerOverview(
-              metrics: metrics,
-              loading: snapshot.connectionState == ConnectionState.waiting,
-            );
-          },
-        ),
-        const SizedBox(height: FinoraSpace.xl),
-        const Text('Khoản vay', style: FinoraTypography.h3),
-        const SizedBox(height: FinoraSpace.sm),
-        ...widget.group.loans.map(
-          (loan) => Padding(
-            padding: const EdgeInsets.only(bottom: FinoraSpace.sm),
-            child: _LoanCard(
-              loan: loan,
-              accrual: widget.viewModel.accruals[loan.id],
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      _LoanDetailPage(loan: loan, viewModel: widget.viewModel),
+    body: FinoraContentWidth(
+      child: ListView(
+        padding: const EdgeInsets.all(FinoraSpace.md),
+        children: [
+          FutureBuilder<_BorrowerLoanMetrics>(
+            future: _metrics,
+            builder: (context, snapshot) {
+              final metrics =
+                  snapshot.data ??
+                  _BorrowerLoanMetrics.fromLoans(widget.group.loans, const []);
+              return _BorrowerOverview(
+                metrics: metrics,
+                loading: snapshot.connectionState == ConnectionState.waiting,
+              );
+            },
+          ),
+          const SizedBox(height: FinoraSpace.xl),
+          const Text('Khoản vay', style: FinoraTypography.h3),
+          const SizedBox(height: FinoraSpace.sm),
+          ...widget.group.loans.map(
+            (loan) => Padding(
+              padding: const EdgeInsets.only(bottom: FinoraSpace.sm),
+              child: _LoanCard(
+                loan: loan,
+                accrual: widget.viewModel.accruals[loan.id],
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => _LoanDetailPage(
+                      loan: loan,
+                      viewModel: widget.viewModel,
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
@@ -840,11 +839,35 @@ class _LoanDetailPageState extends State<_LoanDetailPage> {
   int _paymentLoadVersion = 0;
   DateTime? _lastInterestPaidAt;
   bool _deleting = false;
+  LoanReminder? _reminder;
+  bool _loadingReminder = true;
 
   @override
   void initState() {
     super.initState();
     _loadPayments();
+    _loadReminder();
+  }
+
+  Future<void> _loadReminder() async {
+    final reminder = await LoanReminderService.instance.read(widget.loan.id);
+    if (mounted) {
+      setState(() {
+        _reminder = reminder;
+        _loadingReminder = false;
+      });
+    }
+  }
+
+  Future<void> _openReminderSettings() async {
+    final reminder = await showModalBottomSheet<LoanReminder>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) =>
+          _LoanReminderSheet(loan: widget.loan, existingReminder: _reminder),
+    );
+    if (reminder != null && mounted) setState(() => _reminder = reminder);
   }
 
   Future<void> _openCollection() async {
@@ -929,6 +952,7 @@ class _LoanDetailPageState extends State<_LoanDetailPage> {
     setState(() => _deleting = true);
     try {
       await widget.viewModel.delete(widget.loan.id);
+      await LoanReminderService.instance.remove(widget.loan.id);
       if (mounted) Navigator.pop(context);
     } catch (error) {
       if (mounted) {
@@ -959,6 +983,17 @@ class _LoanDetailPageState extends State<_LoanDetailPage> {
         title: const Text('Chi tiết khoản vay'),
         actions: [
           IconButton(
+            tooltip: _reminder?.enabled == true
+                ? 'Chỉnh sửa nhắc lịch'
+                : 'Cấu hình nhắc lịch',
+            onPressed: _loadingReminder ? null : _openReminderSettings,
+            icon: Icon(
+              _reminder?.enabled == true
+                  ? Icons.notifications_active_rounded
+                  : Icons.notifications_none_rounded,
+            ),
+          ),
+          IconButton(
             tooltip: 'Xóa khoản vay',
             onPressed: _deleting ? null : _deleteLoan,
             icon: _deleting
@@ -970,123 +1005,125 @@ class _LoanDetailPageState extends State<_LoanDetailPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(FinoraSpace.md),
-        children: [
-          FinoraCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(loan.borrower, style: FinoraTypography.h3),
-                    ),
-                    const SizedBox(width: FinoraSpace.sm),
-                    _LoanStatusBadge(loan: loan),
-                  ],
-                ),
-                const SizedBox(height: FinoraSpace.lg),
-                _detailRow('Gốc', _money(principal)),
-                _detailRow('Lãi/ngày', _money(daily)),
-                _detailRow(
-                  'Số ngày đang vay',
-                  '${accrual?.days ?? loan.days} ngày',
-                ),
-                _detailRow('Lãi cộng dồn', _money(accrued)),
-                if (lastInterestPaidAt != null)
+      body: FinoraContentWidth(
+        child: ListView(
+          padding: const EdgeInsets.all(FinoraSpace.md),
+          children: [
+            FinoraCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(loan.borrower, style: FinoraTypography.h3),
+                      ),
+                      const SizedBox(width: FinoraSpace.sm),
+                      _LoanStatusBadge(loan: loan),
+                    ],
+                  ),
+                  const SizedBox(height: FinoraSpace.lg),
+                  _detailRow('Gốc', _money(principal)),
+                  _detailRow('Lãi/ngày', _money(daily)),
                   _detailRow(
-                    'Lần nhận lãi gần nhất',
-                    _date(lastInterestPaidAt.toLocal()),
+                    'Số ngày đang vay',
+                    '${accrual?.days ?? loan.days} ngày',
                   ),
-                const Divider(height: FinoraSpace.xl),
-                _detailRow(
-                  'Tổng phải thu',
-                  _money(principal + accrued),
-                  emphasize: true,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: FinoraSpace.lg),
-          FilledButton.icon(
-            onPressed: _openCollection,
-            icon: const Icon(Icons.payments_rounded),
-            label: const Text('Ghi nhận thu'),
-          ),
-          const SizedBox(height: FinoraSpace.xl),
-          const Text('Lịch sử thu', style: FinoraTypography.h3),
-          const SizedBox(height: FinoraSpace.sm),
-          if (_loadingPayments)
-            const Center(child: CircularProgressIndicator())
-          else if (_paymentsError != null)
-            FinoraEmptyState(
-              icon: Icons.cloud_off_rounded,
-              title: 'Chưa tải được lịch sử thu',
-              message: loanErrorMessage(_paymentsError!),
-              action: TextButton.icon(
-                onPressed: _loadPayments,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Thử lại'),
-              ),
-            )
-          else if (_payments.isEmpty)
-            const FinoraEmptyState(
-              icon: Icons.timeline_rounded,
-              title: 'Chưa có khoản thu',
-              message: 'Các lần thu lãi hoặc gốc sẽ xuất hiện tại đây.',
-            )
-          else
-            Column(
-              children: _payments.map((payment) {
-                final principalAmount = _amount(payment.principal);
-                final interestAmount = _amount(payment.interest);
-                final feeAmount = _amount(payment.fee);
-                final total = principalAmount + interestAmount + feeAmount;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: FinoraSpace.sm),
-                  child: FinoraCard(
-                    child: Row(
-                      children: [
-                        const CircleAvatar(
-                          backgroundColor: FinoraColors.primarySoft,
-                          foregroundColor: FinoraColors.primary,
-                          child: Icon(Icons.payments_rounded),
-                        ),
-                        const SizedBox(width: FinoraSpace.sm),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _date(
-                                  DateTime.tryParse(
-                                        payment.occurredAt,
-                                      )?.toLocal() ??
-                                      DateTime.now(),
-                                ),
-                                style: FinoraTypography.label,
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                _paymentSummary(
-                                  payment,
-                                  principalAmount,
-                                  interestAmount,
-                                ),
-                                style: FinoraTypography.caption,
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(_money(total), style: FinoraTypography.label),
-                      ],
+                  _detailRow('Lãi cộng dồn', _money(accrued)),
+                  if (lastInterestPaidAt != null)
+                    _detailRow(
+                      'Lần nhận lãi gần nhất',
+                      _date(lastInterestPaidAt.toLocal()),
                     ),
+                  const Divider(height: FinoraSpace.xl),
+                  _detailRow(
+                    'Tổng phải thu',
+                    _money(principal + accrued),
+                    emphasize: true,
                   ),
-                );
-              }).toList(),
+                ],
+              ),
             ),
-        ],
+            const SizedBox(height: FinoraSpace.lg),
+            FilledButton.icon(
+              onPressed: _openCollection,
+              icon: const Icon(Icons.payments_rounded),
+              label: const Text('Ghi nhận thu'),
+            ),
+            const SizedBox(height: FinoraSpace.xl),
+            const Text('Lịch sử thu', style: FinoraTypography.h3),
+            const SizedBox(height: FinoraSpace.sm),
+            if (_loadingPayments)
+              const Center(child: CircularProgressIndicator())
+            else if (_paymentsError != null)
+              FinoraEmptyState(
+                icon: Icons.cloud_off_rounded,
+                title: 'Chưa tải được lịch sử thu',
+                message: loanErrorMessage(_paymentsError!),
+                action: TextButton.icon(
+                  onPressed: _loadPayments,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Thử lại'),
+                ),
+              )
+            else if (_payments.isEmpty)
+              const FinoraEmptyState(
+                icon: Icons.timeline_rounded,
+                title: 'Chưa có khoản thu',
+                message: 'Các lần thu lãi hoặc gốc sẽ xuất hiện tại đây.',
+              )
+            else
+              Column(
+                children: _payments.map((payment) {
+                  final principalAmount = _amount(payment.principal);
+                  final interestAmount = _amount(payment.interest);
+                  final feeAmount = _amount(payment.fee);
+                  final total = principalAmount + interestAmount + feeAmount;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: FinoraSpace.sm),
+                    child: FinoraCard(
+                      child: Row(
+                        children: [
+                          const CircleAvatar(
+                            backgroundColor: FinoraColors.primarySoft,
+                            foregroundColor: FinoraColors.primary,
+                            child: Icon(Icons.payments_rounded),
+                          ),
+                          const SizedBox(width: FinoraSpace.sm),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _date(
+                                    DateTime.tryParse(
+                                          payment.occurredAt,
+                                        )?.toLocal() ??
+                                        DateTime.now(),
+                                  ),
+                                  style: FinoraTypography.label,
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  _paymentSummary(
+                                    payment,
+                                    principalAmount,
+                                    interestAmount,
+                                  ),
+                                  style: FinoraTypography.caption,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(_money(total), style: FinoraTypography.label),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1116,6 +1153,218 @@ class _LoanDetailPageState extends State<_LoanDetailPage> {
           ],
         ),
       );
+}
+
+class _LoanReminderSheet extends StatefulWidget {
+  const _LoanReminderSheet({required this.loan, this.existingReminder});
+
+  final Loan loan;
+  final LoanReminder? existingReminder;
+
+  @override
+  State<_LoanReminderSheet> createState() => _LoanReminderSheetState();
+}
+
+class _LoanReminderSheetState extends State<_LoanReminderSheet> {
+  late bool _enabled = widget.existingReminder?.enabled ?? true;
+  late DateTime _scheduledAt =
+      widget.existingReminder?.scheduledAt ?? _defaultReminderTime();
+  bool _saving = false;
+
+  DateTime _defaultReminderTime() {
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    return DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 9);
+  }
+
+  Future<void> _pickDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _scheduledAt,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+      helpText: 'Chọn ngày nhắc',
+    );
+    if (selected != null) {
+      setState(
+        () => _scheduledAt = DateTime(
+          selected.year,
+          selected.month,
+          selected.day,
+          _scheduledAt.hour,
+          _scheduledAt.minute,
+        ),
+      );
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_scheduledAt),
+      helpText: 'Chọn giờ nhắc',
+    );
+    if (selected != null) {
+      setState(
+        () => _scheduledAt = DateTime(
+          _scheduledAt.year,
+          _scheduledAt.month,
+          _scheduledAt.day,
+          selected.hour,
+          selected.minute,
+        ),
+      );
+    }
+  }
+
+  Future<void> _save() async {
+    if (_enabled && !_scheduledAt.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hãy chọn thời điểm nhắc ở tương lai.')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      if (_enabled && !await LoanReminderService.instance.requestPermission()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bạn cần cho phép thông báo để nhận nhắc lịch.'),
+            ),
+          );
+        }
+        return;
+      }
+      final reminder = LoanReminder(
+        loanId: widget.loan.id,
+        borrower: widget.loan.borrower,
+        scheduledAt: _scheduledAt,
+        enabled: _enabled,
+      );
+      await LoanReminderService.instance.save(reminder);
+      if (mounted) Navigator.pop(context, reminder);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chưa thể lưu nhắc lịch. Thử lại sau.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _sendTestNotification() async {
+    if (!await LoanReminderService.instance.requestPermission()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bạn cần cho phép thông báo để gửi thông báo thử.'),
+          ),
+        );
+      }
+      return;
+    }
+    try {
+      await LoanReminderService.instance.showTestNotification(
+        widget.loan.borrower,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã gửi thông báo thử.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chưa thể gửi thông báo thử.')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(
+        FinoraSpace.lg,
+        FinoraSpace.sm,
+        FinoraSpace.lg,
+        FinoraSpace.xl,
+      ),
+      decoration: const BoxDecoration(
+        color: FinoraColors.surfaceElevated,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: const BoxDecoration(
+                color: FinoraColors.borderStrong,
+                borderRadius: FinoraRadius.full,
+              ),
+            ),
+          ),
+          const SizedBox(height: FinoraSpace.lg),
+          const Text('Nhắc lịch thu', style: FinoraTypography.h3),
+          const SizedBox(height: FinoraSpace.xs),
+          Text(
+            'Finora sẽ gửi thông báo trên thiết bị để bạn kiểm tra khoản vay của ${widget.loan.borrower}.',
+            style: FinoraTypography.bodySmall.copyWith(
+              color: FinoraColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: FinoraSpace.md),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Bật nhắc lịch', style: FinoraTypography.title),
+            subtitle: const Text('Thông báo cục bộ trên thiết bị này'),
+            value: _enabled,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _enabled = value),
+          ),
+          if (_enabled) ...[
+            const SizedBox(height: FinoraSpace.sm),
+            OutlinedButton.icon(
+              onPressed: _saving ? null : _pickDate,
+              icon: const Icon(Icons.calendar_today_outlined),
+              label: Text('Ngày nhắc: ${_date(_scheduledAt)}'),
+            ),
+            const SizedBox(height: FinoraSpace.sm),
+            OutlinedButton.icon(
+              onPressed: _saving ? null : _pickTime,
+              icon: const Icon(Icons.access_time_rounded),
+              label: Text('Giờ nhắc: ${_time(_scheduledAt)}'),
+            ),
+            const SizedBox(height: FinoraSpace.sm),
+            TextButton.icon(
+              onPressed: _saving ? null : _sendTestNotification,
+              icon: const Icon(Icons.send_outlined),
+              label: const Text('Gửi thông báo thử'),
+            ),
+          ],
+          const SizedBox(height: FinoraSpace.lg),
+          FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.notifications_active_rounded),
+            label: Text(_enabled ? 'Lưu nhắc lịch' : 'Tắt nhắc lịch'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _LoanCreateSheet extends StatefulWidget {
@@ -1832,8 +2081,14 @@ class _LoanCollectionSheetState extends State<_LoanCollectionSheet> {
       ? _dailyInterest(widget.loan) * _days
       : _amount(widget.loan.principalBalance);
 
-  void _updateSuggestion() =>
-      setState(() => _amountController.text = _suggested.round().toString());
+  void _updateSuggestion() {
+    setState(() => _amountController.text = _suggested.round().toString());
+  }
+
+  void _selectInterestDays(int days) {
+    _days = days;
+    _updateSuggestion();
+  }
 
   Future<void> _pickDate() async {
     final date = await showDatePicker(
@@ -1938,9 +2193,8 @@ class _LoanCollectionSheetState extends State<_LoanCollectionSheet> {
                       (days) => ChoiceChip(
                         label: Text('$days ngày'),
                         selected: _days == days,
-                        onSelected: (_) {
-                          _days = days;
-                          _updateSuggestion();
+                        onSelected: (selected) {
+                          if (selected) _selectInterestDays(days);
                         },
                       ),
                     )
@@ -1952,8 +2206,7 @@ class _LoanCollectionSheetState extends State<_LoanCollectionSheet> {
                   IconButton(
                     onPressed: _days > 1
                         ? () {
-                            _days--;
-                            _updateSuggestion();
+                            _selectInterestDays(_days - 1);
                           }
                         : null,
                     icon: const Icon(Icons.remove_circle_outline),
@@ -1961,8 +2214,7 @@ class _LoanCollectionSheetState extends State<_LoanCollectionSheet> {
                   Text('$_days ngày', style: FinoraTypography.title),
                   IconButton(
                     onPressed: () {
-                      _days++;
-                      _updateSuggestion();
+                      _selectInterestDays(_days + 1);
                     },
                     icon: const Icon(Icons.add_circle_outline),
                   ),
@@ -1972,6 +2224,17 @@ class _LoanCollectionSheetState extends State<_LoanCollectionSheet> {
                 'Tự tính: ${_money(_amount(widget.loan.dailyRatePerMillion))} / 1 triệu / ngày × ${_formatNumber(_amount(widget.loan.principalBalance) / 1000000, decimals: 2)} triệu × $_days ngày = ${_money(_suggested)}',
                 style: FinoraTypography.bodySmall.copyWith(
                   color: FinoraColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: FinoraSpace.xs),
+              Text(
+                _suggested > 0
+                    ? 'Đã tự điền số tiền tạm tính bên dưới. Bạn vẫn có thể chỉnh lại số tiền thực nhận.'
+                    : 'Chưa có lãi/ngày nên số tạm tính là 0 VND. Hãy nhập số tiền thực nhận nếu cần.',
+                style: FinoraTypography.bodySmall.copyWith(
+                  color: _suggested > 0
+                      ? FinoraColors.textSecondary
+                      : FinoraColors.warning,
                 ),
               ),
               const SizedBox(height: FinoraSpace.lg),
@@ -2453,6 +2716,9 @@ String _money(num value) {
 
 String _date(DateTime value) =>
     '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
+
+String _time(DateTime value) =>
+    '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 
 String _initials(String name) => name
     .trim()

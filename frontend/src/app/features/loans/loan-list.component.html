@@ -32,6 +32,10 @@
     </div>
 
     <form (ngSubmit)="submitLoan()" [formGroup]="creationForm" class="space-y-4">
+      <div class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-subtle)] p-4">
+        <div class="flex flex-wrap justify-between gap-3 items-start"><div><h4 class="font-bold text-sm text-[var(--text-main)]">Quy đổi lãi suất</h4><p class="text-xs text-[var(--text-muted)] mt-1">Nhập tiền lãi trên mỗi 1 triệu đồng mỗi ngày; Finora tự quy đổi sang lãi suất năm (ACT/365).</p></div><b class="text-[var(--accent-primary)] text-sm">{{ annualRateEquivalent | number:'1.2-2' }}% / năm</b></div>
+        <div class="flex flex-wrap gap-2 mt-3"><button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="setQuickRate(2000)">2.000đ</button><button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="setQuickRate(3000)">3.000đ</button><button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="setQuickRate(4000)">4.000đ</button><span class="text-xs self-center text-[var(--text-muted)]">Tương đương {{ dailyRatePerMillion | number:'1.0-0' }}đ / triệu / ngày</span></div>
+      </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="w-label" for="loan-counterparty">{{ 'loans.counterparty' | translate }}</label>
@@ -45,7 +49,7 @@
 
         <div>
           <label class="w-label" for="loan-daily-rate">Lãi / 1 triệu / ngày (VND)</label>
-          <input id="loan-daily-rate" formControlName="dailyRatePerMillion" placeholder="Ví dụ: 3000" class="w-input" />
+          <input id="loan-daily-rate" formControlName="dailyRatePerMillion" inputmode="decimal" (input)="syncAnnualRate()" placeholder="Ví dụ: 3000" class="w-input" />
         </div>
 
         <div>
@@ -69,6 +73,8 @@
           <input id="loan-start-at" formControlName="startAt" type="date" class="w-input" />
         </div>
       </div>
+
+      <input type="hidden" formControlName="annualRate" />
 
       <div class="flex justify-end pt-1">
         <button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
@@ -162,6 +168,7 @@
               >
                 <app-icon name="payments" class="text-sm"></app-icon> {{ 'loans.pay_button' | translate }}
               </button>
+              <button *ngIf="auth.canMutate" type="button" class="w-btn w-btn-outline text-xs h-8 px-3 ml-2 text-rose-700 border-rose-200 hover:bg-rose-50" (click)="remove(item)">Xóa</button>
             </td>
           </tr>
         </tbody>

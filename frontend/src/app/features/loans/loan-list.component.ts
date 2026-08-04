@@ -29,6 +29,14 @@ export class LoanListComponent implements OnInit {
   selectedLoanId = '';
   selectedLoanForPayment = '';
 
+  get dailyRatePerMillion(): number {
+    return Number(this.creationForm?.value.dailyRatePerMillion || 0) || 0;
+  }
+
+  get annualRateEquivalent(): number {
+    return (this.dailyRatePerMillion * 365 * 100) / 1_000_000;
+  }
+
   constructor(private api: ApiService, private fb: FormBuilder, public auth: AuthService) {
     this.creationForm = this.fb.group({
       counterparty: ['', Validators.required],
@@ -146,6 +154,32 @@ export class LoanListComponent implements OnInit {
 
   closePayment() {
     this.selectedLoanForPayment = '';
+  }
+
+  setQuickRate(value: number) {
+    this.creationForm.patchValue({
+      dailyRatePerMillion: String(value),
+      annualRate: this.toAnnualRate(value),
+    });
+  }
+
+  syncAnnualRate() {
+    this.creationForm.patchValue({ annualRate: this.toAnnualRate(this.dailyRatePerMillion) }, { emitEvent: false });
+  }
+
+  private toAnnualRate(value: number) {
+    return ((value * 365 * 100) / 1_000_000).toFixed(4);
+  }
+
+  remove(item: Loan) {
+    if (!this.auth.canMutate || !window.confirm(`Xóa khoản vay với “${item.counterparty}”?`)) return;
+    this.api.deleteLoan(item.id).subscribe({
+      next: () => {
+        this.statusMessage = 'Đã xóa khoản vay.';
+        this.reload();
+      },
+      error: () => (this.statusMessage = 'Không thể xóa khoản vay có dữ liệu thanh toán liên kết.'),
+    });
   }
 
   submitPayment() {

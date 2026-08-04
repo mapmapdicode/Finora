@@ -164,6 +164,7 @@
               >
                 <app-icon name="add_chart" class="text-sm"></app-icon> Định giá
               </button>
+              <button *ngIf="auth.canMutate" type="button" class="w-btn w-btn-outline text-xs h-8 px-3 ml-2 text-rose-700 border-rose-200 hover:bg-rose-50" (click)="remove(item)">Xóa</button>
             </td>
           </tr>
         </tbody>

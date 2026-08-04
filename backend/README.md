@@ -14,6 +14,20 @@ Default:
 - Ready: `GET /readyz`
 - Base API: `/api/v1`
 
+## Local PostgreSQL and Redis
+
+Start the local dependencies from the repository root:
+
+```bash
+docker compose up -d postgres redis
+```
+
+- PostgreSQL is published at `localhost:5432` (`wealthos` database).
+- Redis is published at `localhost:6379`.
+- Copy `.env.example` to `.env` (or set the same environment variables) before
+  running the backend. The application runs migrations automatically when
+  `DATABASE_URL` is present.
+
 ## Demo auth
 
 Create/login user:

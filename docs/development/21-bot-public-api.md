@@ -2,6 +2,8 @@
 
 API này dành cho bot/automation ghi nhận giao dịch vào **một** account Finora. Không dùng JWT; mỗi request bắt buộc có secret riêng theo account trong header `X-Finora-Account-Key`.
 
+Mọi `POST` public API phải có thêm `Idempotency-Key` duy nhất (UUID được khuyến nghị). Gửi lại đúng key cùng payload sẽ nhận lại response đã tạo, không tạo bản ghi thứ hai.
+
 ## 1. Tạo hoặc xoay secret
 
 Người dùng đăng nhập Finora với vai trò owner/editor của user gọi:
@@ -20,6 +22,7 @@ Response trả `secret` đúng một lần. Lưu nó trong secret manager của 
 POST /public/v1/accounts/{accountId}/transactions
 Content-Type: application/json
 X-Finora-Account-Key: finora_bot_...
+Idempotency-Key: 53f09b48-6577-4e51-b99c-4f2a7a9f64b0
 
 {
   "type": "expense",
@@ -38,7 +41,33 @@ X-Finora-Account-Key: finora_bot_...
 
 Response `201` chứa `transaction`. Source luôn là `bot_public_api`.
 
-## 3. Lấy lịch sử theo khoảng ngày
+## 3. Tạo khoản vay
+
+```http
+POST /public/v1/accounts/{accountId}/loans
+Content-Type: application/json
+X-Finora-Account-Key: finora_bot_...
+Idempotency-Key: 8d8df2f2-d4aa-4c45-ab30-8fd8e1fbda18
+
+{
+  "counterparty": "Nguyễn Văn A",
+  "direction": "receivable",
+  "principalInitial": "100000000",
+  "annualRate": "12",
+  "dailyRatePerMillion": "0",
+  "dayCountBasis": "365",
+  "startAt": "2026-07-30T00:00:00+07:00",
+  "dueAt": "2026-10-30T00:00:00+07:00",
+  "interestCompounding": false
+}
+```
+
+- `direction`: `receivable` là cho vay; `payable` là đi vay.
+- `counterparty` và `principalInitial` (chuỗi số dương) là bắt buộc. `annualRate` mặc định là `0`; `startAt` mặc định là hiện tại; `dueAt` mặc định sau `startAt` một tháng.
+- Account trong URL luôn là settlement account và portfolio của account đó luôn là portfolio của loan. Bot không thể chỉ định account/portfolio khác.
+- Khi tạo khoản cho vay (`receivable`), API cũng tạo bút toán `loan_disbursement`, không hạch toán thành chi tiêu. Response `201` chứa `loan` và `transaction`. Với khoản đi vay, response chỉ chứa `loan`.
+
+## 4. Lấy lịch sử theo khoảng ngày
 
 ```http
 GET /public/v1/accounts/{accountId}/transactions/history?from=2026-07-01&to=2026-07-31
@@ -52,4 +81,4 @@ X-Finora-Account-Key: finora_bot_...
 - Không đưa secret vào prompt, log, Git hoặc mobile app.
 - Chỉ gọi HTTPS; secret là credential cấp account, không thay cho JWT người dùng.
 - Khi nghi lộ key, gọi lại endpoint tạo key để xoay ngay.
-- API không tự tạo transfer, loan hoặc thay đổi transaction đã có.
+- API không tự tạo transfer hoặc thay đổi transaction đã có.

@@ -90,13 +90,14 @@
 
     <div *ngIf="!loading && accounts.length" class="w-table-container">
       <table class="w-table">
-        <thead><tr><th>{{ 'accounts.table_name' | translate }}</th><th>{{ 'accounts.table_type' | translate }}</th><th>{{ 'accounts.table_currency' | translate }}</th><th>{{ 'accounts.table_id' | translate }}</th></tr></thead>
+        <thead><tr><th>{{ 'accounts.table_name' | translate }}</th><th>{{ 'accounts.table_type' | translate }}</th><th>{{ 'accounts.table_currency' | translate }}</th><th>{{ 'accounts.table_id' | translate }}</th><th class="text-right">{{ 'common.actions' | translate }}</th></tr></thead>
         <tbody>
           <tr *ngFor="let item of accounts">
             <td class="font-bold text-[var(--text-main)]"><span class="account-row-icon"><app-icon [name]="item.type === 'bank' ? 'account_balance' : item.type === 'card' ? 'credit_card' : 'payments'"></app-icon></span>{{ item.name }}</td>
             <td><span class="w-badge font-bold uppercase text-[10px]" [ngClass]="{'w-badge-indigo': item.type === 'bank','w-badge-success': item.type === 'cash','w-badge-warning': item.type === 'card'}">{{ typeLabel(item.type) }}</span></td>
             <td class="font-bold font-mono text-xs">{{ item.currency }}</td>
             <td class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td>
+            <td class="text-right"><button *ngIf="auth.canMutate" type="button" class="w-btn w-btn-outline text-xs h-8 px-3 text-rose-700 border-rose-200 hover:bg-rose-50" (click)="remove(item)"><app-icon name="close" class="text-sm"></app-icon> Xóa</button></td>
           </tr>
         </tbody>
       </table>

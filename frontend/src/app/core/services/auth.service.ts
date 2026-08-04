@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AuthResponse, Role, Workspace } from '../../shared/models';
+import { AuthResponse, RegistrationResponse, Role, Workspace } from '../../shared/models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -45,8 +45,16 @@ export class AuthService {
     return this.http.post<AuthResponse>(`${environment.apiBase}/api/v1/auth/login`, { email, password });
   }
 
-  register(payload: { email: string; password: string; name: string; workspaceName?: string }) {
-    return this.http.post<AuthResponse>(`${environment.apiBase}/api/v1/auth/register`, payload);
+  register(payload: { email: string; password: string; confirmPassword: string; name: string; workspaceName?: string }) {
+    return this.http.post<RegistrationResponse>(`${environment.apiBase}/api/v1/auth/register`, payload);
+  }
+
+  verifyEmail(email: string, code: string) {
+    return this.http.post<AuthResponse>(`${environment.apiBase}/api/v1/auth/verify-email`, { email, code });
+  }
+
+  resendVerificationEmail(email: string) {
+    return this.http.post(`${environment.apiBase}/api/v1/auth/resend-verification-email`, { email });
   }
 
   persistSession(response: AuthResponse) {

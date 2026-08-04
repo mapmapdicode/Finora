@@ -104,7 +104,7 @@
             <app-icon name="pie_chart" class="text-[var(--accent-primary)] text-xl"></app-icon>
             <span class="font-bold text-sm text-[var(--text-main)]">{{ item.name }}</span>
           </div>
-          <span class="w-badge w-badge-indigo uppercase font-mono text-[10px]">{{ item.baseCurrency }}</span>
+          <span class="flex items-center gap-2"><span class="w-badge w-badge-indigo uppercase font-mono text-[10px]">{{ item.baseCurrency }}</span><button *ngIf="auth.canMutate" type="button" class="text-xs text-rose-700 hover:underline" (click)="remove(item, $event)">Xóa</button></span>
         </button>
       </div>
     </div>

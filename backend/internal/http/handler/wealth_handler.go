@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -682,6 +683,9 @@ func (h *WealthHandler) authenticateBotAccount(c *gin.Context) (*domain.Account,
 		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED"})
 		return nil, false
 	}
+	// Preserve the account-key principal for idempotency and audit records. The
+	// public credential remains scoped by the account ID in the URL.
+	c.Set("user_id", string(account.UserID))
 	return account, true
 }
 
@@ -719,6 +723,112 @@ func (h *WealthHandler) BotCreateTransaction(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"transaction": transaction})
+}
+
+// BotCreateLoan creates a loan settled through the account addressed by the
+// public API path.  This prevents an account-scoped key from selecting another
+// account or portfolio during loan creation.
+func (h *WealthHandler) BotCreateLoan(c *gin.Context) {
+	account, ok := h.authenticateBotAccount(c)
+	if !ok {
+		return
+	}
+	var body dto.BotLoanCreateRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+
+	counterparty := strings.TrimSpace(body.Counterparty)
+	if counterparty == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "COUNTERPARTY_REQUIRED", "message": "counterparty is required"})
+		return
+	}
+	direction := domain.LoanDirection(strings.ToLower(strings.TrimSpace(body.Direction)))
+	if direction != domain.LoanDirectionReceivable && direction != domain.LoanDirectionPayable {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_DIRECTION", "message": "direction must be receivable or payable"})
+		return
+	}
+	principal := strings.TrimSpace(body.PrincipalInitial)
+	principalValue, err := strconv.ParseFloat(principal, 64)
+	if err != nil || principal == "" || math.IsNaN(principalValue) || math.IsInf(principalValue, 0) || principalValue <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_PRINCIPAL", "message": "principalInitial must be a positive number"})
+		return
+	}
+	annualRate := strings.TrimSpace(body.AnnualRate)
+	if annualRate == "" {
+		annualRate = "0"
+	}
+	annualRateValue, err := strconv.ParseFloat(annualRate, 64)
+	if err != nil || math.IsNaN(annualRateValue) || math.IsInf(annualRateValue, 0) || annualRateValue < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_ANNUAL_RATE", "message": "annualRate must be a non-negative number"})
+		return
+	}
+	dailyRate := strings.TrimSpace(body.DailyRatePerMillion)
+	if dailyRate == "" {
+		dailyRate = "0"
+	}
+	dailyRateValue, err := strconv.ParseFloat(dailyRate, 64)
+	if err != nil || math.IsNaN(dailyRateValue) || math.IsInf(dailyRateValue, 0) || dailyRateValue < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_DAILY_RATE", "message": "dailyRatePerMillion must be a non-negative number"})
+		return
+	}
+
+	startAt := time.Now().UTC()
+	if raw := strings.TrimSpace(body.StartAt); raw != "" {
+		startAt, err = parseDateTime(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_START_DATE"})
+			return
+		}
+	}
+	dueAt := startAt.AddDate(0, 1, 0)
+	if raw := strings.TrimSpace(body.DueAt); raw != "" {
+		dueAt, err = parseDateTime(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_DUE_DATE"})
+			return
+		}
+	}
+	if !dueAt.After(startAt) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_TERM", "message": "dueAt must be after startAt"})
+		return
+	}
+
+	customer, err := h.store.CreateCustomer(domain.Customer{UserID: account.UserID, Name: counterparty})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	loan, err := h.store.CreateLoan(domain.Loan{
+		UserID: account.UserID, PortfolioID: account.PortfolioID, CustomerID: customer.ID,
+		Counterparty: counterparty, Direction: direction, PrincipalInitial: principal,
+		PrincipalBalance: principal, AnnualRate: annualRate, DailyRatePerMillion: dailyRate,
+		DayCountBasis: firstNonEmpty(strings.TrimSpace(body.DayCountBasis), "365"),
+		StartAt:       startAt, DueAt: dueAt, Status: domain.LoanStatusActive,
+		InterestCompound: body.InterestCompounding, SettlementAccountID: account.ID,
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	if direction == domain.LoanDirectionReceivable {
+		transaction, err := h.service.CreateTransaction(domain.Transaction{
+			UserID: account.UserID, AccountID: account.ID, PortfolioID: account.PortfolioID,
+			Type: domain.TransactionTypeLoanDisbursement, Amount: principal, Currency: account.Currency,
+			Name: "Loan disbursement", Note: "loan principal: " + string(loan.ID),
+			OccurredAt: startAt, Status: domain.TransactionStatusPosted, Source: "bot_public_api",
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+			return
+		}
+		h.recordAudit(c, "", "loan", loan.ID, nil, loan, "success", "public account key")
+		c.JSON(http.StatusCreated, gin.H{"loan": loan, "transaction": transaction})
+		return
+	}
+	h.recordAudit(c, "", "loan", loan.ID, nil, loan, "success", "public account key")
+	c.JSON(http.StatusCreated, gin.H{"loan": loan})
 }
 
 func (h *WealthHandler) BotListTransactions(c *gin.Context) {

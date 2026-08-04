@@ -94,6 +94,24 @@ export class AccountListComponent implements OnInit {
     });
   }
 
+  remove(item: { id: string; name: string }) {
+    if (!this.auth.canMutate || !item.id) return;
+    if (!window.confirm(`Xóa tài khoản “${item.name}”? Chỉ có thể xóa tài khoản không có giao dịch liên kết.`)) return;
+    this.statusMessage = '';
+    this.api.deleteAccount(item.id).subscribe({
+      next: () => {
+        this.statusMessage = `Đã xóa tài khoản “${item.name}”.`;
+        this.reload();
+      },
+      error: (error) => {
+        const code = error?.error?.code;
+        this.statusMessage = code === 'ACCOUNT_HAS_TRANSACTIONS'
+          ? 'Không thể xóa tài khoản vì đang có giao dịch hoặc dòng tiền liên kết.'
+          : 'Không thể xóa tài khoản.';
+      },
+    });
+  }
+
   typeLabel(type: string | undefined) {
     const labels: Record<string, string> = {
       bank: 'Ngân hàng',
