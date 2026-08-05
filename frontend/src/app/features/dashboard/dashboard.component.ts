@@ -25,6 +25,10 @@ export class DashboardComponent implements OnInit {
   toggleBalanceVisibility() {
     this.hideBalance.update((v) => !v);
   }
+
+  openCommandPalette() {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, ctrlKey: true }));
+  }
   summaryByPortfolio: string[] = [];
   accounts: Account[] = [];
   transactions: Transaction[] = [];

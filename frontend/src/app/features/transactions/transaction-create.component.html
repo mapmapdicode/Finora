@@ -1,0 +1,151 @@
+<!-- TopAppBar -->
+<header class="w-full sticky top-0 z-50 bg-[#fff7fc] shadow-[0px_4px_20px_rgba(29,11,41,0.04)] border-b border-[#cfc2d2]/30">
+  <div class="flex justify-between items-center px-4 md:px-16 h-16 w-full max-w-[1280px] mx-auto">
+    <div class="flex items-center gap-3">
+      <!-- Back Button for Transactional Flow -->
+      <button (click)="goBack()" type="button" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#fae8ff] transition-colors text-[#4c4450] active:scale-95 duration-200 cursor-pointer">
+        <span class="material-symbols-outlined">arrow_back</span>
+      </button>
+      <div class="font-headline-md text-xl md:text-2xl font-bold text-[#43016a] tracking-tight font-display">
+        Nhập dữ liệu Thu/Chi
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <button type="button" (click)="goBack()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#fae8ff] transition-colors text-[#43016a] active:scale-95 duration-200">
+        <span class="material-symbols-outlined">notifications</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Main Content Canvas -->
+<main class="flex-1 w-full max-w-[1280px] mx-auto px-4 md:px-16 py-6 pb-32 md:pb-8 flex flex-col md:flex-row gap-6 font-sans text-[#261432]">
+  <!-- Left Column: Form Details -->
+  <section class="flex-1 flex flex-col gap-4">
+    
+    <!-- Amount Display Card -->
+    <div class="bg-white rounded-xl shadow-[0px_4px_20px_rgba(29,11,41,0.04)] border border-[#cfc2d2]/30 p-6 flex flex-col items-center justify-center min-h-[140px] relative overflow-hidden group">
+      <div class="absolute inset-0 bg-[#43016a]/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+      <div class="text-xs font-bold text-[#4c4450] uppercase tracking-wider mb-2">Số tiền (VND)</div>
+      <div class="text-3xl md:text-5xl font-bold text-[#43016a] flex items-baseline gap-1 font-display tracking-tight">
+        <span class="text-2xl font-bold text-[#e9c349]">₫</span>
+        <span id="amount-display">{{ formattedAmount }}</span>
+      </div>
+    </div>
+
+    <!-- Type Toggle (Chi phí vs Thu nhập) -->
+    <div class="flex bg-[#fae8ff] rounded-full p-1 shadow-inner relative border border-[#cfc2d2]/40">
+      <button type="button" 
+              (click)="setType('expense')" 
+              [class.bg-white]="type === 'expense'" 
+              [class.text-[#43016a]]="type === 'expense'" 
+              [class.shadow-sm]="type === 'expense'" 
+              [class.text-[#4c4450]]="type !== 'expense'" 
+              class="flex-1 z-10 py-2.5 text-sm font-bold text-center rounded-full transition-all cursor-pointer">
+        Chi phí
+      </button>
+      <button type="button" 
+              (click)="setType('income')" 
+              [class.bg-white]="type === 'income'" 
+              [class.text-[#43016a]]="type === 'income'" 
+              [class.shadow-sm]="type === 'income'" 
+              [class.text-[#4c4450]]="type !== 'income'" 
+              class="flex-1 z-10 py-2.5 text-sm font-bold text-center rounded-full transition-all cursor-pointer">
+        Thu nhập
+      </button>
+    </div>
+
+    <!-- Target Account Selection -->
+    <div *ngIf="accounts.length" class="bg-white rounded-xl shadow-[0px_4px_20px_rgba(29,11,41,0.04)] border border-[#cfc2d2]/30 p-4">
+      <label class="text-xs font-bold text-[#4c4450] uppercase tracking-wider block mb-2">Tài khoản ghi nhận</label>
+      <select [ngModel]="selectedAccountId" (ngModelChange)="selectedAccountId = $event" class="w-full bg-[#fff7fc] border border-[#cfc2d2]/50 rounded-lg p-2.5 text-sm font-bold text-[#261432] outline-none cursor-pointer">
+        <option *ngFor="let acc of accounts" [value]="acc.id">{{ acc.name }} ({{ acc.currency }})</option>
+      </select>
+    </div>
+
+    <!-- Category List -->
+    <div class="bg-white rounded-xl shadow-[0px_4px_20px_rgba(29,11,41,0.04)] border border-[#cfc2d2]/30 overflow-hidden flex flex-col">
+      <div class="p-4 border-b border-[#cfc2d2]/30 flex justify-between items-center bg-[#fff7fc]">
+        <span class="text-sm font-bold text-[#261432]">Danh mục</span>
+        <button type="button" class="text-[#43016a] hover:bg-[#fae8ff] rounded-full w-8 h-8 flex items-center justify-center transition-colors">
+          <span class="material-symbols-outlined text-sm">add</span>
+        </button>
+      </div>
+      <div class="max-h-[240px] overflow-y-auto p-2 space-y-1">
+        <label *ngFor="let cat of categories" 
+               (click)="selectCategory(cat.label)" 
+               class="flex items-center gap-4 p-3 rounded-lg hover:bg-[#fae8ff]/50 cursor-pointer transition-colors group border"
+               [class.border-[#43016a]]="selectedCategory === cat.label"
+               [class.bg-[#fae8ff]/40]="selectedCategory === cat.label"
+               [class.border-transparent]="selectedCategory !== cat.label">
+          <div class="w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0"
+               [ngClass]="selectedCategory === cat.label ? 'bg-[#43016a] text-white' : 'bg-[#fae8ff] text-[#43016a]'">
+            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">{{ cat.icon }}</span>
+          </div>
+          <span class="text-sm font-semibold text-[#261432] flex-1">{{ cat.label }}</span>
+          <span *ngIf="selectedCategory === cat.label" class="material-symbols-outlined text-[#43016a]">check</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Advanced Fields -->
+    <div class="bg-white rounded-xl shadow-[0px_4px_20px_rgba(29,11,41,0.04)] border border-[#cfc2d2]/30 p-5 flex flex-col gap-4">
+      <div class="flex flex-col gap-2">
+        <label class="text-xs font-bold text-[#4c4450] uppercase tracking-wider">Ghi chú</label>
+        <textarea [(ngModel)]="note" 
+                  class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-lg p-3 text-sm text-[#261432] focus:border-[#43016a] focus:ring-1 focus:ring-[#43016a] focus:outline-none transition-shadow resize-none h-20 placeholder:text-[#cfc2d2]" 
+                  placeholder="Thêm mô tả chi tiết..."></textarea>
+      </div>
+
+      <div class="flex items-center justify-between py-2 border-t border-[#cfc2d2]/30">
+        <div class="flex flex-col">
+          <span class="text-sm font-bold text-[#261432]">Khấu trừ thuế</span>
+          <span class="text-xs text-[#4c4450]">Đánh dấu chi phí này cho mục đích tính thuế</span>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" [(ngModel)]="taxDeductible" class="sr-only peer" />
+          <div class="w-11 h-6 bg-[#f4daff] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#43016a]"></div>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- Right Column: Interactive Numpad Keypad & Action Button -->
+  <aside class="w-full md:w-80 flex flex-col gap-4">
+    <!-- Numpad Keypad Grid -->
+    <div class="bg-white rounded-xl shadow-[0px_4px_20px_rgba(29,11,41,0.04)] border border-[#cfc2d2]/30 p-3 grid grid-cols-3 gap-2">
+      <button type="button" (click)="pressKey('1')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">1</button>
+      <button type="button" (click)="pressKey('2')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">2</button>
+      <button type="button" (click)="pressKey('3')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">3</button>
+      <button type="button" (click)="pressKey('4')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">4</button>
+      <button type="button" (click)="pressKey('5')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">5</button>
+      <button type="button" (click)="pressKey('6')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">6</button>
+      <button type="button" (click)="pressKey('7')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">7</button>
+      <button type="button" (click)="pressKey('8')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">8</button>
+      <button type="button" (click)="pressKey('9')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">9</button>
+      <button type="button" (click)="pressKey('000')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-sm font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">000</button>
+      <button type="button" (click)="pressKey('0')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-[#fae8ff] hover:text-[#43016a] text-xl font-bold text-[#261432] transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">0</button>
+      <button type="button" (click)="pressKey('backspace')" class="h-13 rounded-lg bg-[#fff7fc] hover:bg-rose-50 text-rose-600 flex items-center justify-center transition-colors active:scale-95 duration-150 border border-[#cfc2d2]/20">
+        <span class="material-symbols-outlined text-xl">backspace</span>
+      </button>
+    </div>
+
+    <!-- Date Picker Input -->
+    <div class="bg-white rounded-xl shadow-[0px_4px_20px_rgba(29,11,41,0.04)] border border-[#cfc2d2]/30 p-3 flex flex-col gap-2">
+      <label class="text-xs font-bold text-[#4c4450] uppercase tracking-wider block">Ngày thực hiện</label>
+      <div class="flex items-center gap-2 bg-[#fff7fc] border border-[#cfc2d2]/50 rounded-lg p-2.5">
+        <span class="material-symbols-outlined text-[#43016a]">calendar_today</span>
+        <input type="date" [(ngModel)]="occurredAt" class="bg-transparent border-none text-sm font-bold text-[#261432] outline-none w-full cursor-pointer" />
+      </div>
+    </div>
+
+    <!-- Submit Transaction Button -->
+    <button type="button" 
+            (click)="submitTransaction()" 
+            [disabled]="isSubmitting || numericAmount <= 0" 
+            class="w-full h-14 mt-auto rounded-xl bg-[#43016a] text-white font-bold text-base flex items-center justify-center gap-2 hover:bg-[#5b2382] hover:shadow-lg transition-all active:scale-[0.98] duration-200 cursor-pointer disabled:opacity-50 shadow-md">
+      <span class="material-symbols-outlined">check_circle</span>
+      <span>{{ isSubmitting ? 'Đang lưu...' : 'Lưu Giao Dịch' }}</span>
+    </button>
+  </aside>
+</main>

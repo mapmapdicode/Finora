@@ -1,0 +1,259 @@
+<!-- TopAppBar -->
+<header class="w-full sticky top-0 bg-[#fff7fc] shadow-[0_4px_20px_rgba(29,11,41,0.04)] z-40 border-b border-[#cfc2d2]/30">
+  <div class="flex justify-between items-center px-4 md:px-16 py-3 w-full max-w-[1280px] mx-auto">
+    <!-- Leading: Back Button & Avatar -->
+    <div class="flex items-center gap-3">
+      <button (click)="goBack()" type="button" aria-label="Quay lại" class="w-9 h-9 rounded-full flex items-center justify-center text-[#4c4450] hover:bg-[#fae8ff] transition-colors cursor-pointer">
+        <span class="material-symbols-outlined text-xl">arrow_back</span>
+      </button>
+      <div class="w-9 h-9 rounded-full bg-gradient-to-r from-[#6d5df6] to-[#5142d7] text-white font-extrabold text-xs flex items-center justify-center shadow-xs border border-white">
+        AN
+      </div>
+    </div>
+
+    <!-- Headline -->
+    <div class="absolute left-1/2 -translate-x-1/2">
+      <h1 class="font-headline-md text-lg md:text-xl font-bold text-[#43016a] tracking-tight font-display">Finora Wealth</h1>
+    </div>
+
+    <!-- Trailing Icon -->
+    <button type="button" (click)="goBack()" class="w-9 h-9 rounded-full flex items-center justify-center text-[#4c4450] hover:bg-[#fae8ff] transition-colors">
+      <span class="material-symbols-outlined text-xl">settings</span>
+    </button>
+  </div>
+</header>
+
+<!-- Main Content Canvas -->
+<main class="flex-grow w-full max-w-[1280px] mx-auto px-4 md:px-16 py-6 md:py-10 flex flex-col items-center pb-32 font-sans text-[#261432]">
+  
+  <!-- Page Header -->
+  <div class="w-full max-w-2xl text-center mb-6">
+    <h2 class="text-2xl md:text-4xl font-bold text-[#43016a] mb-2 tracking-tight font-display">Ghi chép khoản vay</h2>
+    <p class="text-xs md:text-sm text-[#4c4450] font-medium">Tạo hồ sơ vay mới với Lãi suất theo đầu triệu.</p>
+  </div>
+
+  <!-- Form Container (Glassmorphism Card) -->
+  <div class="w-full max-w-2xl bg-white rounded-2xl shadow-[0_4px_20px_rgba(29,11,41,0.04)] p-6 md:p-8 border border-[#cfc2d2]/30">
+    <form (ngSubmit)="submitLoan()" class="flex flex-col gap-6">
+      
+      <!-- Section 1: Borrower Details (Select + Quick Add Feature) -->
+      <div class="flex flex-col gap-3 relative pl-3">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-[#f4daff] rounded-full"></div>
+        <div class="flex items-center justify-between text-[#43016a]">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-xl">person</span>
+            <h3 class="text-lg font-bold font-display">Thông tin người vay</h3>
+          </div>
+          <!-- Quick Add Toggle Button -->
+          <button type="button" 
+                  (click)="toggleAddNewBorrower()" 
+                  class="text-xs font-bold text-[#43016a] hover:bg-[#fae8ff] px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer">
+            <span class="material-symbols-outlined text-base">{{ isAddingNewBorrower ? 'list' : 'add' }}</span>
+            <span>{{ isAddingNewBorrower ? 'Chọn từ danh sách' : '+ Thêm mới người vay' }}</span>
+          </button>
+        </div>
+
+        <!-- Mode A: Select Borrower from Existing Dropdown -->
+        <div *ngIf="!isAddingNewBorrower" class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-[#261432]" for="borrowerSelect">Tên người vay *</label>
+          <div class="relative group rounded-lg">
+            <select [ngModel]="borrowerName" 
+                    (change)="onBorrowerSelectChange($event)" 
+                    id="borrowerSelect" 
+                    name="borrowerSelect" 
+                    class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-lg px-4 py-3 text-sm font-bold text-[#261432] focus:outline-none focus:border-[#43016a] focus:ring-1 focus:ring-[#43016a] transition-colors cursor-pointer">
+              <option *ngFor="let b of borrowers" [value]="b">{{ b }}</option>
+              <option value="__add_new__">+ Thêm mới người vay khác...</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Mode B: Quick Inline Add New Borrower Input -->
+        <div *ngIf="isAddingNewBorrower" class="flex flex-col gap-2 p-3 bg-[#fae8ff]/50 rounded-xl border border-[#43016a]/30 animate-fade">
+          <label class="text-xs font-bold text-[#43016a]" for="newBorrowerInput">Nhập tên người vay mới *</label>
+          <div class="flex gap-2">
+            <input [(ngModel)]="newBorrowerName" 
+                   id="newBorrowerInput" 
+                   name="newBorrowerInput" 
+                   placeholder="Nhập họ và tên (VD: Nguyễn Văn C)" 
+                   type="text" 
+                   class="flex-1 bg-white border border-[#cfc2d2]/60 rounded-lg px-3.5 py-2 text-sm text-[#261432] placeholder:text-[#7e7481] focus:outline-none focus:border-[#43016a]" 
+                   autofocus />
+            <button type="button" 
+                    (click)="addQuickBorrower()" 
+                    class="bg-[#43016a] text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-[#5b2382] transition-colors cursor-pointer shrink-0 shadow-xs">
+              Lưu tên
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="w-full h-[1px] bg-[#cfc2d2]/30"></div>
+
+      <!-- Section 2: Loan Financials -->
+      <div class="flex flex-col gap-4 relative pl-3">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-[#e2b5ff] rounded-full"></div>
+        <div class="flex items-center gap-2 text-[#43016a]">
+          <span class="material-symbols-outlined text-xl">payments</span>
+          <h3 class="text-lg font-bold font-display">Chi tiết khoản vay</h3>
+        </div>
+
+        <!-- Loan Amount -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-[#261432]" for="loanAmount">Số tiền cho vay (VND) *</label>
+          <div class="relative group rounded-lg">
+            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[#4c4450] font-bold">₫</span>
+            <input [value]="amountString" 
+                   (input)="onAmountInput($event)" 
+                   id="loanAmount" 
+                   name="loanAmount" 
+                   required
+                   placeholder="0" 
+                   type="text" 
+                   class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-lg pl-8 pr-4 py-3 text-sm font-bold text-[#261432] placeholder:text-[#7e7481] focus:outline-none focus:border-[#43016a] focus:ring-1 focus:ring-[#43016a] transition-colors text-right" />
+          </div>
+        </div>
+
+        <!-- Settlement Account Selection -->
+        <div *ngIf="accounts.length" class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-[#261432]">Tài khoản giải ngân *</label>
+          <select [(ngModel)]="selectedAccountId" name="selectedAccountId" class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-lg px-4 py-3 text-sm font-bold text-[#261432] outline-none cursor-pointer">
+            <option *ngFor="let acc of accounts" [value]="acc.id">{{ acc.name }} ({{ acc.currency }})</option>
+          </select>
+        </div>
+
+        <!-- Interest Rate Type (Per Million) Bento Selector -->
+        <div class="flex flex-col gap-2">
+          <label class="text-xs font-bold text-[#261432]">Lãi suất theo đầu triệu *</label>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <label (click)="setInterestRate(2000)" class="cursor-pointer relative">
+              <input type="radio" name="interestRate" [checked]="interestRate === 2000" class="sr-only" />
+              <div [class.border-[#43016a]]="interestRate === 2000" 
+                   [class.bg-[#f3daff]/40]="interestRate === 2000" 
+                   [class.shadow-sm]="interestRate === 2000" 
+                   class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-xl p-3.5 text-center transition-all hover:bg-[#fae8ff]">
+                <span class="text-lg font-bold text-[#43016a] block">2k</span>
+                <span class="text-[11px] text-[#4c4450] block mt-0.5">/ triệu / ngày</span>
+              </div>
+            </label>
+
+            <label (click)="setInterestRate(3000)" class="cursor-pointer relative">
+              <input type="radio" name="interestRate" [checked]="interestRate === 3000" class="sr-only" />
+              <div [class.border-[#43016a]]="interestRate === 3000" 
+                   [class.bg-[#f3daff]/40]="interestRate === 3000" 
+                   [class.shadow-sm]="interestRate === 3000" 
+                   class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-xl p-3.5 text-center transition-all hover:bg-[#fae8ff]">
+                <span class="text-lg font-bold text-[#43016a] block">3k</span>
+                <span class="text-[11px] text-[#4c4450] block mt-0.5">/ triệu / ngày</span>
+              </div>
+            </label>
+
+            <label (click)="setInterestRate(4000)" class="cursor-pointer relative">
+              <input type="radio" name="interestRate" [checked]="interestRate === 4000" class="sr-only" />
+              <div [class.border-[#43016a]]="interestRate === 4000" 
+                   [class.bg-[#f3daff]/40]="interestRate === 4000" 
+                   [class.shadow-sm]="interestRate === 4000" 
+                   class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-xl p-3.5 text-center transition-all hover:bg-[#fae8ff]">
+                <span class="text-lg font-bold text-[#43016a] block">4k</span>
+                <span class="text-[11px] text-[#4c4450] block mt-0.5">/ triệu / ngày</span>
+              </div>
+            </label>
+
+            <label (click)="setInterestRate(5000)" class="cursor-pointer relative">
+              <input type="radio" name="interestRate" [checked]="interestRate === 5000" class="sr-only" />
+              <div [class.border-[#43016a]]="interestRate === 5000" 
+                   [class.bg-[#f3daff]/40]="interestRate === 5000" 
+                   [class.shadow-sm]="interestRate === 5000" 
+                   class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-xl p-3.5 text-center transition-all hover:bg-[#fae8ff]">
+                <span class="text-lg font-bold text-[#43016a] block">5k</span>
+                <span class="text-[11px] text-[#4c4450] block mt-0.5">/ triệu / ngày</span>
+              </div>
+            </label>
+          </div>
+          <p class="text-[11px] text-[#4c4450] mt-1 font-medium">Tương đương: <strong class="text-[#43016a]">{{ annualRateEquivalent | number:'1.0-1' }}%/năm</strong></p>
+        </div>
+
+        <!-- Interest Period Toggle -->
+        <div class="flex flex-col gap-1.5 mt-2">
+          <label class="text-xs font-bold text-[#261432]">Phương thức thu lãi</label>
+          <div class="flex p-1 bg-[#fae8ff] rounded-lg w-full border border-[#cfc2d2]/40">
+            <button type="button" 
+                    (click)="setInterestPeriod('monthly')" 
+                    [class.bg-white]="interestPeriod === 'monthly'" 
+                    [class.text-[#43016a]]="interestPeriod === 'monthly'" 
+                    [class.shadow-sm]="interestPeriod === 'monthly'" 
+                    [class.text-[#4c4450]]="interestPeriod !== 'monthly'" 
+                    class="flex-1 py-2 px-4 text-xs font-bold text-center rounded-md transition-all cursor-pointer">
+              Lấy theo tháng
+            </button>
+            <button type="button" 
+                    (click)="setInterestPeriod('flexible')" 
+                    [class.bg-white]="interestPeriod === 'flexible'" 
+                    [class.text-[#43016a]]="interestPeriod === 'flexible'" 
+                    [class.shadow-sm]="interestPeriod === 'flexible'" 
+                    [class.text-[#4c4450]]="interestPeriod !== 'flexible'" 
+                    class="flex-1 py-2 px-4 text-xs font-bold text-center rounded-md transition-all cursor-pointer">
+              Lấy linh hoạt
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="w-full h-[1px] bg-[#cfc2d2]/30"></div>
+
+      <!-- Section 3: Timeline & Notes -->
+      <div class="flex flex-col gap-4 relative pl-3">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-[#fed65b] rounded-full"></div>
+        <div class="flex items-center gap-2 text-[#43016a]">
+          <span class="material-symbols-outlined text-xl">calendar_month</span>
+          <h3 class="text-lg font-bold font-display">Thời hạn & Ghi chú</h3>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Loan Date -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-bold text-[#261432]" for="loanDate">Ngày vay</label>
+            <input [(ngModel)]="loanDate" 
+                   id="loanDate" 
+                   name="loanDate" 
+                   required
+                   type="date" 
+                   class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-lg px-4 py-2.5 text-sm font-semibold text-[#261432] focus:outline-none focus:border-[#43016a] transition-colors cursor-pointer" />
+          </div>
+
+          <!-- Due Date -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-bold text-[#261432]" for="dueDate">Ngày đáo hạn</label>
+            <input [(ngModel)]="dueDate" 
+                   id="dueDate" 
+                   name="dueDate" 
+                   type="date" 
+                   class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-lg px-4 py-2.5 text-sm font-semibold text-[#261432] focus:outline-none focus:border-[#43016a] transition-colors cursor-pointer" />
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-[#261432]" for="notes">Ghi chú (Tùy chọn)</label>
+          <textarea [(ngModel)]="notes" 
+                    id="notes" 
+                    name="notes" 
+                    rows="3" 
+                    placeholder="Nhập thông tin thêm về tài sản thế chấp, liên hệ..." 
+                    class="w-full bg-[#fff7fc] border border-[#cfc2d2]/60 rounded-lg px-4 py-3 text-sm text-[#261432] placeholder:text-[#7e7481] focus:outline-none focus:border-[#43016a] transition-colors resize-none"></textarea>
+        </div>
+      </div>
+
+      <!-- Submit Action -->
+      <div class="mt-4 pt-4 border-t border-[#cfc2d2]/30 flex justify-end">
+        <button type="submit" 
+                [disabled]="isSubmitting || (isAddingNewBorrower ? !newBorrowerName : !borrowerName) || numericAmount <= 0" 
+                class="w-full md:w-auto px-8 py-3.5 bg-[#43016a] text-white rounded-full font-bold text-sm hover:bg-[#5b2382] transition-colors shadow-md active:scale-95 duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
+          <span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">save</span>
+          <span>{{ isSubmitting ? 'Đang lưu...' : 'Lưu Khoản Vay' }}</span>
+        </button>
+      </div>
+
+    </form>
+  </div>
+</main>

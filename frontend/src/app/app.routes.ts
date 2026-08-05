@@ -18,6 +18,9 @@ import { NotFoundComponent } from './features/not-found/not-found.component';
 import { PortfolioListComponent } from './features/portfolios/portfolio-list.component';
 import { AuditLogsComponent } from './features/audit/audit-logs.component';
 import { ProfileComponent } from './features/profile/profile.component';
+import { DepositComponent } from './features/transactions/deposit.component';
+import { TransactionCreateComponent } from './features/transactions/transaction-create.component';
+import { LoanCreateComponent } from './features/loans/loan-create.component';
 
 export const appRoutes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
@@ -26,7 +29,10 @@ export const appRoutes: Routes = [
   { path: 'dashboard', component: DashboardComponent, canActivate: [authGuard] },
   { path: 'accounts', component: AccountListComponent, canActivate: [authGuard] },
   { path: 'transactions', component: TransactionListComponent, canActivate: [authGuard] },
+  { path: 'transactions/create', component: TransactionCreateComponent, canActivate: [authGuard] },
+  { path: 'deposit', component: DepositComponent, canActivate: [authGuard] },
   { path: 'loans', component: LoanListComponent, canActivate: [authGuard] },
+  { path: 'loans/create', component: LoanCreateComponent, canActivate: [authGuard] },
   { path: 'assets', component: AssetListComponent, canActivate: [authGuard] },
   { path: 'properties', component: PropertyListComponent, canActivate: [authGuard] },
   { path: 'forecast', component: ForecastPageComponent, canActivate: [authGuard] },

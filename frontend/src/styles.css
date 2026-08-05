@@ -4,54 +4,54 @@
 @tailwind utilities;
 
 :root {
-  --w-font-sans: 'Hanken Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
-  --w-font-display: 'Hanken Grotesk', 'Outfit', system-ui, sans-serif;
+  --w-font-sans: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  --w-font-display: 'Outfit', system-ui, sans-serif;
 
-  /* Premium Banking / WealthOS Royal Purple Palette */
-  --primary: #460f79;
-  --primary-container: #5e2d91;
+  /* Finora Design Tokens (matching user HTML mockup) */
+  --primary: #43016a;
+  --primary-container: #5b2382;
   --on-primary: #ffffff;
-  --on-primary-container: #cfa2ff;
+  --on-primary-container: #cf93f8;
+  --primary-fixed-dim: #e2b5ff;
 
-  --secondary: #a04100;
-  --secondary-container: #fc7728;
+  --secondary: #735c00;
+  --secondary-container: #fed65b;
+  --secondary-fixed-dim: #e9c349;
   --on-secondary: #ffffff;
-  --on-secondary-container: #ffdbcb;
 
-  --tertiary: #640038;
-  --tertiary-container: #8d0052;
-  --on-tertiary: #ffffff;
-  --on-tertiary-container: #ff95be;
+  --bg-main: #fff7fc;
+  --bg-surface: #fff7fc;
+  --surface-lowest: #ffffff;
+  --surface-container: #fae8ff;
+  --surface-high: #f7e1ff;
 
-  --bg-main: #fcf9f8;
-  --bg-surface: #ffffff;
-  --bg-subtle: #f0eded;
+  --border-subtle: rgba(207, 194, 210, 0.4);
+  --border-strong: #cfc2d2;
+  --outline: #7e7481;
+  --outline-variant: #cfc2d2;
 
-  --border-subtle: #e5e2e1;
-  --border-strong: #cec3d3;
-
-  --text-main: #1c1b1b;
-  --text-muted: #4b4451;
+  --text-main: #261432;
+  --text-muted: #4c4450;
   --text-inverse: #ffffff;
 
-  --accent-primary: #460f79;
-  --accent-primary-hover: #5e2d91;
+  --accent-primary: #43016a;
+  --accent-primary-hover: #5b2382;
 
   --status-success: #078847;
-  --status-warning: #fc7728;
+  --status-warning: #735c00;
   --status-danger: #ba1a1a;
-  --status-info: #460f79;
+  --status-info: #43016a;
 
-  --shadow-soft-elevated: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
-  --shadow-hover: 0 20px 40px -10px rgba(70, 15, 121, 0.14);
+  --shadow-soft-elevated: 0 4px 20px 0px rgba(29, 11, 41, 0.04);
+  --shadow-card: 0 4px 20px 0px rgba(29, 11, 41, 0.04);
+  --shadow-hover: 0 8px 30px 0px rgba(67, 1, 106, 0.08);
 
-  /* Compatibility aliases for the existing Material-style templates. */
+  /* Compatibility aliases */
   --m3-primary: var(--primary);
-  --m3-primary-container: #efdbff;
+  --m3-primary-container: #5b2382;
   --m3-on-surface: var(--text-main);
   --m3-on-surface-variant: var(--text-muted);
-  --m3-outline: var(--border-strong);
+  --m3-outline: var(--outline-variant);
   --m3-danger: var(--status-danger);
   --m3-danger-container: #ffdad6;
 }

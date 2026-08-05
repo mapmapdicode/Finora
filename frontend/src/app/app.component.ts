@@ -39,6 +39,7 @@ export class AppComponent implements OnDestroy {
   isDarkMode = false;
   commandPaletteOpen = false;
   commandQuery = '';
+  quickActionSheetOpen = false;
   private tokenSub: Subscription | null = null;
   private readonly viewerMessage = 'Không gian làm việc này chỉ cho phép xem dữ liệu.';
   private readonly roleMessageShown = new Set<string>();
@@ -162,6 +163,19 @@ export class AppComponent implements OnDestroy {
   closeCommandPalette() {
     this.commandPaletteOpen = false;
     this.commandQuery = '';
+  }
+
+  openQuickActionSheet() {
+    this.quickActionSheetOpen = true;
+  }
+
+  closeQuickActionSheet() {
+    this.quickActionSheetOpen = false;
+  }
+
+  navigateToQuickAction(path: string) {
+    this.closeQuickActionSheet();
+    this.router.navigateByUrl(path);
   }
 
   updateCommandQuery(event: Event) {

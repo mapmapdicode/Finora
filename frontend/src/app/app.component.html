@@ -1,68 +1,31 @@
 <div class="app-shell min-h-screen text-[#261432] relative flex justify-center bg-[#fff7fc] font-sans">
   
-  <!-- High-Key Ambient Foliage Background Overlay (Matching Login UI) -->
+  <!-- High-Key Ambient Background Overlay -->
   <div *ngIf="isAuthenticated" aria-hidden="true" class="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat pointer-events-none transition-all duration-700" 
        style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAuv1VBAVXQw2bzmZKIeus0GWAWdK9Xq8RAqpB6InckJ-MkZjH27I4lpMz-awnzb0u65rypAJ2t01Gm4toO3w2bihSRPh2A79QLe-LWMi61-2yNwSSjBilOXds8w_Oa0MRkugpZ9K1cwjEFRZ-hkuqU0YyKII_8PG3d707KbDtUcevM3S3wCFxc8xR9iUBdSKLH-ehioxk7Z8s5XP5oXvsyHSvYI3z9avCQL-nzoJdi2-p1JXHOKoLE');">
-    <div class="absolute inset-0 bg-white/35 backdrop-blur-[2px]"></div>
+    <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px]"></div>
     <div class="absolute inset-0 bg-gradient-to-b from-white/70 via-purple-50/20 to-white/85"></div>
   </div>
 
-  <!-- Mobile Web App Container (Centered Mobile View on Web Desktop, Fluid Full Width on Mobile Device) -->
+  <!-- Mobile Web App Frame Container -->
   <div [class.mobile-app-frame]="isAuthenticated" 
        [class.w-full]="true" 
        [class.max-w-[480px]]="isAuthenticated" 
-       class="min-h-screen relative z-10 flex flex-col justify-between bg-white/80 backdrop-blur-2xl border-x border-white/80 shadow-[0_20px_60px_rgba(43,1,77,0.08)]">
+       class="min-h-screen relative z-10 flex flex-col justify-between bg-[#fff7fc]/90 backdrop-blur-2xl border-x border-[#cfc2d2]/30 shadow-[0_20px_60px_rgba(43,1,77,0.06)] pb-20">
     
-    <!-- Mobile App Top Status & Action Bar (Replacing Old Thick Topbar) -->
-    <header *ngIf="isAuthenticated" class="sticky top-0 z-30 w-full px-4 py-3 bg-white/85 backdrop-blur-xl border-b border-white/80 flex items-center justify-between shadow-xs">
-      <!-- App Brand Logo & Name -->
-      <div class="flex items-center gap-2 cursor-pointer" routerLink="/dashboard">
-        <div class="w-8 h-8 rounded-xl bg-gradient-to-r from-[#43016a] to-[#5b2382] text-white font-extrabold flex items-center justify-center text-sm shadow-sm">
-          F
-        </div>
-        <div>
-          <div class="font-extrabold text-sm text-[#43016a] font-display leading-tight">Finora</div>
-          <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Wealth OS</div>
-        </div>
+    <!-- Top Sticky Mobile Header -->
+    <header *ngIf="isAuthenticated" class="w-full sticky top-0 bg-[#fff7fc]/95 backdrop-blur-md shadow-[0_4px_20px_0px_rgba(29,11,41,0.04)] z-40 px-5 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-3 cursor-pointer" routerLink="/dashboard">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-r from-[#43016a] to-[#5b2382] text-white font-extrabold flex items-center justify-center text-sm shadow-sm">F</div>
+        <span class="text-xl font-bold text-[#43016a] tracking-tight font-display">Finora</span>
       </div>
 
-      <!-- Quick Action Utilities -->
-      <div class="flex items-center gap-1.5">
-        <!-- Quick Command Search -->
-        <button type="button" 
-                (click)="openCommandPalette()" 
-                title="Tìm nhanh" 
-                class="w-8 h-8 rounded-xl bg-purple-50 text-[#43016a] flex items-center justify-center hover:bg-purple-100 transition-colors">
-          <span class="material-symbols-outlined text-base">search</span>
+      <div class="flex items-center gap-2">
+        <button type="button" (click)="openCommandPalette()" class="w-10 h-10 rounded-full flex items-center justify-center text-[#43016a] hover:bg-[#fae8ff] transition-colors active:scale-95 duration-200">
+          <span class="material-symbols-outlined">search</span>
         </button>
-
-        <!-- Workspace Switcher Selector -->
-        <div *ngIf="workspaces.length" class="relative flex items-center bg-purple-50 rounded-xl px-2 py-1 border border-purple-100/70">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 mr-1 shrink-0"></span>
-          <select [value]="selectedWorkspaceId || ''" 
-                  (change)="onWorkspaceChange($event)"
-                  aria-label="Chọn không gian làm việc"
-                  class="bg-transparent text-[11px] font-bold text-[#261432] focus:outline-none cursor-pointer max-w-[90px] truncate">
-            <option *ngFor="let item of workspaces" [value]="item.id">
-              {{ item.name }}
-            </option>
-          </select>
-        </div>
-
-        <!-- Dark/Light Theme Toggle -->
-        <button type="button" 
-                (click)="toggleDarkMode()" 
-                [title]="isDarkMode ? 'Chế độ sáng' : 'Chế độ tối'"
-                class="w-8 h-8 rounded-xl bg-purple-50 text-[#43016a] flex items-center justify-center hover:bg-purple-100 transition-colors">
-          <span class="material-symbols-outlined text-base">{{ isDarkMode ? 'light_mode' : 'dark_mode' }}</span>
-        </button>
-
-        <!-- Logout Button -->
-        <button type="button" 
-                (click)="logout()" 
-                title="Đăng xuất" 
-                class="w-8 h-8 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center hover:bg-rose-100 transition-colors">
-          <span class="material-symbols-outlined text-base">logout</span>
+        <button type="button" (click)="toggleSidebar()" class="w-10 h-10 rounded-full flex items-center justify-center text-[#43016a] hover:bg-[#fae8ff] transition-colors active:scale-95 duration-200">
+          <span class="material-symbols-outlined">menu</span>
         </button>
       </div>
     </header>
@@ -72,95 +35,111 @@
          (click)="toggleSidebar()" 
          class="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs animate-fade"></div>
 
-    <!-- Mobile Navigation Drawer Sheet (Slides from Left) -->
+    <!-- Mobile Navigation Drawer Sheet -->
     <aside *ngIf="isAuthenticated" 
            id="finora-navigation-drawer"
            [class.translate-x-0]="sidebarOpen"
            [class.-translate-x-full]="!sidebarOpen"
-           class="fixed inset-y-0 left-0 z-50 w-72 bg-white/95 backdrop-blur-2xl border-r border-purple-100 shadow-2xl transition-transform duration-300 ease-out flex flex-col justify-between p-5">
+           class="fixed inset-y-0 left-0 z-50 w-72 bg-white/95 backdrop-blur-2xl border-r border-[#cfc2d2]/40 shadow-2xl transition-transform duration-300 ease-out flex flex-col justify-between p-5">
       <div>
-        <div class="flex items-center justify-between pb-4 mb-4 border-b border-purple-100">
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-[#cfc2d2]/40">
           <div class="flex items-center gap-2">
-            <span class="w-8 h-8 rounded-xl bg-[#43016a] text-white font-extrabold flex items-center justify-center text-sm">F</span>
+            <span class="w-8 h-8 rounded-xl bg-gradient-to-r from-[#43016a] to-[#5b2382] text-white font-extrabold flex items-center justify-center text-sm shadow-sm">F</span>
             <div>
-              <div class="font-extrabold text-sm text-[#43016a] font-display">Finora OS</div>
-              <div class="text-[10px] text-slate-400">Danh mục & Công cụ</div>
+              <div class="font-extrabold text-sm text-[#43016a] font-display">Finora</div>
+              <div class="text-[10px] text-[#4c4450]">Quản lý tài chính cá nhân</div>
             </div>
           </div>
-          <button type="button" (click)="toggleSidebar()" class="text-slate-400 hover:text-slate-600">
+          <button type="button" (click)="toggleSidebar()" class="text-[#7e7481] hover:text-[#261432]">
             <span class="material-symbols-outlined text-xl">close</span>
           </button>
         </div>
 
-        <nav class="space-y-1 overflow-y-auto max-h-[calc(100vh-180px)] pr-1">
-          <p class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-3 py-1">Điều hướng chính</p>
+        <!-- Workspace Selector -->
+        <div class="p-3 mb-4 rounded-2xl bg-[#fae8ff] border border-[#cfc2d2]/50 space-y-2">
+          <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#4c4450]">Không gian làm việc</div>
+          <div *ngIf="workspaces.length" class="flex items-center bg-white rounded-xl px-2.5 py-1.5 border border-[#cfc2d2]/50 shadow-xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 shrink-0"></span>
+            <select [value]="selectedWorkspaceId || ''" 
+                    (change)="onWorkspaceChange($event)"
+                    aria-label="Chọn không gian làm việc"
+                    class="bg-transparent text-xs font-bold text-[#261432] focus:outline-none cursor-pointer w-full">
+              <option *ngFor="let item of workspaces" [value]="item.id">
+                {{ item.name }} ({{ item.baseCurrency }})
+              </option>
+            </select>
+          </div>
+          <button type="button" (click)="logout()" class="w-full text-right text-xs font-bold text-rose-600 hover:underline pt-1">
+            Đăng xuất
+          </button>
+        </div>
+
+        <nav class="space-y-1 overflow-y-auto max-h-[calc(100vh-280px)] pr-1">
+          <p class="text-[10px] font-extrabold uppercase tracking-widest text-[#7e7481] px-3 py-1">Menu điều hướng</p>
           <a *ngFor="let item of navItems"
              [routerLink]="item.path"
              (click)="closeSidebarOnMobile()"
              routerLinkActive="bg-[#43016a] text-white font-bold shadow-md"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-purple-50 transition-all">
+             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-[#261432] hover:bg-[#fae8ff] transition-all">
             <span class="material-symbols-outlined text-lg">{{ item.icon }}</span>
             <span>{{ item.labelKey | translate }}</span>
           </a>
         </nav>
       </div>
 
-      <div class="pt-4 border-t border-purple-100 text-center">
-        <p class="text-[10px] font-medium text-slate-400">Finora Mobile Web v2.4.0</p>
+      <div class="pt-3 border-t border-[#cfc2d2]/40 text-center">
+        <p class="text-[10px] font-medium text-[#7e7481]">Finora v2.4.0 — Wealth OS</p>
       </div>
     </aside>
 
-    <!-- Main Mobile Content Router Outlet -->
-    <main [class.pb-24]="isAuthenticated" class="flex-1 w-full min-w-0">
+    <!-- Main Content Area -->
+    <main class="flex-1 w-full min-w-0">
       <router-outlet></router-outlet>
     </main>
 
-    <!-- Mobile Bottom App Bar (Sticky Navigation Bar for Mobile Web) -->
+    <!-- Bottom Navigation Shell (Matching Mockup with Icon-Only Items) -->
     <nav *ngIf="isAuthenticated" 
-         class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-40 bg-white/90 backdrop-blur-2xl border-t border-purple-100 px-2 py-2 flex items-center justify-around shadow-[0_-8px_30px_rgba(67,1,106,0.08)]">
+         class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-50 flex justify-around items-center px-4 pb-2 pt-2 bg-[#fff7fc] shadow-[0_-4px_20px_0px_rgba(29,11,41,0.04)] rounded-t-xl border-t border-[#cfc2d2]/30">
       
-      <!-- Dashboard Home -->
+      <!-- Tab 1: Dashboard / Home (Icon-only) -->
       <a routerLink="/dashboard" 
-         routerLinkActive="text-[#43016a] font-bold" 
+         routerLinkActive="bg-[#5b2382] text-white shadow-sm" 
          [routerLinkActiveOptions]="{ exact: true }"
-         class="flex flex-col items-center gap-0.5 text-slate-500 hover:text-[#43016a] transition-all py-1 px-3">
-        <span class="material-symbols-outlined text-xl">home</span>
-        <span class="text-[10px] font-semibold tracking-tight">Tổng quan</span>
+         class="flex items-center justify-center text-[#4c4450] hover:text-[#43016a] transition-all p-2.5 rounded-xl active:scale-90 duration-150"
+         title="Tổng quan">
+        <span class="material-symbols-outlined fill-icon">account_balance_wallet</span>
       </a>
 
-      <!-- Accounts -->
+      <!-- Tab 2: Accounts / Allocation (Icon-only) -->
       <a routerLink="/accounts" 
-         routerLinkActive="text-[#43016a] font-bold" 
-         class="flex flex-col items-center gap-0.5 text-slate-500 hover:text-[#43016a] transition-all py-1 px-3">
-        <span class="material-symbols-outlined text-xl">account_balance</span>
-        <span class="text-[10px] font-semibold tracking-tight">Tài khoản</span>
+         routerLinkActive="bg-[#5b2382] text-white shadow-sm" 
+         class="flex items-center justify-center text-[#4c4450] hover:text-[#43016a] transition-all p-2.5 rounded-xl active:scale-90 duration-150"
+         title="Tài khoản">
+        <span class="material-symbols-outlined">pie_chart</span>
       </a>
 
-      <!-- Quick Add Transaction Raised Button -->
+      <!-- Tab 3: Raised FAB Center Action Button (+) -->
+      <button type="button"
+              (click)="openQuickActionSheet()" 
+              class="flex items-center justify-center w-12 h-12 bg-[#43016a] text-white rounded-full shadow-lg -mt-6 active:scale-90 duration-150 transition-all border-4 border-[#fff7fc] cursor-pointer"
+              aria-label="Tạo mới giao dịch hoặc khoản vay">
+        <span class="material-symbols-outlined">add</span>
+      </button>
+
+      <!-- Tab 4: Transactions / Ledger (Icon-only) -->
       <a routerLink="/transactions" 
-         [queryParams]="{ entry: '1' }" 
-         class="flex flex-col items-center gap-0.5 -mt-5 group" 
-         aria-label="Thêm giao dịch mới">
-        <div class="w-12 h-12 rounded-full bg-gradient-to-r from-[#43016a] to-[#5b2382] text-white flex items-center justify-center shadow-lg shadow-purple-900/30 border-4 border-white group-hover:scale-105 transition-all">
-          <span class="material-symbols-outlined text-2xl font-bold">add</span>
-        </div>
-        <span class="text-[10px] font-extrabold text-[#43016a] tracking-tight">Ghi thu chi</span>
+         routerLinkActive="bg-[#5b2382] text-white shadow-sm" 
+         class="flex items-center justify-center text-[#4c4450] hover:text-[#43016a] transition-all p-2.5 rounded-xl active:scale-90 duration-150"
+         title="Giao dịch">
+        <span class="material-symbols-outlined">receipt_long</span>
       </a>
 
-      <!-- Transactions / Ledger -->
-      <a routerLink="/transactions" 
-         routerLinkActive="text-[#43016a] font-bold" 
-         class="flex flex-col items-center gap-0.5 text-slate-500 hover:text-[#43016a] transition-all py-1 px-3">
-        <span class="material-symbols-outlined text-xl">payments</span>
-        <span class="text-[10px] font-semibold tracking-tight">Giao dịch</span>
-      </a>
-
-      <!-- Menu Drawer Toggle -->
+      <!-- Tab 5: Menu / Settings (Icon-only) -->
       <button type="button" 
               (click)="toggleSidebar()" 
-              class="flex flex-col items-center gap-0.5 text-slate-500 hover:text-[#43016a] transition-all py-1 px-3">
-        <span class="material-symbols-outlined text-xl">menu</span>
-        <span class="text-[10px] font-semibold tracking-tight">Khác</span>
+              class="flex items-center justify-center text-[#4c4450] hover:text-[#43016a] transition-all p-2.5 rounded-xl active:scale-90 duration-150"
+              title="Menu mở rộng">
+        <span class="material-symbols-outlined">settings</span>
       </button>
     </nav>
 
@@ -168,9 +147,9 @@
 
   <!-- Global Command Palette Search Dialog -->
   <div *ngIf="commandPaletteOpen" class="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4 bg-slate-900/40 backdrop-blur-sm animate-fade" (click)="closeCommandPalette()">
-    <section class="bg-white border border-purple-100 rounded-3xl p-5 w-full max-w-sm shadow-2xl" role="dialog" aria-modal="true" aria-label="Tìm kiếm nhanh" (click)="$event.stopPropagation()">
-      <div class="flex items-center gap-3 pb-3 border-b border-purple-100">
-        <span class="material-symbols-outlined text-purple-600">search</span>
+    <section class="bg-white border border-[#cfc2d2] rounded-3xl p-5 w-full max-w-sm shadow-2xl" role="dialog" aria-modal="true" aria-label="Tìm kiếm nhanh" (click)="$event.stopPropagation()">
+      <div class="flex items-center gap-3 pb-3 border-b border-[#cfc2d2]/40">
+        <span class="material-symbols-outlined text-[#43016a]">search</span>
         <input #commandSearch 
                type="search" 
                autocomplete="off" 
@@ -178,50 +157,119 @@
                [value]="commandQuery" 
                (input)="updateCommandQuery($event)" 
                (keydown.enter)="filteredCommands[0] && runCommand(filteredCommands[0])" 
-               class="w-full bg-transparent text-sm font-semibold text-slate-900 focus:outline-none placeholder-slate-400"
+               class="w-full bg-transparent text-sm font-semibold text-[#261432] focus:outline-none placeholder-slate-400"
                autofocus />
-        <button type="button" (click)="closeCommandPalette()" class="text-xs text-slate-400 font-mono">Esc</button>
+        <button type="button" (click)="closeCommandPalette()" class="text-xs text-[#7e7481] font-mono">Esc</button>
       </div>
 
-      <p class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 my-3">ĐIỀU HƯỚNG & THAO TÁC</p>
+      <p class="text-[10px] font-extrabold uppercase tracking-widest text-[#7e7481] my-3">ĐIỀU HƯỚNG & THAO TÁC</p>
       
       <div class="space-y-1 max-h-64 overflow-y-auto" *ngIf="filteredCommands.length; else noCommands">
         <button type="button" 
                 *ngFor="let item of filteredCommands" 
                 (click)="runCommand(item)"
-                class="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-purple-50 transition-colors text-left">
+                class="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#fae8ff] transition-colors text-left">
           <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-purple-100 text-[#43016a] flex items-center justify-center">
+            <div class="w-8 h-8 rounded-lg bg-[#fae8ff] text-[#43016a] flex items-center justify-center">
               <span class="material-symbols-outlined text-base">{{ item.icon }}</span>
             </div>
             <div>
-              <div class="text-xs font-bold text-slate-900">{{ item.labelKey | translate }}</div>
-              <div class="text-[10px] text-slate-400 truncate max-w-[200px]">{{ item.description }}</div>
+              <div class="text-xs font-bold text-[#261432]">{{ item.labelKey | translate }}</div>
+              <div class="text-[10px] text-[#4c4450] truncate max-w-[200px]">{{ item.description }}</div>
             </div>
           </div>
-          <span class="material-symbols-outlined text-sm text-slate-400">chevron_right</span>
+          <span class="material-symbols-outlined text-sm text-[#7e7481]">chevron_right</span>
         </button>
       </div>
 
       <ng-template #noCommands>
-        <p class="text-xs text-slate-400 py-6 text-center">Không tìm thấy thao tác phù hợp.</p>
+        <p class="text-xs text-[#7e7481] py-6 text-center">Không tìm thấy thao tác phù hợp.</p>
       </ng-template>
     </section>
   </div>
 
+  <!-- Quick Action Selection Sheet Modal (Triggered by '+' Button) -->
+  <div *ngIf="quickActionSheetOpen" 
+       class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-xs animate-fade" 
+       (click)="closeQuickActionSheet()">
+    <section class="bg-white border border-[#cfc2d2]/40 rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-[440px] shadow-2xl space-y-4" 
+             role="dialog" 
+             aria-modal="true" 
+             aria-label="Chọn loại tác vụ mới" 
+             (click)="$event.stopPropagation()">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-[#cfc2d2]/30">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-full bg-[#fae8ff] text-[#43016a] flex items-center justify-center font-bold">
+            <span class="material-symbols-outlined text-lg">add</span>
+          </div>
+          <h3 class="text-base font-bold text-[#261432] font-display">Bạn muốn tạo gì?</h3>
+        </div>
+        <button type="button" (click)="closeQuickActionSheet()" class="text-[#7e7481] hover:text-[#261432] p-1">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+
+      <div class="space-y-2 py-1">
+        <!-- Option 1: Nhập dữ liệu Thu/Chi -->
+        <button type="button" 
+                (click)="navigateToQuickAction('/transactions/create')" 
+                class="w-full flex items-center gap-4 p-3.5 rounded-2xl bg-[#fff7fc] border border-[#cfc2d2]/40 hover:bg-[#fae8ff] hover:border-[#43016a]/30 transition-all text-left group cursor-pointer">
+          <div class="w-11 h-11 rounded-xl bg-[#43016a] text-white flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+            <span class="material-symbols-outlined text-xl">payments</span>
+          </div>
+          <div class="flex-1">
+            <div class="text-sm font-bold text-[#261432]">Ghi giao dịch Thu / Chi</div>
+            <div class="text-xs text-[#4c4450]">Nhập khoản thu chi cá nhân hàng ngày</div>
+          </div>
+          <span class="material-symbols-outlined text-sm text-[#7e7481] group-hover:text-[#43016a]">chevron_right</span>
+        </button>
+
+        <!-- Option 2: Ghi chép khoản vay -->
+        <button type="button" 
+                (click)="navigateToQuickAction('/loans/create')" 
+                class="w-full flex items-center gap-4 p-3.5 rounded-2xl bg-[#fff7fc] border border-[#cfc2d2]/40 hover:bg-[#fae8ff] hover:border-[#43016a]/30 transition-all text-left group cursor-pointer">
+          <div class="w-11 h-11 rounded-xl bg-gradient-to-r from-[#5142d7] to-[#6d5df6] text-white flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+            <span class="material-symbols-outlined text-xl">request_quote</span>
+          </div>
+          <div class="flex-1">
+            <div class="text-sm font-bold text-[#261432]">Ghi chép khoản vay</div>
+            <div class="text-xs text-[#4c4450]">Tạo hồ sơ vay mới (Lãi suất theo đầu triệu)</div>
+          </div>
+          <span class="material-symbols-outlined text-sm text-[#7e7481] group-hover:text-[#43016a]">chevron_right</span>
+        </button>
+
+        <!-- Option 3: Nạp tiền vào ví -->
+        <button type="button" 
+                (click)="navigateToQuickAction('/deposit')" 
+                class="w-full flex items-center gap-4 p-3.5 rounded-2xl bg-[#fff7fc] border border-[#cfc2d2]/40 hover:bg-[#fae8ff] hover:border-[#43016a]/30 transition-all text-left group cursor-pointer">
+          <div class="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+            <span class="material-symbols-outlined text-xl">account_balance_wallet</span>
+          </div>
+          <div class="flex-1">
+            <div class="text-sm font-bold text-[#261432]">Nạp tiền vào ví</div>
+            <div class="text-xs text-[#4c4450]">Nạp tiền từ tài khoản/thẻ ngân hàng</div>
+          </div>
+          <span class="material-symbols-outlined text-sm text-[#7e7481] group-hover:text-[#43016a]">chevron_right</span>
+        </button>
+      </div>
+
+    </section>
+  </div>
+
   <!-- Toast Notification Stack Container -->
-  <div class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-[440px] px-4 pointer-events-none space-y-2">
+  <div class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-[440px] px-4 pointer-events-none space-y-2">
     <article *ngFor="let toast of toasts$ | async" 
              [attr.role]="toastRole(toast.type)" 
-             class="pointer-events-auto flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-white border border-purple-100 shadow-xl text-xs font-semibold text-slate-900 animate-fade">
+             class="pointer-events-auto flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-white border border-[#cfc2d2]/40 shadow-xl text-xs font-semibold text-[#261432] animate-fade">
       <div class="flex items-center gap-2.5">
         <span class="material-symbols-outlined text-lg" 
-              [ngClass]="toast.type === 'success' ? 'text-emerald-600' : toast.type === 'error' ? 'text-rose-600' : 'text-purple-600'">
+              [ngClass]="toast.type === 'success' ? 'text-emerald-600' : toast.type === 'error' ? 'text-rose-600' : 'text-[#43016a]'">
           {{ toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : 'info' }}
         </span>
         <span>{{ toast.message }}</span>
       </div>
-      <button type="button" (click)="closeToast(toast.id)" class="text-slate-400 hover:text-slate-600">
+      <button type="button" (click)="closeToast(toast.id)" class="text-[#7e7481] hover:text-[#261432]">
         <span class="material-symbols-outlined text-sm">close</span>
       </button>
     </article>
