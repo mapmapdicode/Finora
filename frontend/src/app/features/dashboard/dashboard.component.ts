@@ -6,6 +6,7 @@ import { Account, NetWorthSummary, Portfolio, PortfolioSnapshotPage, Transaction
 import { AuthService } from '../../core/services/auth.service';
 import { RouterLink } from '@angular/router';
 import { VndMoneyPipe } from '../../shared/pipes/vnd-money.pipe';
+import { sortTransactionsNewestFirst } from '../../shared/transaction-order';
 
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -190,7 +191,7 @@ export class DashboardComponent implements OnInit {
           ([portfolioId, count]) => `${portfolioId}: ${count} TK`
         );
 
-        this.transactions = (transactionsPage.items || []).slice(0, 5);
+        this.transactions = sortTransactionsNewestFirst(transactionsPage.items || []).slice(0, 5);
 
         this.portfolios = portfolios;
         if (!portfolios.length) {

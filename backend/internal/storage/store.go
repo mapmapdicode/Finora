@@ -754,7 +754,12 @@ func (s *InMemoryStore) ListTransactions(userID domain.ID, accountID domain.ID) 
 		}
 		out = append(out, *t)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].OccurredAt.After(out[j].OccurredAt) })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].OccurredAt.Equal(out[j].OccurredAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].OccurredAt.After(out[j].OccurredAt)
+	})
 	return out
 }
 

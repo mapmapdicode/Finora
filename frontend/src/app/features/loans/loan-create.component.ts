@@ -5,12 +5,12 @@ import { Router } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { Account, Customer } from '../../shared/models';
-import { SelectMenuComponent, SelectMenuOption } from '../../shared/components/select-menu.component';
+import { normalizeVndAmount } from '../../shared/money-input';
 
 @Component({
   selector: 'app-loan-create',
   standalone: true,
-  imports: [CommonModule, FormsModule, SelectMenuComponent],
+  imports: [CommonModule, FormsModule],
   templateUrl: './loan-create.component.html',
 })
 export class LoanCreateComponent implements OnInit {
@@ -23,7 +23,7 @@ export class LoanCreateComponent implements OnInit {
   creatingCustomer = false;
   customerLoadError = '';
 
-  amountString = '0';
+  amountString = '';
   interestRate = 2000; // 2k, 3k, 4k, 5k
   interestPeriod: 'monthly' | 'flexible' = 'monthly';
   loanDate = new Date().toISOString().substring(0, 10);
@@ -34,28 +34,11 @@ export class LoanCreateComponent implements OnInit {
   isSubmitting = false;
 
   get numericAmount(): number {
-    return Number.parseInt(this.amountString.replace(/\D/g, ''), 10) || 0;
+    return Number(normalizeVndAmount(this.amountString)) || 0;
   }
 
   get formattedAmount(): string {
     return new Intl.NumberFormat('vi-VN').format(this.numericAmount);
-  }
-
-  get customerOptions(): SelectMenuOption[] {
-    return [
-      ...this.customers.map((customer) => ({
-        value: customer.id,
-        label: `${customer.name}${customer.phone ? ` · ${customer.phone}` : ''}`,
-      })),
-      { value: '__add_new__', label: '+ Thêm khách hàng mới…' },
-    ];
-  }
-
-  get accountOptions(): SelectMenuOption[] {
-    return this.accounts.map((account) => ({
-      value: account.id,
-      label: `${account.name} (${account.currency})`,
-    }));
   }
 
   get annualRateEquivalent(): number {
@@ -101,9 +84,7 @@ export class LoanCreateComponent implements OnInit {
 
   onBorrowerSelectionChange(value: string) {
     if (value === '__add_new__') {
-      this.isAddingNewBorrower = true;
-      this.newBorrowerName = '';
-      this.newBorrowerPhone = '';
+      this.openAddNewBorrower();
     } else {
       this.selectedCustomerId = value;
       this.isAddingNewBorrower = false;
@@ -111,11 +92,18 @@ export class LoanCreateComponent implements OnInit {
   }
 
   toggleAddNewBorrower() {
-    this.isAddingNewBorrower = !this.isAddingNewBorrower;
     if (this.isAddingNewBorrower) {
-      this.newBorrowerName = '';
-      this.newBorrowerPhone = '';
+      this.isAddingNewBorrower = false;
+      return;
     }
+    this.openAddNewBorrower();
+  }
+
+  private openAddNewBorrower() {
+    this.selectedCustomerId = '';
+    this.isAddingNewBorrower = true;
+    this.newBorrowerName = '';
+    this.newBorrowerPhone = '';
   }
 
   addQuickBorrower() {
@@ -149,9 +137,13 @@ export class LoanCreateComponent implements OnInit {
   }
 
   onAmountInput(event: Event) {
-    const raw = (event.target as HTMLInputElement).value.replace(/\D/g, '');
-    const num = Number.parseInt(raw, 10) || 0;
-    this.amountString = new Intl.NumberFormat('vi-VN').format(num);
+    this.amountString = (event.target as HTMLInputElement).value;
+  }
+
+  onAmountBlur(event: Event) {
+    const formatted = this.numericAmount > 0 ? new Intl.NumberFormat('vi-VN').format(this.numericAmount) : '';
+    this.amountString = formatted;
+    (event.target as HTMLInputElement).value = formatted;
   }
 
   setInterestRate(rate: number) {

@@ -2486,7 +2486,12 @@ func (s *WealthService) SeedDemoData(seedUserID domain.ID, userID domain.ID) {
 
 func (s *WealthService) DashboardKpis(userID domain.ID, top int) ([]domain.Transaction, error) {
 	txs := s.store.ListTransactions(userID, "")
-	sort.Slice(txs, func(i, j int) bool { return txs[i].OccurredAt.After(txs[j].OccurredAt) })
+	sort.Slice(txs, func(i, j int) bool {
+		if txs[i].OccurredAt.Equal(txs[j].OccurredAt) {
+			return txs[i].ID > txs[j].ID
+		}
+		return txs[i].OccurredAt.After(txs[j].OccurredAt)
+	})
 	if top <= 0 || len(txs) <= top {
 		return txs, nil
 	}

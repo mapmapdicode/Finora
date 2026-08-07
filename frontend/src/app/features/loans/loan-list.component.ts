@@ -37,7 +37,6 @@ export class LoanListComponent implements OnInit {
   showCreateForm = false;
 
   paymentMode: 'interest_only' | 'principal_only' | 'both' = 'both';
-  totalPaymentString = '';
   activePaymentLoan: Loan | null = null;
 
   get dailyRatePerMillion(): number {
@@ -144,7 +143,6 @@ export class LoanListComponent implements OnInit {
     this.selectedLoanForPayment = loanId;
     this.activePaymentLoan = this.loans.find(l => l.id === loanId) || null;
     this.paymentMode = 'both';
-    this.totalPaymentString = '';
     this.paymentForm.patchValue({
       loanId,
       principalAmount: '0',
@@ -162,23 +160,13 @@ export class LoanListComponent implements OnInit {
     this.activePaymentLoan = null;
   }
 
-  onPaymentDateChange() {
-    this.recalculatePaymentAllocation();
-  }
-
   setPaymentMode(mode: 'interest_only' | 'principal_only' | 'both') {
     this.paymentMode = mode;
-    this.recalculatePaymentAllocation();
-  }
-
-  onTotalPaymentInput(event: Event) {
-    const input = event.target as HTMLInputElement;
-    this.totalPaymentString = input.value;
-    this.recalculatePaymentAllocation();
-  }
-
-  onTotalPaymentBlur() {
-    this.totalPaymentString = this.formatVndAmount(this.totalPaymentString);
+    if (mode === 'interest_only') {
+      this.paymentForm.patchValue({ principalAmount: '0' }, { emitEvent: false });
+    } else if (mode === 'principal_only') {
+      this.paymentForm.patchValue({ interestAmount: '0' }, { emitEvent: false });
+    }
   }
 
   setQuickPaymentAmount(type: 'accrued' | 'principal' | 'full') {
@@ -192,15 +180,23 @@ export class LoanListComponent implements OnInit {
 
     if (type === 'accrued') {
       this.paymentMode = 'interest_only';
-      this.totalPaymentString = new Intl.NumberFormat('vi-VN').format(accrued);
+      this.paymentForm.patchValue({
+        interestAmount: new Intl.NumberFormat('vi-VN').format(accrued),
+        principalAmount: '0',
+      }, { emitEvent: false });
     } else if (type === 'principal') {
       this.paymentMode = 'principal_only';
-      this.totalPaymentString = new Intl.NumberFormat('vi-VN').format(principal);
+      this.paymentForm.patchValue({
+        interestAmount: '0',
+        principalAmount: new Intl.NumberFormat('vi-VN').format(principal),
+      }, { emitEvent: false });
     } else if (type === 'full') {
       this.paymentMode = 'both';
-      this.totalPaymentString = new Intl.NumberFormat('vi-VN').format(accrued + principal);
+      this.paymentForm.patchValue({
+        interestAmount: new Intl.NumberFormat('vi-VN').format(accrued),
+        principalAmount: new Intl.NumberFormat('vi-VN').format(principal),
+      }, { emitEvent: false });
     }
-    this.recalculatePaymentAllocation();
   }
 
   onPaymentComponentBlur(control: 'interestAmount' | 'principalAmount', event: Event) {
@@ -209,55 +205,6 @@ export class LoanListComponent implements OnInit {
     this.paymentForm.get(control)?.setValue(formatted, { emitEvent: false });
     input.value = formatted;
 
-    const interestNum = Number(normalizeVndAmount(this.paymentForm.value.interestAmount)) || 0;
-    const principalNum = Number(normalizeVndAmount(this.paymentForm.value.principalAmount)) || 0;
-    const totalNum = interestNum + principalNum;
-    this.totalPaymentString = totalNum > 0 ? new Intl.NumberFormat('vi-VN').format(totalNum) : '';
-  }
-
-  recalculatePaymentAllocation() {
-    const totalNum = Number(normalizeVndAmount(this.totalPaymentString)) || 0;
-    if (totalNum <= 0) {
-      this.paymentForm.patchValue({ interestAmount: '0', principalAmount: '0' }, { emitEvent: false });
-      return;
-    }
-
-    if (this.paymentMode === 'interest_only') {
-      this.paymentForm.patchValue({
-        interestAmount: new Intl.NumberFormat('vi-VN').format(totalNum),
-        principalAmount: '0',
-      }, { emitEvent: false });
-    } else if (this.paymentMode === 'principal_only') {
-      this.paymentForm.patchValue({
-        interestAmount: '0',
-        principalAmount: new Intl.NumberFormat('vi-VN').format(totalNum),
-      }, { emitEvent: false });
-    } else {
-      const loanId = this.selectedLoanForPayment;
-      const accruedMapInterest = Number(normalizeVndAmount(this.accrualsMap[loanId]?.totalAccruedInterest || '0')) || 0;
-      const accruedByDays = this.computedInterestByDays;
-      const accrued = accruedByDays > 0 ? accruedByDays : accruedMapInterest;
-
-      let interestPart = 0;
-      let principalPart = 0;
-
-      if (accrued > 0) {
-        if (totalNum <= accrued) {
-          interestPart = totalNum;
-          principalPart = 0;
-        } else {
-          interestPart = accrued;
-          principalPart = totalNum - accrued;
-        }
-      } else {
-        principalPart = totalNum;
-      }
-
-      this.paymentForm.patchValue({
-        interestAmount: new Intl.NumberFormat('vi-VN').format(interestPart),
-        principalAmount: new Intl.NumberFormat('vi-VN').format(principalPart),
-      }, { emitEvent: false });
-    }
   }
 
   submitLoan() {

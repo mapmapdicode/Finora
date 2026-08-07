@@ -6,13 +6,6 @@ import { ApiService } from '../../core/services/api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { Account } from '../../shared/models';
 
-interface SourceOption {
-  id: string;
-  name: string;
-  subtext: string;
-  icon: string;
-}
-
 @Component({
   selector: 'app-deposit',
   standalone: true,
@@ -20,18 +13,11 @@ interface SourceOption {
   templateUrl: './deposit.component.html',
 })
 export class DepositComponent implements OnInit {
-  amount = 5000000;
+  amount = 0;
   quickChips = [1000000, 5000000, 10000000, 50000000];
-  selectedSourceId = 'techcombank';
   isSubmitting = false;
   accounts: Account[] = [];
   selectedAccountId = '';
-
-  sources: SourceOption[] = [
-    { id: 'techcombank', name: 'Techcombank', subtext: '**** 8899', icon: 'account_balance' },
-    { id: 'mbbank', name: 'MBBank', subtext: '**** 1234', icon: 'account_balance' },
-    { id: 'visa', name: 'Thẻ VISA / Mastercard', subtext: '**** 4242', icon: 'credit_card' },
-  ];
 
   get formattedAmount(): string {
     return new Intl.NumberFormat('vi-VN').format(this.amount || 0);
@@ -67,10 +53,6 @@ export class DepositComponent implements OnInit {
     this.amount = chipAmount;
   }
 
-  selectSource(id: string) {
-    this.selectedSourceId = id;
-  }
-
   formatNumber(val: number): string {
     return new Intl.NumberFormat('vi-VN').format(val);
   }
@@ -81,7 +63,6 @@ export class DepositComponent implements OnInit {
       return;
     }
 
-    const selectedSource = this.sources.find((s) => s.id === this.selectedSourceId);
     this.isSubmitting = true;
 
     const payload = {
@@ -89,8 +70,8 @@ export class DepositComponent implements OnInit {
       type: 'income' as const,
       amount: String(this.amount),
       currency: 'VND',
-      name: `Nạp tiền từ ${selectedSource?.name || 'Ngân hàng'}`,
-      note: `Nạp tiền tự động qua ${selectedSource?.name} (${selectedSource?.subtext})`,
+      name: 'Nạp tiền vào ví',
+      note: 'Ghi nhận nạp tiền thủ công',
       occurredAt: new Date().toISOString(),
     };
 

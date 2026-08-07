@@ -546,6 +546,9 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 	if len(p1.Items) != 2 {
 		t.Fatalf("expected 2 items on first page, got %d", len(p1.Items))
 	}
+	if !p1.Items[0].OccurredAt.Equal(now.Add(-1*time.Hour)) || !p1.Items[1].OccurredAt.Equal(now.Add(-2*time.Hour)) {
+		t.Fatalf("expected newest transactions first, got %s then %s", p1.Items[0].OccurredAt, p1.Items[1].OccurredAt)
+	}
 	if p1.NextCursor == "" {
 		t.Fatalf("expected next cursor")
 	}

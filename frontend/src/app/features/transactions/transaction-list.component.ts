@@ -8,6 +8,7 @@ import { Account, Transaction, TransactionListPage } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { normalizeVndAmount } from '../../shared/money-input';
+import { sortTransactionsNewestFirst } from '../../shared/transaction-order';
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { VndMoneyPipe } from '../../shared/pipes/vnd-money.pipe';
@@ -208,7 +209,8 @@ export class TransactionListComponent implements OnInit, OnDestroy {
     this.totalFiltered = 0;
     this.api.getTransactions(payload).subscribe({
       next: (page: TransactionListPage) => {
-        this.items = page.items ?? [];
+        this.items = sortTransactionsNewestFirst(page.items ?? []);
+        this.items = sortTransactionsNewestFirst(this.items);
         this.nextCursor = page.nextCursor || '';
         this.totalFiltered = this.items.length + (this.nextCursor ? 1 : 0);
         this.loading = false;

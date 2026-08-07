@@ -31,21 +31,25 @@
         <!-- Mode A: Select an existing customer -->
         <div *ngIf="!isAddingNewBorrower" class="flex flex-col gap-1.5">
           <p id="loan-customer-label" class="text-xs font-bold text-[#261432]">Khách hàng *</p>
-          <app-select-menu
-            [options]="customerOptions"
-            [value]="selectedCustomerId"
-            [placeholder]="customersLoading ? 'Đang tải khách hàng…' : 'Chọn khách hàng'"
-            ariaLabel="Chọn khách hàng"
+          <select
+            [(ngModel)]="selectedCustomerId"
+            (ngModelChange)="onBorrowerSelectionChange($event)"
+            name="loanCustomer"
+            aria-label="Chọn khách hàng"
             [disabled]="customersLoading"
-            (valueChange)="onBorrowerSelectionChange($event)"
-          ></app-select-menu>
+            class="w-full min-h-[48px] rounded-xl border border-[#cfc2d2] bg-white px-4 text-sm font-semibold text-[#261432] outline-none transition-colors focus:border-[#43016a] focus:ring-2 focus:ring-[#43016a]/15 disabled:cursor-not-allowed disabled:bg-[#f6f1f7]"
+          >
+            <option value="">{{ customersLoading ? 'Đang tải khách hàng…' : 'Chọn khách hàng' }}</option>
+            <option *ngFor="let customer of customers" [value]="customer.id">{{ customer.name }}{{ customer.phone ? ' · ' + customer.phone : '' }}</option>
+            <option value="__add_new__">+ Thêm khách hàng mới…</option>
+          </select>
           <p *ngIf="customerLoadError" class="text-xs text-rose-700">{{ customerLoadError }} <button type="button" class="underline font-bold" (click)="loadCustomers()">Thử lại</button></p>
           <p *ngIf="!customersLoading && !customers.length && !customerLoadError" class="text-xs text-[#4c4450]">Chưa có khách hàng. Thêm khách hàng mới để tiếp tục.</p>
         </div>
 
         <!-- Mode B: Add a new customer inline -->
         <div *ngIf="isAddingNewBorrower" class="flex flex-col gap-2 p-3 bg-[#fae8ff]/50 rounded-xl border border-[#43016a]/30 animate-fade">
-          <label class="text-xs font-bold text-[#43016a]" for="newBorrowerInput">Tên khách hàng mới *</label>
+          <label class="text-xs font-bold text-[#43016a]" for="newBorrowerInput">Tên người vay mới *</label>
           <div class="flex flex-col sm:flex-row gap-2">
             <input [(ngModel)]="newBorrowerName" 
                    id="newBorrowerInput" 
@@ -85,8 +89,9 @@
           <label class="text-xs font-bold text-[#261432]" for="loanAmount">Số tiền cho vay (VND) *</label>
           <div class="relative group rounded-lg">
             <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[#4c4450] font-bold">₫</span>
-            <input [value]="amountString" 
+            <input [value]="amountString"
                    (input)="onAmountInput($event)" 
+                   (blur)="onAmountBlur($event)"
                    id="loanAmount" 
                    name="loanAmount" 
                    required
@@ -99,12 +104,14 @@
         <!-- Settlement Account Selection -->
         <div *ngIf="accounts.length" class="flex flex-col gap-1.5">
           <p id="loan-account-label" class="text-xs font-bold text-[#261432]">Tài khoản giải ngân *</p>
-          <app-select-menu
-            [options]="accountOptions"
-            [value]="selectedAccountId"
-            ariaLabel="Tài khoản giải ngân"
-            (valueChange)="selectedAccountId = $event"
-          ></app-select-menu>
+          <select
+            [(ngModel)]="selectedAccountId"
+            name="settlementAccount"
+            aria-label="Tài khoản giải ngân"
+            class="w-full min-h-[48px] rounded-xl border border-[#cfc2d2] bg-white px-4 text-sm font-semibold text-[#261432] outline-none transition-colors focus:border-[#43016a] focus:ring-2 focus:ring-[#43016a]/15"
+          >
+            <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }} ({{ account.currency }})</option>
+          </select>
         </div>
 
         <!-- Interest Rate Type (Per Million) Bento Selector -->

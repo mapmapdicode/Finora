@@ -45,10 +45,36 @@ describe('LoanCreateComponent customer workflow', () => {
   });
 
   it('opens the quick-add form from the customer menu option', () => {
+    component.selectedCustomerId = existingCustomer.id;
+    component.newBorrowerName = 'Dữ liệu cũ';
     component.onBorrowerSelectionChange('__add_new__');
 
     expect(component.isAddingNewBorrower).toBeTrue();
+    expect(component.selectedCustomerId).toBe('');
     expect(component.newBorrowerName).toBe('');
     expect(component.newBorrowerPhone).toBe('');
+  });
+
+  it('opens the quick-add form from the add new borrower button', () => {
+    component.selectedCustomerId = existingCustomer.id;
+
+    component.toggleAddNewBorrower();
+
+    expect(component.isAddingNewBorrower).toBeTrue();
+    expect(component.selectedCustomerId).toBe('');
+  });
+
+  it('keeps a full VND amount while typing and formats it only after leaving the field', () => {
+    const input = { value: '5000000' } as HTMLInputElement;
+
+    component.onAmountInput({ target: input } as unknown as Event);
+
+    expect(component.amountString).toBe('5000000');
+    expect(component.numericAmount).toBe(5_000_000);
+
+    component.onAmountBlur({ target: input } as unknown as Event);
+
+    expect(component.amountString).toBe('5.000.000');
+    expect(input.value).toBe('5.000.000');
   });
 });

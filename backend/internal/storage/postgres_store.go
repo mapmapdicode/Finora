@@ -512,7 +512,7 @@ func (s *PostgresStore) ListTransactions(userID domain.ID, accountID domain.ID) 
 		query += " AND account_id=$2"
 		args = append(args, accountID)
 	}
-	query += " ORDER BY occurred_at DESC"
+	query += " ORDER BY occurred_at DESC, id DESC"
 	rows, err := s.pool.Query(context.Background(), query, args...)
 	if err != nil {
 		return []domain.Transaction{}
