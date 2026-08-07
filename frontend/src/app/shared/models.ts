@@ -181,6 +181,7 @@ export interface TransactionListPage {
 export interface Loan {
   id: string;
   workspaceId: string;
+  customerId?: string;
   direction: 'receivable' | 'payable';
   counterparty: string;
   principalInitial: string;
@@ -193,6 +194,15 @@ export interface Loan {
 	  settlementAccountId?: string;
   dayCountBasis?: string;
   status: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone?: string;
+  normalizedName?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface LoanPayment {

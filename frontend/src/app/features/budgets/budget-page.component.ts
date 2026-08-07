@@ -9,11 +9,12 @@ import { AuthService } from '../../core/services/auth.service';
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { normalizeVndAmount } from '../../shared/money-input';
+import { VndMoneyPipe } from '../../shared/pipes/vnd-money.pipe';
 
 @Component({
   selector: 'app-budget-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, TranslatePipe, IconComponent],
+  imports: [CommonModule, ReactiveFormsModule, TranslatePipe, IconComponent, VndMoneyPipe],
   templateUrl: './budget-page.component.html',
 })
 export class BudgetPageComponent implements OnInit {

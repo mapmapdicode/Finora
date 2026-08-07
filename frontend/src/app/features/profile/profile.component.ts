@@ -59,19 +59,6 @@ export class ProfileComponent implements OnInit {
     return `Đồng bộ ${Math.floor(minutes / 1440)} ngày trước`;
   }
 
-  toggleAmountDisplay() {
-    this.api.getUserSettings().subscribe({
-      next: (settings) => {
-        const next = settings.amountDisplayMode === 'full' ? 'compact' : 'full';
-        this.api.updateUserSettings({ amountDisplayMode: next }).subscribe({
-          next: () => (this.notice = `Đã chọn hiển thị số tiền ${next === 'compact' ? 'rút gọn' : 'đầy đủ'}.`),
-          error: () => (this.error = 'Không thể lưu lựa chọn hiển thị số tiền.'),
-        });
-      },
-      error: () => (this.error = 'Không thể tải thiết lập hiển thị.'),
-    });
-  }
-
   logout() {
     this.auth.clearToken();
     this.router.navigateByUrl('/login');

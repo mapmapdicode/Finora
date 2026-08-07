@@ -288,9 +288,9 @@
         </thead>
         <tbody>
           <tr *ngFor="let item of items">
-            <td class="font-semibold text-xs whitespace-nowrap">{{ item.occurredAt | date: 'medium' }}</td>
-            <td class="font-bold text-xs text-[var(--text-main)]">{{ accountLabel(item.accountId) }}</td>
-            <td>
+            <td data-label="Ngày" class="font-semibold text-xs whitespace-nowrap">{{ item.occurredAt | date: 'medium' }}</td>
+            <td data-label="Tài khoản" class="font-bold text-xs text-[var(--text-main)]">{{ accountLabel(item.accountId) }}</td>
+            <td data-label="Loại">
               <span class="w-badge uppercase text-[10px]" [ngClass]="{
                 'w-badge-danger': item.type === 'expense',
                 'w-badge-success': item.type === 'income',
@@ -299,11 +299,11 @@
                 {{ typeLabel(item.type) }}
               </span>
             </td>
-            <td class="text-xs font-medium">{{ item.note || '-' }}</td>
-            <td class="font-bold text-sm" [class.text-rose-600]="item.type === 'expense'" [class.text-emerald-600]="item.type === 'income'">
-              {{ formatAmount(item.amount) }} {{ item.currency || 'VND' }}
+            <td data-label="Mô tả" class="text-xs font-medium">{{ item.note || '-' }}</td>
+            <td data-label="Số tiền" class="font-bold text-sm" [class.text-rose-600]="item.type === 'expense'" [class.text-emerald-600]="item.type === 'income'">
+              {{ item.amount | vndMoney: (item.currency || 'VND') }}
             </td>
-            <td>
+            <td data-label="Trạng thái">
               <span class="w-badge w-badge-neutral text-[10px]">
                 {{ statusLabel(item.status || 'posted') }}
               </span>

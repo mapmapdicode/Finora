@@ -43,10 +43,11 @@
 
   <article class="w-card">
     <div class="m3-card-header"><div><h2 class="m3-card-title">Thiết lập cá nhân</h2><p class="m3-card-subtitle">Các lựa chọn hiển thị được lưu an toàn vào hồ sơ của bạn.</p></div></div>
-    <button type="button" class="w-full text-left p-3 rounded-xl hover:bg-[var(--bg-subtle)] flex gap-3 items-center" (click)="toggleAmountDisplay()">
+    <div class="w-full text-left p-3 rounded-xl bg-[var(--bg-subtle)] flex gap-3 items-center">
       <span class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] grid place-items-center"><app-icon name="tune"></app-icon></span>
-      <span class="flex-1"><b class="block text-sm">Hiển thị số tiền</b><small class="text-[var(--text-muted)]">Chọn chế độ đầy đủ hoặc rút gọn cho các số liệu tài chính.</small></span><app-icon name="chevron_right"></app-icon>
-    </button>
+      <span class="flex-1"><b class="block text-sm">Hiển thị số tiền</b><small class="text-[var(--text-muted)]">Luôn dùng định dạng đầy đủ theo VND trên toàn bộ Finora.</small></span>
+      <span class="w-badge w-badge-success">VND đầy đủ</span>
+    </div>
   </article>
 
   <article class="w-card">

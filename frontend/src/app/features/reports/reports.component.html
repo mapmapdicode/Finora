@@ -1,0 +1,28 @@
+<main class="w-full max-w-screen-sm mx-auto px-4 pt-5 pb-28 space-y-5 text-[var(--text-main)]">
+  <header class="flex items-start justify-between gap-3">
+    <div><p class="text-[10px] font-extrabold tracking-[.14em] text-[var(--text-muted)]">PHÂN TÍCH DÒNG TIỀN</p><h1 class="text-2xl font-bold tracking-tight">Báo cáo</h1><p class="text-xs text-[var(--text-muted)] mt-1">{{ rangeLabel }}</p></div>
+    <div class="flex rounded-xl bg-[var(--bg-subtle)] p-1 border border-[var(--border-subtle)]">
+      <button type="button" (click)="setPeriod('week')" class="px-3 py-2 rounded-lg text-xs font-bold transition" [class.bg-white]="period === 'week'" [class.shadow-sm]="period === 'week'" [class.text-[var(--accent-primary)]]="period === 'week'">Tuần</button>
+      <button type="button" (click)="setPeriod('month')" class="px-3 py-2 rounded-lg text-xs font-bold transition" [class.bg-white]="period === 'month'" [class.shadow-sm]="period === 'month'" [class.text-[var(--accent-primary)]]="period === 'month'">Tháng</button>
+    </div>
+  </header>
+
+  <p *ngIf="error" class="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{{ error }}</p>
+  <div *ngIf="loading" class="py-16 text-center text-xs text-[var(--text-muted)]"><span class="material-symbols-outlined animate-spin">progress_activity</span><p>Đang tổng hợp báo cáo…</p></div>
+
+  <ng-container *ngIf="!loading">
+    <section class="rounded-2xl p-5 text-white bg-gradient-to-br from-[#43016a] to-[#70409d] shadow-lg">
+      <p class="text-[10px] font-bold tracking-wider text-white/70">DÒNG TIỀN RÒNG</p>
+      <p class="mt-1 text-3xl font-bold tracking-tight">{{ balance | vndMoney:'VND':true }}</p>
+      <div class="mt-5 grid grid-cols-2 gap-4 border-t border-white/20 pt-4"><div><p class="text-[10px] text-white/70">Tổng thu</p><strong class="text-sm">{{ income | vndMoney:'VND':true }}</strong></div><div><p class="text-[10px] text-white/70">Tổng chi</p><strong class="text-sm">-{{ expense | vndMoney }}</strong></div></div>
+    </section>
+
+    <section class="grid grid-cols-2 gap-3"><article class="rounded-xl bg-white border border-[var(--border-subtle)] p-4"><span class="material-symbols-outlined text-emerald-600">savings</span><p class="mt-2 text-xs text-[var(--text-muted)]">Tỷ lệ tiết kiệm</p><strong class="text-xl text-emerald-700">{{ savingsRate }}%</strong></article><article class="rounded-xl bg-white border border-[var(--border-subtle)] p-4"><span class="material-symbols-outlined text-[var(--accent-primary)]">receipt_long</span><p class="mt-2 text-xs text-[var(--text-muted)]">Giao dịch đã ghi</p><strong class="text-xl">{{ transactions.length }}</strong></article></section>
+
+    <section class="rounded-2xl bg-white border border-[var(--border-subtle)] p-4">
+      <div class="flex justify-between items-center mb-4"><div><h2 class="font-bold">Chi tiêu theo hạng mục</h2><p class="text-xs text-[var(--text-muted)]">Top 5 hạng mục trong kỳ</p></div><span class="material-symbols-outlined text-[var(--accent-primary)]">donut_large</span></div>
+      <div *ngIf="expenseCategories.length" class="space-y-4"><div *ngFor="let category of expenseCategories"><div class="flex justify-between gap-3 text-xs mb-1"><span class="font-semibold truncate">{{ category.name }}</span><strong>{{ category.amount | vndMoney }} · {{ category.percentage }}%</strong></div><div class="h-2 bg-[#f3edf5] rounded-full overflow-hidden"><span class="block h-full bg-[#6c3c98] rounded-full" [style.width.%]="category.percentage"></span></div></div></div>
+      <div *ngIf="!expenseCategories.length" class="py-8 text-center text-xs text-[var(--text-muted)]"><span class="material-symbols-outlined text-3xl text-[var(--accent-primary)]">bar_chart</span><p>Chưa có khoản chi trong kỳ này.</p></div>
+    </section>
+  </ng-container>
+</main>

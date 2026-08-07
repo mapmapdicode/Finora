@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
@@ -38,7 +38,6 @@ export class DepositComponent implements OnInit {
   }
 
   constructor(
-    private location: Location,
     private router: Router,
     private api: ApiService,
     private toast: ToastService
@@ -57,10 +56,6 @@ export class DepositComponent implements OnInit {
         }
       },
     });
-  }
-
-  goBack() {
-    this.location.back();
   }
 
   onAmountInput(event: Event) {

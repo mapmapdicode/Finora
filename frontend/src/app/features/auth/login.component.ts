@@ -6,6 +6,12 @@ import { CommonModule } from '@angular/common';
 
 import { LanguageService, SupportedLanguage } from '../../core/services/language.service';
 
+export interface SavedUser {
+  name: string;
+  email: string;
+  avatar?: string;
+}
+
 @Component({
   selector: 'app-login',
   standalone: true,
@@ -18,8 +24,11 @@ export class LoginComponent implements OnInit, OnDestroy {
   verificationRequired = false;
   submitting = false;
 
+  hasSavedUser = false;
+  lastUser: SavedUser | null = null;
+
   // UI state management for glassmorphism layout & fast auth
-  authMode: 'faceid' | 'password' = 'faceid';
+  authMode: 'faceid' | 'password' = 'password';
   showPassword = false;
   isScanningFace = false;
   
@@ -41,13 +50,34 @@ export class LoginComponent implements OnInit, OnDestroy {
     public langService: LanguageService
   ) {
     this.form = this.fb.group({
-      email: ['thanhoangz', [Validators.required]],
-      password: ['HoangThanZ6^', Validators.required],
+      email: ['', [Validators.required]],
+      password: ['', Validators.required],
       code: [''],
     });
   }
 
   ngOnInit(): void {
+    const rawSaved = localStorage.getItem('finora.last_user');
+    if (rawSaved) {
+      try {
+        const parsed = JSON.parse(rawSaved);
+        if (parsed && (parsed.email || parsed.name)) {
+          this.lastUser = parsed;
+          this.hasSavedUser = true;
+          this.authMode = 'faceid';
+          this.form.patchValue({
+            email: parsed.email || '',
+          });
+        }
+      } catch {
+        this.hasSavedUser = false;
+      }
+    }
+
+    if (!this.hasSavedUser) {
+      this.authMode = 'password';
+    }
+
     this.timer = setInterval(() => {
       if (this.otpSeconds > 1) {
         this.otpSeconds--;
@@ -71,6 +101,16 @@ export class LoginComponent implements OnInit, OnDestroy {
     } else {
       this.authMode = this.authMode === 'faceid' ? 'password' : 'faceid';
     }
+  }
+
+  switchAccount(): void {
+    this.hasSavedUser = false;
+    this.lastUser = null;
+    this.authMode = 'password';
+    this.form.patchValue({
+      email: '',
+      password: '',
+    });
   }
 
   loginWithFaceID(): void {
@@ -97,6 +137,16 @@ export class LoginComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.submitting = false;
         this.auth.persistSession(res);
+
+        // Save last logged in user for fast login next time
+        const userName = res.user?.name || this.form.value.email || 'Người dùng Finora';
+        const userEmail = res.user?.email || this.form.value.email || '';
+        const savedUser: SavedUser = {
+          name: userName,
+          email: userEmail,
+        };
+        localStorage.setItem('finora.last_user', JSON.stringify(savedUser));
+
         this.router.navigateByUrl('/dashboard');
       },
       error: (err) => {

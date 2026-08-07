@@ -53,6 +53,33 @@ func setupDemoUser(store *storage.InMemoryStore) (*domain.User, domain.ID, error
 	return ws, p.ID, nil
 }
 
+func TestCreateTransactionWithoutCategoryLeavesCategoryEmpty(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	ws, _, err := setupDemoUser(store)
+	if err != nil {
+		t.Fatalf("prepare user: %v", err)
+	}
+	accounts := store.ListAccounts(ws.ID)
+	if len(accounts) == 0 {
+		t.Fatal("expected a test account")
+	}
+
+	transaction, err := NewWealthService(store, nil).CreateTransaction(domain.Transaction{
+		UserID:     ws.ID,
+		AccountID:  accounts[0].ID,
+		Type:       domain.TransactionTypeExpense,
+		Amount:     "1",
+		Currency:   "VND",
+		OccurredAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("create transaction without category: %v", err)
+	}
+	if transaction.CategoryID != "" {
+		t.Fatalf("expected an empty category ID, got %q", transaction.CategoryID)
+	}
+}
+
 func TestProcessSePayIncoming_OutboundRequiresReview(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ws, _, err := setupDemoUser(store)
@@ -519,7 +546,7 @@ func TestReclassifyBankFeedClearsRuleIDAndPosts(t *testing.T) {
 	}
 	wasPostedInitially := got.PostingState == domain.PostingStatePosted
 
-	tx, err := svc.ReclassifyBankFeed(feed.ID, "", domain.TransactionTypeExpense, "manual-food", "manual review")
+	tx, err := svc.ReclassifyBankFeed(feed.ID, "", domain.TransactionTypeExpense, "", "manual review")
 	if err != nil {
 		t.Fatalf("reclassify bank feed: %v", err)
 	}
@@ -545,8 +572,8 @@ func TestReclassifyBankFeedClearsRuleIDAndPosts(t *testing.T) {
 		if tx.Type != domain.TransactionTypeExpense {
 			t.Fatalf("expected reclassified transaction type expense, got %s", tx.Type)
 		}
-		if tx.CategoryID != "manual-food" {
-			t.Fatalf("expected reclassified transaction category manual-food, got %s", tx.CategoryID)
+		if tx.CategoryID != "" {
+			t.Fatalf("expected reclassified transaction without a category, got %s", tx.CategoryID)
 		}
 	}
 }

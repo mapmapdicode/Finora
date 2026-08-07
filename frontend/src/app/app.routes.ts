@@ -19,6 +19,7 @@ import { PortfolioListComponent } from './features/portfolios/portfolio-list.com
 import { AuditLogsComponent } from './features/audit/audit-logs.component';
 import { ProfileComponent } from './features/profile/profile.component';
 import { DepositComponent } from './features/transactions/deposit.component';
+import { ReportsComponent } from './features/reports/reports.component';
 import { TransactionCreateComponent } from './features/transactions/transaction-create.component';
 import { LoanCreateComponent } from './features/loans/loan-create.component';
 
@@ -36,6 +37,7 @@ export const appRoutes: Routes = [
   { path: 'assets', component: AssetListComponent, canActivate: [authGuard] },
   { path: 'properties', component: PropertyListComponent, canActivate: [authGuard] },
   { path: 'forecast', component: ForecastPageComponent, canActivate: [authGuard] },
+  { path: 'reports', component: ReportsComponent, canActivate: [authGuard] },
   { path: 'budgets', component: BudgetPageComponent, canActivate: [authGuard] },
   { path: 'budgets/:period', component: BudgetPageComponent, canActivate: [authGuard] },
   { path: 'sepay', component: SePayComponent, canActivate: [authGuard] },

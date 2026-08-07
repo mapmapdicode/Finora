@@ -21,6 +21,7 @@
 
   --bg-main: #fff7fc;
   --bg-surface: #fff7fc;
+  --bg-subtle: #fae8ff;
   --surface-lowest: #ffffff;
   --surface-container: #fae8ff;
   --surface-high: #f7e1ff;
@@ -309,6 +310,23 @@ h1, h2, h3, h4, h5, h6, .font-display {
   box-sizing: border-box;
 }
 
+.w-textarea, .m3-textarea {
+  min-height: 104px;
+  height: auto;
+  padding: 12px 16px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.w-input--bare {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0 !important;
+  background: transparent;
+  box-shadow: none !important;
+}
+
 .w-select, .m3-select, select.w-select, select.m3-select {
   width: 100%;
   height: 46px;
@@ -354,6 +372,58 @@ h1, h2, h3, h4, h5, h6, .font-display {
   border-color: var(--primary) !important;
   box-shadow: 0 0 0 3px rgba(70, 15, 121, 0.15) !important;
 }
+
+.w-input:hover:not(:disabled), .m3-input:hover:not(:disabled), .w-select:hover:not(:disabled), .m3-select:hover:not(:disabled), .w-textarea:hover:not(:disabled), .m3-textarea:hover:not(:disabled) {
+  border-color: var(--outline) !important;
+}
+
+.w-input::placeholder, .m3-input::placeholder, .w-textarea::placeholder, .m3-textarea::placeholder {
+  color: var(--outline);
+  opacity: 1;
+}
+
+.w-input:disabled, .m3-input:disabled, .w-select:disabled, .m3-select:disabled, .w-textarea:disabled, .m3-textarea:disabled {
+  cursor: not-allowed;
+  color: var(--outline);
+  background-color: var(--bg-subtle);
+  border-color: var(--border-subtle) !important;
+}
+
+.w-input.is-invalid, .m3-input.is-invalid, .w-select.is-invalid, .m3-select.is-invalid, .w-textarea.is-invalid, .m3-textarea.is-invalid,
+.w-input[aria-invalid='true'], .m3-input[aria-invalid='true'], .w-select[aria-invalid='true'], .m3-select[aria-invalid='true'], .w-textarea[aria-invalid='true'], .m3-textarea[aria-invalid='true'] {
+  border-color: var(--status-danger) !important;
+}
+
+.app-back-button {
+  display: inline-flex;
+  min-height: 40px;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+  font: 700 12px var(--w-font-sans);
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+
+.app-back-button:hover { background: var(--bg-subtle); border-color: var(--primary); }
+.app-back-button:focus-visible { outline: 3px solid var(--secondary-fixed-dim); outline-offset: 2px; }
+
+.w-page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.w-page-heading h1 { margin: 2px 0 4px; color: var(--text-main); font-size: clamp(24px, 5vw, 32px); line-height: 1.15; font-weight: 800; }
+.w-page-heading p:not(.w-page-eyebrow) { margin: 0; color: var(--text-muted); font-size: 13px; }
+.w-page-eyebrow { margin: 0; color: var(--accent-primary); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
 
 select option, .w-select option, .m3-select option {
   background-color: var(--bg-surface) !important;
@@ -624,6 +694,11 @@ select option, .w-select option, .m3-select option {
   box-shadow: 0 20px 60px rgba(43, 1, 77, 0.12);
 }
 
+.app-viewport {
+  width: 100%;
+  max-width: 1440px;
+}
+
 .dashboard-grid,
 .dashboard-columns {
   grid-template-columns: 1fr !important;
@@ -638,14 +713,173 @@ select option, .w-select option, .m3-select option {
 }
 
 /* Touch-friendly table scroll container */
-.w-card table,
-table {
-  display: block;
+.w-table-container,
+.m3-table-container {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
+.w-table,
+.m3-table {
+  display: table;
+  width: 100%;
+  min-width: 720px;
+}
+
 button, input, select, textarea, a {
   touch-action: manipulation;
+}
+
+/* Mobile containment contract: every route must remain inside an iPhone viewport. */
+html,
+body,
+app-root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+}
+
+@media (max-width: 480px) {
+  /* A table that asks users to pan horizontally is unusable on a phone.
+     Keep each existing table semantic, but render each row as a vertical card. */
+  .w-table-container,
+  .m3-table-container {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .w-table,
+  .m3-table,
+  .w-card table,
+  table {
+    display: block;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .w-table thead,
+  .m3-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .w-table tbody,
+  .m3-table tbody,
+  .w-table tr,
+  .m3-table tr,
+  .w-table td,
+  .m3-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .w-table tr,
+  .m3-table tr {
+    margin-bottom: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    background: var(--bg-surface);
+  }
+
+  .w-table td,
+  .m3-table td {
+    min-width: 0;
+    padding: 9px 12px;
+    overflow-wrap: anywhere;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .w-table td:last-child,
+  .m3-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .w-table td.text-right,
+  .m3-table td.text-right {
+    text-align: left;
+  }
+
+  .w-table td[data-label],
+  .m3-table td[data-label] {
+    display: grid !important;
+    grid-template-columns: minmax(104px, 42%) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+  }
+
+  .w-table td[data-label]::before,
+  .m3-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+
+  .loan-create-action {
+    width: 100%;
+  }
+
+  .loan-create-action .w-btn {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .w-table td.loan-actions-cell[data-label] {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .loan-row-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .loan-row-actions .w-btn {
+    width: 100%;
+    min-height: 44px;
+    white-space: normal;
+  }
+
+  /* Long payloads and references must wrap instead of forcing horizontal panning. */
+  pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow-x: hidden !important;
+  }
+
+  .flex > *,
+  .grid > * {
+    min-width: 0;
+  }
 }

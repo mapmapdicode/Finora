@@ -52,12 +52,41 @@ type UserSettingsResponse struct {
 }
 
 type PortfolioNetWorthResponse struct {
-	AsOfAt            time.Time `json:"asOfAt"`
-	BaseCurrency      string    `json:"baseCurrency"`
-	NetWorth          string    `json:"netWorth"`
-	Cash              string    `json:"cash"`
-	Liabilities       string    `json:"liabilities"`
-	AmountDisplayMode string    `json:"amountDisplayMode"`
+	AsOfAt            time.Time                    `json:"asOfAt"`
+	BaseCurrency      string                       `json:"baseCurrency"`
+	NetWorth          string                       `json:"netWorth"`
+	NetWorthChange    string                       `json:"netWorthChange"`
+	Cash              string                       `json:"cash"`
+	Liabilities       string                       `json:"liabilities"`
+	SnapshotVersion   int                          `json:"snapshotVersion"`
+	Assets            PortfolioNetWorthAssets      `json:"assets"`
+	DataQuality       PortfolioNetWorthDataQuality `json:"dataQuality"`
+	Attribution       PortfolioNetWorthAttribution `json:"attribution"`
+	AmountDisplayMode string                       `json:"amountDisplayMode"`
+}
+
+// These fields deliberately mirror the wealth-service result. Keeping the
+// dashboard response complete prevents web and mobile clients from inferring
+// allocation values from a net-worth total.
+type PortfolioNetWorthAssets struct {
+	Cash            string `json:"cash"`
+	Receivables     string `json:"receivables"`
+	Property        string `json:"property"`
+	OtherAssets     string `json:"otherAssets"`
+	AccruedInterest string `json:"accruedInterest"`
+}
+
+type PortfolioNetWorthDataQuality struct {
+	ReconciledAccounts int    `json:"reconciledAccounts"`
+	StaleValuations    int    `json:"staleValuations"`
+	AsOfSource         string `json:"asOfSource"`
+}
+
+type PortfolioNetWorthAttribution struct {
+	ExternalCashFlow string `json:"externalCashFlow"`
+	AccruedInterest  string `json:"accruedInterest"`
+	ValuationChange  string `json:"valuationChange"`
+	AccruedFee       string `json:"accruedFee"`
 }
 
 type PortfolioSnapshotResponse struct {

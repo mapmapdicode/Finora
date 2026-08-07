@@ -10,6 +10,7 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { normalizeVndAmount } from '../../shared/money-input';
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { VndMoneyPipe } from '../../shared/pipes/vnd-money.pipe';
 
 type TransactionFilters = {
   accountId: string;
@@ -25,7 +26,7 @@ type TransactionFilters = {
 @Component({
   selector: 'app-transaction-list',
   standalone: true,
-  imports: [ReactiveFormsModule, CommonModule, IconComponent, TranslatePipe, RouterLink],
+  imports: [ReactiveFormsModule, CommonModule, IconComponent, TranslatePipe, RouterLink, VndMoneyPipe],
   templateUrl: './transaction-list.component.html'
 })
 export class TransactionListComponent implements OnInit, OnDestroy {
@@ -375,7 +376,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
     }
 
     return Array.from(totals.entries())
-      .map(([currency, value]) => `${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`)
+      .map(([currency, value]) => `${value.toLocaleString('vi-VN', { maximumFractionDigits: 0 })} ${currency}`)
       .join(' + ');
   }
 
@@ -396,13 +397,6 @@ export class TransactionListComponent implements OnInit, OnDestroy {
 
   accountLabel(accountId: string) {
     return this.accountNameById.get(accountId) || accountId;
-  }
-
-  formatAmount(value: string | number | undefined) {
-    const amount = Number.parseFloat(String(value ?? 0));
-    return (Number.isFinite(amount) ? amount : 0).toLocaleString('vi-VN', {
-      maximumFractionDigits: 0,
-    });
   }
 
   private resetForm() {

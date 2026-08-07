@@ -5,6 +5,7 @@ import { Account, NetWorthSummary, Portfolio, PortfolioSnapshotPage, Transaction
 
 import { AuthService } from '../../core/services/auth.service';
 import { RouterLink } from '@angular/router';
+import { VndMoneyPipe } from '../../shared/pipes/vnd-money.pipe';
 
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -12,7 +13,7 @@ import { catchError } from 'rxjs/operators';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, VndMoneyPipe],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css',
 })
@@ -81,6 +82,23 @@ export class DashboardComponent implements OnInit {
   };
   selectedSnapshotNetWorth: NetWorthSummary | null = null;
 
+  readonly homeModules = [
+    { path: '/accounts', icon: 'account_balance', title: 'Tài khoản', description: 'Ví, ngân hàng và số dư' },
+    { path: '/transactions', icon: 'receipt_long', title: 'Giao dịch', description: 'Nhật ký thu, chi và chuyển tiền' },
+    { path: '/loans', icon: 'request_quote', title: 'Khoản vay', description: 'Lãi, lịch thu và lịch sử vay' },
+    { path: '/assets', icon: 'savings', title: 'Tài sản đầu tư', description: 'Theo dõi tài sản và định giá' },
+    { path: '/properties', icon: 'home', title: 'Bất động sản', description: 'Danh mục nhà đất của bạn' },
+    { path: '/budgets', icon: 'pie_chart', title: 'Ngân sách', description: 'Kế hoạch chi tiêu theo tháng' },
+    { path: '/reports', icon: 'bar_chart', title: 'Báo cáo', description: 'Dòng tiền theo tuần và tháng' },
+    { path: '/forecast', icon: 'auto_graph', title: 'Dự báo', description: 'Mô phỏng kịch bản tài chính' },
+    { path: '/portfolios', icon: 'donut_large', title: 'Danh mục', description: 'Cấu trúc tài sản của bạn' },
+    { path: '/sepay', icon: 'account_balance_wallet', title: 'Kết nối ngân hàng', description: 'Đồng bộ SePay và đối soát' },
+    { path: '/automation', icon: 'auto_awesome', title: 'Tự động hoá', description: 'Quy tắc cho giao dịch' },
+    { path: '/assistant', icon: 'smart_toy', title: 'Trợ lý AI', description: 'Hỗ trợ các câu lệnh tài chính' },
+    { path: '/audit-logs', icon: 'history', title: 'Nhật ký hoạt động', description: 'Theo dõi các thay đổi dữ liệu' },
+    { path: '/profile', icon: 'person', title: 'Cá nhân', description: 'Thiết lập, bảo mật và đăng xuất' },
+  ];
+
   get assetBreakdown() {
     const assets = this.drillDownSnapshot().assets;
     if (!assets) return [];
@@ -96,6 +114,55 @@ export class DashboardComponent implements OnInit {
     return entries
       .filter((item) => item.numericAmount > 0)
       .map(({ numericAmount, ...item }) => ({ ...item, percentage: Math.round((numericAmount / total) * 100) }));
+  }
+
+  get totalAssets(): number {
+    const assets = this.netWorth.assets;
+    if (!assets) return Math.max(0, Number.parseFloat(this.netWorth.netWorth) || 0);
+    return Object.values(assets).reduce((total, amount) => total + Math.max(0, Number.parseFloat(amount) || 0), 0);
+  }
+
+  get investmentValue(): number {
+    const assets = this.netWorth.assets;
+    if (!assets) return 0;
+    return Math.max(0, Number.parseFloat(assets.otherAssets) || 0) + Math.max(0, Number.parseFloat(assets.property) || 0);
+  }
+
+  get receivablesValue(): number {
+    return Math.max(0, Number.parseFloat(this.netWorth.assets?.receivables || '0') || 0);
+  }
+
+  get todayProfit(): number {
+    return Number.parseFloat(this.netWorth.netWorthChange || '0') || 0;
+  }
+
+  get todayProfitIsPositive(): boolean {
+    return this.todayProfit >= 0;
+  }
+
+  get currency(): string {
+    return this.netWorth.baseCurrency || this.portfolios.find((item) => item.id === this.selectedPortfolioId)?.baseCurrency || 'VND';
+  }
+
+  get recentTrendPoints() {
+    return this.trendDotPositions.slice(-7);
+  }
+
+  get timeGreeting(): string {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) {
+      return 'Chào buổi sáng';
+    }
+    if (hour >= 12 && hour < 18) {
+      return 'Chào buổi chiều';
+    }
+    return 'Chào buổi tối';
+  }
+
+  get trendDateLabels(): string[] {
+    const points = this.recentTrendPoints;
+    if (points.length < 2) return [];
+    return [this.formatShortDate(points[0].asOf), this.formatShortDate(points[points.length - 1].asOf)];
   }
 
   constructor(private api: ApiService, public auth: AuthService) {}
@@ -287,15 +354,16 @@ export class DashboardComponent implements OnInit {
     return new Date(data.asOfAt).toLocaleString();
   }
 
-  formatAmount(value: string | number | undefined): string {
-    const amount = Number.parseFloat(String(value ?? 0));
-    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number.isFinite(amount) ? amount : 0);
-  }
-
   formatDate(value: string | undefined): string {
     if (!value) return '';
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+  }
+
+  formatShortDate(value: string | undefined): string {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit' }).format(date);
   }
 
   transactionLabel(transaction: Transaction): string {
@@ -318,9 +386,11 @@ export class DashboardComponent implements OnInit {
   }
 
   private buildTrendFromSnapshots() {
-    const ordered = [...this.snapshots].sort((a, b) =>
-      new Date(a.asOfAt).getTime() - new Date(b.asOfAt).getTime()
-    );
+    // The home screen is a quick daily check-in: intentionally keep its chart
+    // to the latest seven observations rather than drawing a cramped history.
+    const ordered = [...this.snapshots]
+      .sort((a, b) => new Date(a.asOfAt).getTime() - new Date(b.asOfAt).getTime())
+      .slice(-7);
     const values = ordered
       .map((item) => parseFloat(item.netWorth))
       .filter((value) => Number.isFinite(value));

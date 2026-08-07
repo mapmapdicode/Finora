@@ -2,35 +2,46 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
-import { Account, Loan, LoanAccruals, LoanPayment, LoanPaymentRequest, LoanPortfolioSummary, LoanScheduleItem } from '../../shared/models';
+import { Account, Customer, Loan, LoanAccruals, LoanPayment, LoanPaymentRequest, LoanPortfolioSummary, LoanScheduleItem } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { normalizeVndAmount } from '../../shared/money-input';
+import { RouterLink } from '@angular/router';
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
+import { VndMoneyPipe } from '../../shared/pipes/vnd-money.pipe';
 
 @Component({
   selector: 'app-loan-list',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, IconComponent, TranslatePipe],
+  imports: [CommonModule, ReactiveFormsModule, IconComponent, TranslatePipe, VndMoneyPipe, RouterLink],
   templateUrl: './loan-list.component.html'
 })
 export class LoanListComponent implements OnInit {
   loans: Loan[] = [];
+  customers: Customer[] = [];
   accounts: Account[] = [];
   accrualsMap: Record<string, LoanAccruals> = {};
   paymentRequests: Record<string, LoanPaymentRequest | null> = {};
   summary: LoanPortfolioSummary = { activePrincipal: '0', dailyInterest: '0', accruedInterest: '0', paidInterest: '0' };
   schedule: LoanScheduleItem[] = [];
+  paymentHistory: LoanPayment[] = [];
   creationForm: FormGroup;
   paymentForm: FormGroup;
   requestForm: FormGroup;
   statusMessage = '';
   selectedLoanId = '';
   selectedLoanForPayment = '';
+  selectedLoanForHistory: Loan | null = null;
+  historyLoading = false;
+  showCreateForm = false;
+
+  paymentMode: 'interest_only' | 'principal_only' | 'both' = 'both';
+  totalPaymentString = '';
+  activePaymentLoan: Loan | null = null;
 
   get dailyRatePerMillion(): number {
-    return Number(this.creationForm?.value.dailyRatePerMillion || 0) || 0;
+    return Number(normalizeVndAmount(this.creationForm?.value.dailyRatePerMillion)) || 0;
   }
 
   get annualRateEquivalent(): number {
@@ -39,7 +50,7 @@ export class LoanListComponent implements OnInit {
 
   constructor(private api: ApiService, private fb: FormBuilder, public auth: AuthService) {
     this.creationForm = this.fb.group({
-      counterparty: ['', Validators.required],
+      customerId: ['', Validators.required],
       direction: ['receivable', Validators.required],
       principalInitial: ['', Validators.required],
       annualRate: ['0', Validators.required],
@@ -73,18 +84,196 @@ export class LoanListComponent implements OnInit {
   ngOnInit() {
     this.reload();
     this.api.getAccounts().subscribe((items) => (this.accounts = items));
+    this.api.getCustomers().subscribe({
+      next: (items) => (this.customers = items),
+      error: () => (this.statusMessage = 'Không thể tải danh sách khách hàng.'),
+    });
+  }
+
+  get todayDateString(): string {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  get lastInterestDate(): Date {
+    const loanId = this.selectedLoanForPayment;
+    const accrual = this.accrualsMap[loanId];
+    const loan = this.activePaymentLoan;
+    
+    let dateStr = accrual?.lastInterestPaidDate || loan?.startAt;
+    if (!dateStr || dateStr.startsWith('0001')) {
+      dateStr = loan?.startAt || '';
+    }
+    if (!dateStr || dateStr.startsWith('0001')) {
+      return new Date();
+    }
+    
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime()) || d.getFullYear() < 2000) {
+      return new Date();
+    }
+    return d;
+  }
+
+  get interestDaysCount(): number {
+    const lastDate = this.lastInterestDate;
+    const paymentDateStr = this.paymentForm?.value?.occurredAt || this.todayDateString;
+    const paymentDate = new Date(paymentDateStr);
+    if (isNaN(paymentDate.getTime())) return 0;
+
+    const d1 = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+    const d2 = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
+    const diffMs = d2.getTime() - d1.getTime();
+    return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  }
+
+  get computedInterestByDays(): number {
+    const loanId = this.selectedLoanForPayment;
+    if (!loanId) return 0;
+    const dailyInterestStr = this.accrualsMap[loanId]?.dailyInterest || '0';
+    const dailyInterest = Number(normalizeVndAmount(dailyInterestStr)) || 0;
+    const days = this.interestDaysCount;
+    return Math.round(days * dailyInterest);
+  }
+
+  openPayment(loanId: string) {
+    if (!this.auth.canMutate) return;
+    this.selectedLoanForPayment = loanId;
+    this.activePaymentLoan = this.loans.find(l => l.id === loanId) || null;
+    this.paymentMode = 'both';
+    this.totalPaymentString = '';
+    this.paymentForm.patchValue({
+      loanId,
+      principalAmount: '0',
+      interestAmount: '0',
+      feeAmount: '0',
+      waivedAmount: '0',
+      occurredAt: this.todayDateString,
+      accountId: '',
+    });
+    this.scrollToElement('loan-payment-form');
+  }
+
+  closePayment() {
+    this.selectedLoanForPayment = '';
+    this.activePaymentLoan = null;
+  }
+
+  onPaymentDateChange() {
+    this.recalculatePaymentAllocation();
+  }
+
+  setPaymentMode(mode: 'interest_only' | 'principal_only' | 'both') {
+    this.paymentMode = mode;
+    this.recalculatePaymentAllocation();
+  }
+
+  onTotalPaymentInput(event: Event) {
+    const input = event.target as HTMLInputElement;
+    this.totalPaymentString = input.value;
+    this.recalculatePaymentAllocation();
+  }
+
+  onTotalPaymentBlur() {
+    this.totalPaymentString = this.formatVndAmount(this.totalPaymentString);
+  }
+
+  setQuickPaymentAmount(type: 'accrued' | 'principal' | 'full') {
+    const loanId = this.selectedLoanForPayment;
+    const accruedMapInterest = Number(normalizeVndAmount(this.accrualsMap[loanId]?.totalAccruedInterest || '0')) || 0;
+    const accruedByDays = this.computedInterestByDays;
+    const accrued = accruedByDays > 0 ? accruedByDays : accruedMapInterest;
+
+    const loan = this.activePaymentLoan;
+    const principal = Number(normalizeVndAmount(loan?.principalBalance || '0')) || 0;
+
+    if (type === 'accrued') {
+      this.paymentMode = 'interest_only';
+      this.totalPaymentString = new Intl.NumberFormat('vi-VN').format(accrued);
+    } else if (type === 'principal') {
+      this.paymentMode = 'principal_only';
+      this.totalPaymentString = new Intl.NumberFormat('vi-VN').format(principal);
+    } else if (type === 'full') {
+      this.paymentMode = 'both';
+      this.totalPaymentString = new Intl.NumberFormat('vi-VN').format(accrued + principal);
+    }
+    this.recalculatePaymentAllocation();
+  }
+
+  onPaymentComponentBlur(control: 'interestAmount' | 'principalAmount', event: Event) {
+    const input = event.target as HTMLInputElement;
+    const formatted = this.formatVndAmount(input.value);
+    this.paymentForm.get(control)?.setValue(formatted, { emitEvent: false });
+    input.value = formatted;
+
+    const interestNum = Number(normalizeVndAmount(this.paymentForm.value.interestAmount)) || 0;
+    const principalNum = Number(normalizeVndAmount(this.paymentForm.value.principalAmount)) || 0;
+    const totalNum = interestNum + principalNum;
+    this.totalPaymentString = totalNum > 0 ? new Intl.NumberFormat('vi-VN').format(totalNum) : '';
+  }
+
+  recalculatePaymentAllocation() {
+    const totalNum = Number(normalizeVndAmount(this.totalPaymentString)) || 0;
+    if (totalNum <= 0) {
+      this.paymentForm.patchValue({ interestAmount: '0', principalAmount: '0' }, { emitEvent: false });
+      return;
+    }
+
+    if (this.paymentMode === 'interest_only') {
+      this.paymentForm.patchValue({
+        interestAmount: new Intl.NumberFormat('vi-VN').format(totalNum),
+        principalAmount: '0',
+      }, { emitEvent: false });
+    } else if (this.paymentMode === 'principal_only') {
+      this.paymentForm.patchValue({
+        interestAmount: '0',
+        principalAmount: new Intl.NumberFormat('vi-VN').format(totalNum),
+      }, { emitEvent: false });
+    } else {
+      const loanId = this.selectedLoanForPayment;
+      const accruedMapInterest = Number(normalizeVndAmount(this.accrualsMap[loanId]?.totalAccruedInterest || '0')) || 0;
+      const accruedByDays = this.computedInterestByDays;
+      const accrued = accruedByDays > 0 ? accruedByDays : accruedMapInterest;
+
+      let interestPart = 0;
+      let principalPart = 0;
+
+      if (accrued > 0) {
+        if (totalNum <= accrued) {
+          interestPart = totalNum;
+          principalPart = 0;
+        } else {
+          interestPart = accrued;
+          principalPart = totalNum - accrued;
+        }
+      } else {
+        principalPart = totalNum;
+      }
+
+      this.paymentForm.patchValue({
+        interestAmount: new Intl.NumberFormat('vi-VN').format(interestPart),
+        principalAmount: new Intl.NumberFormat('vi-VN').format(principalPart),
+      }, { emitEvent: false });
+    }
   }
 
   submitLoan() {
     if (!this.auth.canMutate) return;
-    if (this.creationForm.invalid) return;
+    if (this.creationForm.invalid) {
+      this.creationForm.markAllAsTouched();
+      this.statusMessage = 'Vui lòng chọn khách hàng, tài khoản và nhập số tiền gốc cùng lãi/ngày hợp lệ.';
+      return;
+    }
     const payload = {
-      counterparty: this.creationForm.value.counterparty,
+      customerId: this.creationForm.value.customerId,
       direction: this.creationForm.value.direction,
       principalInitial: normalizeVndAmount(this.creationForm.value.principalInitial),
       annualRate: this.creationForm.value.annualRate,
-	  dailyRatePerMillion: this.creationForm.value.dailyRatePerMillion,
-	  settlementAccountId: this.creationForm.value.settlementAccountId,
+      dailyRatePerMillion: normalizeVndAmount(this.creationForm.value.dailyRatePerMillion),
+      settlementAccountId: this.creationForm.value.settlementAccountId,
       dayCountBasis: this.creationForm.value.dayCountBasis || 'ACT_365',
       portfolioId: this.creationForm.value.portfolioId || '',
       interestCompounding: !!this.creationForm.value.interestCompounding,
@@ -95,7 +284,7 @@ export class LoanListComponent implements OnInit {
       next: () => {
         this.statusMessage = 'Tạo khoản vay thành công.';
         this.creationForm.reset({
-          counterparty: '',
+          customerId: '',
           direction: 'receivable',
           principalInitial: '',
           annualRate: '0',
@@ -109,8 +298,8 @@ export class LoanListComponent implements OnInit {
         });
         this.reload();
       },
-      error: () => {
-        this.statusMessage = 'Tạo khoản vay thất bại.';
+      error: (error) => {
+        this.statusMessage = error?.error?.message || 'Tạo khoản vay thất bại.';
       },
     });
   }
@@ -138,29 +327,60 @@ export class LoanListComponent implements OnInit {
     });
   }
 
-  openPayment(loanId: string) {
-    if (!this.auth.canMutate) return;
-    this.selectedLoanForPayment = loanId;
-    this.paymentForm.patchValue({
-      loanId,
-      principalAmount: '',
-      interestAmount: '0',
-      feeAmount: '0',
-      waivedAmount: '0',
-      occurredAt: '',
-	  accountId: '',
+
+
+
+
+  openPaymentHistory(loan: Loan) {
+    if (this.selectedLoanForHistory?.id === loan.id) {
+      this.selectedLoanForHistory = null;
+      this.paymentHistory = [];
+      return;
+    }
+    this.selectedLoanForHistory = loan;
+    this.paymentHistory = [];
+    this.historyLoading = true;
+    this.scrollToElement('loan-history-section');
+    this.api.getLoanPayments(loan.id).subscribe({
+      next: (items) => {
+        this.paymentHistory = [...items].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+        this.historyLoading = false;
+        this.scrollToElement('loan-history-section');
+      },
+      error: () => {
+        this.historyLoading = false;
+        this.statusMessage = 'Không thể tải lịch sử thanh toán khoản vay.';
+      },
     });
   }
 
-  closePayment() {
-    this.selectedLoanForPayment = '';
+  private scrollToElement(elementId: string) {
+    setTimeout(() => {
+      const el = document.getElementById(elementId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 80);
+  }
+
+  paymentTotal(payment: LoanPayment): number {
+    return ['principalAmount', 'interestAmount', 'feeAmount']
+      .reduce((sum, field) => sum + (Number.parseFloat(payment[field as keyof LoanPayment] as string) || 0), 0);
   }
 
   setQuickRate(value: number) {
     this.creationForm.patchValue({
-      dailyRatePerMillion: String(value),
+      dailyRatePerMillion: this.formatVndAmount(String(value)),
       annualRate: this.toAnnualRate(value),
     });
+  }
+
+  onLoanMoneyBlur(control: 'principalInitial' | 'dailyRatePerMillion', event: Event) {
+    const input = event.target as HTMLInputElement;
+    const formatted = this.formatVndAmount(input.value);
+    this.creationForm.get(control)?.setValue(formatted, { emitEvent: false });
+    input.value = formatted;
+    if (control === 'dailyRatePerMillion') this.syncAnnualRate();
   }
 
   syncAnnualRate() {
@@ -169,6 +389,11 @@ export class LoanListComponent implements OnInit {
 
   private toAnnualRate(value: number) {
     return ((value * 365 * 100) / 1_000_000).toFixed(4);
+  }
+
+  private formatVndAmount(value: unknown): string {
+    const normalized = normalizeVndAmount(value);
+    return normalized ? new Intl.NumberFormat('vi-VN').format(Number(normalized)) : '';
   }
 
   remove(item: Loan) {
@@ -186,17 +411,25 @@ export class LoanListComponent implements OnInit {
     if (!this.auth.canMutate) return;
     const loanId = this.paymentForm.value.loanId || this.selectedLoanForPayment;
     if (!loanId || this.paymentForm.invalid) return;
+    const principal = normalizeVndAmount(this.paymentForm.value.principalAmount) || '0';
+    const interest = normalizeVndAmount(this.paymentForm.value.interestAmount) || '0';
+
+    if (Number(principal) <= 0 && Number(interest) <= 0) {
+      this.statusMessage = 'Vui lòng nhập số tiền ghi nhận (lãi hoặc gốc).';
+      return;
+    }
+
     const payload = {
-      principalAmount: normalizeVndAmount(this.paymentForm.value.principalAmount) || '0',
-      interestAmount: this.paymentForm.value.interestAmount || '0',
-      feeAmount: this.paymentForm.value.feeAmount || '0',
-      waivedAmount: this.paymentForm.value.waivedAmount || '0',
+      principalAmount: principal,
+      interestAmount: interest,
+      feeAmount: normalizeVndAmount(this.paymentForm.value.feeAmount) || '0',
+      waivedAmount: normalizeVndAmount(this.paymentForm.value.waivedAmount) || '0',
       occurredAt: this.paymentForm.value.occurredAt || undefined,
-	  accountId: this.paymentForm.value.accountId,
+      accountId: this.paymentForm.value.accountId,
     };
     this.api.createLoanPayment(loanId, payload).subscribe({
       next: (_result: LoanPayment) => {
-        this.statusMessage = 'Đã ghi nhận khoản trả nợ.';
+        this.statusMessage = 'Đã ghi nhận khoản thu / trả nợ thành công.';
         this.reload();
         this.closePayment();
       },

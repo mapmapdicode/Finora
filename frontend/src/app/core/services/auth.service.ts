@@ -57,6 +57,8 @@ export class AuthService {
     return this.http.post(`${environment.apiBase}/api/v1/auth/resend-verification-email`, { email });
   }
 
+  private userKey = 'wealthos.user';
+
   persistSession(response: AuthResponse) {
     if (response.token) {
       this.setToken(response.token);
@@ -64,6 +66,35 @@ export class AuthService {
     if (response.workspace?.id) {
       this.saveWorkspace(response.workspace.id);
     }
+    if (response.user) {
+      this.saveUser(response.user);
+    }
+  }
+
+  saveUser(user: { id?: string; name?: string; email?: string }) {
+    localStorage.setItem(this.userKey, JSON.stringify(user));
+  }
+
+  get currentUser(): { id?: string; name?: string; email?: string } | null {
+    const raw = localStorage.getItem(this.userKey);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  get userName(): string {
+    const user = this.currentUser;
+    if (user?.name && user.name.trim()) {
+      return user.name.trim();
+    }
+    if (user?.email) {
+      const emailPrefix = user.email.split('@')[0];
+      return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+    }
+    return 'bạn';
   }
 
   saveWorkspace(workspaceId: string) {
@@ -131,6 +162,7 @@ export class AuthService {
     localStorage.removeItem(this.workspaceRolesKey);
     localStorage.removeItem(this.workspaceRoleKey);
     localStorage.removeItem(this.workspaceKey);
+    localStorage.removeItem(this.userKey);
     this.token$.next(null);
   }
 }

@@ -1,22 +1,27 @@
 import { Component, OnInit } from '@angular/core';
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { ToastService } from '../../core/services/toast.service';
-import { Account, Loan } from '../../shared/models';
+import { Account, Customer } from '../../shared/models';
+import { SelectMenuComponent, SelectMenuOption } from '../../shared/components/select-menu.component';
 
 @Component({
   selector: 'app-loan-create',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, SelectMenuComponent],
   templateUrl: './loan-create.component.html',
 })
 export class LoanCreateComponent implements OnInit {
-  borrowerName = '';
+  customers: Customer[] = [];
+  selectedCustomerId = '';
   newBorrowerName = '';
+  newBorrowerPhone = '';
   isAddingNewBorrower = false;
-  borrowers: string[] = ['Nguyễn Văn A', 'Trần Thị B', 'Lê Văn C', 'Công ty TNHH Hưng Thịnh'];
+  customersLoading = false;
+  creatingCustomer = false;
+  customerLoadError = '';
 
   amountString = '0';
   interestRate = 2000; // 2k, 3k, 4k, 5k
@@ -36,12 +41,28 @@ export class LoanCreateComponent implements OnInit {
     return new Intl.NumberFormat('vi-VN').format(this.numericAmount);
   }
 
+  get customerOptions(): SelectMenuOption[] {
+    return [
+      ...this.customers.map((customer) => ({
+        value: customer.id,
+        label: `${customer.name}${customer.phone ? ` · ${customer.phone}` : ''}`,
+      })),
+      { value: '__add_new__', label: '+ Thêm khách hàng mới…' },
+    ];
+  }
+
+  get accountOptions(): SelectMenuOption[] {
+    return this.accounts.map((account) => ({
+      value: account.id,
+      label: `${account.name} (${account.currency})`,
+    }));
+  }
+
   get annualRateEquivalent(): number {
     return (this.interestRate * 365 * 100) / 1000000;
   }
 
   constructor(
-    private location: Location,
     private router: Router,
     private api: ApiService,
     private toast: ToastService
@@ -49,7 +70,7 @@ export class LoanCreateComponent implements OnInit {
 
   ngOnInit() {
     this.loadAccounts();
-    this.loadExistingBorrowers();
+    this.loadCustomers();
   }
 
   loadAccounts() {
@@ -63,39 +84,28 @@ export class LoanCreateComponent implements OnInit {
     });
   }
 
-  loadExistingBorrowers() {
-    this.api.getLoans().subscribe({
-      next: (loans: Loan[]) => {
-        const set = new Set(this.borrowers);
-        loans.forEach((loan) => {
-          if (loan.counterparty && loan.counterparty.trim()) {
-            set.add(loan.counterparty.trim());
-          }
-        });
-        this.borrowers = Array.from(set);
-        if (this.borrowers.length && !this.borrowerName) {
-          this.borrowerName = this.borrowers[0];
-        }
+  loadCustomers() {
+    this.customersLoading = true;
+    this.customerLoadError = '';
+    this.api.getCustomers().subscribe({
+      next: (customers) => {
+        this.customers = customers;
+        this.customersLoading = false;
       },
       error: () => {
-        if (this.borrowers.length && !this.borrowerName) {
-          this.borrowerName = this.borrowers[0];
-        }
+        this.customersLoading = false;
+        this.customerLoadError = 'Không thể tải danh sách khách hàng.';
       },
     });
   }
 
-  goBack() {
-    this.location.back();
-  }
-
-  onBorrowerSelectChange(event: Event) {
-    const val = (event.target as HTMLSelectElement).value;
-    if (val === '__add_new__') {
+  onBorrowerSelectionChange(value: string) {
+    if (value === '__add_new__') {
       this.isAddingNewBorrower = true;
       this.newBorrowerName = '';
+      this.newBorrowerPhone = '';
     } else {
-      this.borrowerName = val;
+      this.selectedCustomerId = value;
       this.isAddingNewBorrower = false;
     }
   }
@@ -104,6 +114,7 @@ export class LoanCreateComponent implements OnInit {
     this.isAddingNewBorrower = !this.isAddingNewBorrower;
     if (this.isAddingNewBorrower) {
       this.newBorrowerName = '';
+      this.newBorrowerPhone = '';
     }
   }
 
@@ -114,13 +125,27 @@ export class LoanCreateComponent implements OnInit {
       return;
     }
 
-    if (!this.borrowers.includes(name)) {
-      this.borrowers.unshift(name);
-    }
-    this.borrowerName = name;
-    this.isAddingNewBorrower = false;
-    this.newBorrowerName = '';
-    this.toast.show(`Đã thêm người vay: ${name}`, 'success');
+    this.creatingCustomer = true;
+    this.api.createCustomer({ name, phone: this.newBorrowerPhone.trim() || undefined }).subscribe({
+      next: (customer) => {
+        this.creatingCustomer = false;
+        const existingIndex = this.customers.findIndex((item) => item.id === customer.id);
+        if (existingIndex >= 0) {
+          this.customers[existingIndex] = customer;
+        } else {
+          this.customers = [customer, ...this.customers];
+        }
+        this.selectedCustomerId = customer.id;
+        this.isAddingNewBorrower = false;
+        this.newBorrowerName = '';
+        this.newBorrowerPhone = '';
+        this.toast.show(`Đã lưu và chọn khách hàng ${customer.name}.`, 'success');
+      },
+      error: (error) => {
+        this.creatingCustomer = false;
+        this.toast.show(error?.error?.message || 'Không thể lưu khách hàng. Vui lòng thử lại.', 'error');
+      },
+    });
   }
 
   onAmountInput(event: Event) {
@@ -138,10 +163,14 @@ export class LoanCreateComponent implements OnInit {
   }
 
   submitLoan() {
-    const targetBorrower = this.isAddingNewBorrower ? this.newBorrowerName.trim() : this.borrowerName.trim();
+    if (this.isAddingNewBorrower) {
+      this.toast.show('Hãy lưu khách hàng mới trước khi tạo khoản vay.', 'error');
+      return;
+    }
 
-    if (!targetBorrower) {
-      this.toast.show('Vui lòng chọn hoặc nhập tên người vay.', 'error');
+    const customer = this.customers.find((item) => item.id === this.selectedCustomerId);
+    if (!customer) {
+      this.toast.show('Vui lòng chọn khách hàng.', 'error');
       return;
     }
 
@@ -153,7 +182,8 @@ export class LoanCreateComponent implements OnInit {
     this.isSubmitting = true;
 
     const payload = {
-      counterparty: targetBorrower,
+      customerId: customer.id,
+      counterparty: customer.name,
       direction: 'receivable' as const,
       principalInitial: String(this.numericAmount),
       annualRate: String(this.annualRateEquivalent),
@@ -168,7 +198,7 @@ export class LoanCreateComponent implements OnInit {
     this.api.createLoan(payload).subscribe({
       next: () => {
         this.isSubmitting = false;
-        this.toast.show(`Đã tạo hồ sơ vay thành công cho ${targetBorrower}!`, 'success');
+        this.toast.show(`Đã tạo hồ sơ vay thành công cho ${customer.name}!`, 'success');
         this.router.navigate(['/loans']);
       },
       error: () => {

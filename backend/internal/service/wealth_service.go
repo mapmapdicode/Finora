@@ -1115,12 +1115,9 @@ func (s *WealthService) CreateTransaction(input domain.Transaction) (domain.Tran
 		input.Currency = acc.Currency
 	}
 
-	// For income / expense, keep compatibility with UI by fallback to uncategorized.
-	if input.Type == domain.TransactionTypeIncome || input.Type == domain.TransactionTypeExpense {
-		if input.CategoryID == "" {
-			input.CategoryID = "uncategorized"
-		}
-	}
+	// category_id is a nullable UUID in PostgreSQL. A transaction created from
+	// the quick Thu/Chi form may not have a persisted category yet, so leave it
+	// empty and let the storage layer insert NULL instead of a sentinel string.
 
 	return s.store.CreateTransactionStrict(input)
 }
@@ -2183,7 +2180,9 @@ func (s *WealthService) ApproveBankFeed(id domain.ID, feed domain.BankFeedTransa
 
 	confidence := feed.Confidence
 	evidence := firstNonEmpty(feed.Evidence, "manual approval")
-	categoryID := domain.ID("uncategorized")
+	// A manually approved feed can be posted before a category is assigned.
+	// Keep category_id NULL rather than using a non-UUID sentinel.
+	categoryID := domain.ID("")
 
 	tx, err := s.postBankFeedTransaction(feed, accountID, txType, categoryID, confidence, evidence, false)
 	if err != nil {
@@ -2217,10 +2216,6 @@ func (s *WealthService) ReclassifyBankFeed(id domain.ID, accountID domain.ID, tx
 	if accountID == "" {
 		return domain.Transaction{}, errors.New("missing account for posting")
 	}
-	if categoryID == "" {
-		categoryID = "uncategorized"
-	}
-
 	tx, err := s.postBankFeedTransaction(*feed, accountID, txType, categoryID, feed.Confidence, reason, false)
 	if err != nil {
 		return domain.Transaction{}, err

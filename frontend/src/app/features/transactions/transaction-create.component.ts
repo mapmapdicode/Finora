@@ -1,10 +1,11 @@
 import { Component, OnInit } from '@angular/core';
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { Account } from '../../shared/models';
+import { SelectMenuComponent, SelectMenuOption } from '../../shared/components/select-menu.component';
 
 interface CategoryOption {
   id: string;
@@ -15,7 +16,7 @@ interface CategoryOption {
 @Component({
   selector: 'app-transaction-create',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, SelectMenuComponent],
   templateUrl: './transaction-create.component.html',
 })
 export class TransactionCreateComponent implements OnInit {
@@ -46,15 +47,25 @@ export class TransactionCreateComponent implements OnInit {
     return new Intl.NumberFormat('vi-VN').format(this.numericAmount);
   }
 
+  get accountOptions(): SelectMenuOption[] {
+    return this.accounts.map((account) => ({ value: account.id, label: `${account.name} (${account.currency})` }));
+  }
+
   constructor(
-    private location: Location,
     private router: Router,
+    private route: ActivatedRoute,
     private api: ApiService,
     private toast: ToastService
   ) {}
 
   ngOnInit() {
     this.loadAccounts();
+    this.route.queryParamMap.subscribe((params) => {
+      const requestedType = params.get('type');
+      if (requestedType === 'income' || requestedType === 'expense') {
+        this.setType(requestedType);
+      }
+    });
   }
 
   loadAccounts() {
@@ -68,10 +79,6 @@ export class TransactionCreateComponent implements OnInit {
     });
   }
 
-  goBack() {
-    this.location.back();
-  }
-
   setType(newType: 'expense' | 'income') {
     this.type = newType;
     if (newType === 'income' && this.selectedCategory === 'Ăn uống') {
@@ -83,33 +90,20 @@ export class TransactionCreateComponent implements OnInit {
     this.selectedCategory = catLabel;
   }
 
-  pressKey(key: string) {
-    if (key === 'backspace') {
-      if (this.amountString.length <= 1) {
-        this.amountString = '0';
-      } else {
-        this.amountString = this.amountString.slice(0, -1);
-      }
-      return;
-    }
-
-    if (key === '000') {
-      if (this.amountString !== '0') {
-        this.amountString += '000';
-      }
-      return;
-    }
-
-    if (this.amountString === '0') {
-      this.amountString = key;
-    } else if (this.amountString.length < 12) {
-      this.amountString += key;
-    }
+  onAmountInput(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const digits = input.value.replace(/\D/g, '').slice(0, 12).replace(/^0+(?=\d)/, '');
+    this.amountString = digits || '0';
+    input.value = this.formattedAmount;
   }
 
   submitTransaction() {
     if (this.numericAmount <= 0) {
       this.toast.show('Vui lòng nhập số tiền hợp lệ.', 'error');
+      return;
+    }
+    if (!this.selectedAccountId && !this.accounts.length) {
+      this.toast.show('Hãy tạo hoặc chọn một tài khoản trước khi ghi giao dịch.', 'error');
       return;
     }
 
@@ -121,7 +115,7 @@ export class TransactionCreateComponent implements OnInit {
       currency: 'VND',
       name: `${this.selectedCategory} - ${this.type === 'expense' ? 'Chi phí' : 'Thu nhập'}`,
       note: `${this.note}${this.taxDeductible ? ' [Khấu trừ thuế]' : ''}`,
-      occurredAt: new Date(this.occurredAt).toISOString(),
+      occurredAt: new Date(`${this.occurredAt}T12:00:00`).toISOString(),
     };
 
     this.api.createTransaction(payload).subscribe({

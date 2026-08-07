@@ -184,27 +184,27 @@
         </thead>
         <tbody>
           <tr *ngFor="let item of rules">
-            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
+            <td data-label="Tên quy tắc" class="font-bold text-[var(--text-main)] flex items-center gap-2">
               <app-icon name="bolt" class="text-[var(--accent-primary)]"></app-icon>
               {{ item.name }}
             </td>
-            <td>
+            <td data-label="Hướng">
               <span class="w-badge uppercase text-[10px]" [ngClass]="item.direction === 'in' ? 'w-badge-success' : 'w-badge-danger'">
                 {{ directionLabel(item.direction || 'out') }}
               </span>
             </td>
-            <td>
+            <td data-label="Hành động & loại">
               <p class="text-xs font-bold text-[var(--text-main)]">{{ actionLabel(item.actionType) }}</p>
               <p class="text-[10px] text-[var(--text-muted)] uppercase font-semibold">{{ typeLabel(item.type) }}</p>
             </td>
-            <td class="font-mono text-xs font-bold">{{ item.priority }}</td>
-            <td>
+            <td data-label="Ưu tiên" class="font-mono text-xs font-bold">{{ item.priority }}</td>
+            <td data-label="Trạng thái">
               <span class="w-badge uppercase text-[10px]" [ngClass]="item.enabled ? 'w-badge-indigo' : 'w-badge-neutral'">
                 {{ item.enabled ? 'Đang bật' : 'Đã tắt' }}
               </span>
             </td>
-            <td class="font-mono text-xs text-[var(--text-muted)] font-medium">{{ item.contentPattern || '-' }}</td>
-            <td class="text-right whitespace-nowrap space-x-1">
+            <td data-label="Regex nội dung" class="font-mono text-xs text-[var(--text-muted)] font-medium">{{ item.contentPattern || '-' }}</td>
+            <td data-label="Thao tác" class="text-right whitespace-nowrap space-x-1">
               <button class="w-btn w-btn-outline text-xs h-8 px-2.5" *ngIf="auth.canMutate" (click)="beginEdit(item)">{{ 'common.edit' | translate }}</button>
               <button class="w-btn w-btn-outline text-xs h-8 px-2.5" *ngIf="auth.canMutate" (click)="toggleEnabled(item)">
                 {{ item.enabled ? 'Tắt' : 'Bật' }}

@@ -7,11 +7,12 @@ import { Portfolio, NetWorthSummary, PortfolioSnapshotPage } from '../../shared/
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { VndMoneyPipe } from '../../shared/pipes/vnd-money.pipe';
 
 @Component({
   selector: 'app-portfolio-list',
   standalone: true,
-  imports: [CommonModule, NgForOf, NgIf, ReactiveFormsModule, TranslatePipe, IconComponent],
+  imports: [CommonModule, NgForOf, NgIf, ReactiveFormsModule, TranslatePipe, IconComponent, VndMoneyPipe],
   templateUrl: './portfolio-list.component.html',
 })
 export class PortfolioListComponent implements OnInit {
@@ -168,10 +169,4 @@ export class PortfolioListComponent implements OnInit {
     return found ? found.name : 'Danh mục đã chọn';
   }
 
-  formatChange(value?: string) {
-    if (!value) return '0.00';
-    const amount = Number.parseFloat(value);
-    if (Number.isNaN(amount)) return value;
-    return amount.toFixed(2);
-  }
 }

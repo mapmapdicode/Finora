@@ -386,8 +386,22 @@ func (s *PostgresStore) DeletePortfolio(userID domain.ID, id domain.ID) error {
 }
 
 func (s *PostgresStore) DeleteLoan(userID domain.ID, id domain.ID) error {
-	_, err := s.pool.Exec(context.Background(), `DELETE FROM loans WHERE id=$1 AND user_id=$2`, id, userID)
-	return err
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `DELETE FROM loans WHERE id=$1 AND user_id=$2`, id, userID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `
+		DELETE FROM transactions
+		WHERE user_id=$1 AND type='loan_disbursement' AND source='loan_disbursement' AND note=$2
+	`, userID, "loan principal: "+string(id)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) DeleteProperty(userID domain.ID, id domain.ID) error {
@@ -609,7 +623,7 @@ func (s *PostgresStore) GetCustomer(id domain.ID) (*domain.Customer, bool) {
 
 func (s *PostgresStore) GetLoan(id domain.ID) (*domain.Loan, bool) {
 	row := s.pool.QueryRow(context.Background(), `
-		SELECT id, user_id, portfolio_id, COALESCE(customer_id::text, ''), counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text,
+		SELECT id, user_id, COALESCE(portfolio_id::text, ''), COALESCE(customer_id::text, ''), counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text,
 		       COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
 		FROM loans WHERE id=$1`, id)
 	var l domain.Loan
@@ -660,7 +674,7 @@ func (s *PostgresStore) CreateLoan(input domain.Loan) (domain.Loan, error) {
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO loans(user_id, portfolio_id, customer_id, counterparty, direction, principal_initial, principal_balance, annual_rate, day_count_basis, start_at, due_at, status, interest_compounding, daily_rate_per_million, settlement_account_id)
 		VALUES($1, $2, NULLIF($3, '')::UUID, $4, $5, CAST($6 AS NUMERIC), CAST($7 AS NUMERIC), CAST($8 AS NUMERIC), $9, $10, $11, $12, $13, CAST($14 AS NUMERIC), NULLIF($15, '')::UUID)
-		RETURNING id, user_id, portfolio_id, COALESCE(customer_id::text, ''), counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text, COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
+		RETURNING id, user_id, COALESCE(portfolio_id::text, ''), COALESCE(customer_id::text, ''), counterparty, direction, principal_initial::text, principal_balance::text, annual_rate::text, COALESCE(day_count_basis, ''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
 	`, input.UserID, nilUUID(input.PortfolioID), input.CustomerID, input.Counterparty, input.Direction, input.PrincipalInitial, input.PrincipalBalance,
 		input.AnnualRate, nullString(input.DayCountBasis), input.StartAt, input.DueAt, defaultLoanStatus(input.Status), input.InterestCompound, input.DailyRatePerMillion, input.SettlementAccountID).Scan(
 		&out.ID, &out.UserID, &out.PortfolioID, &out.CustomerID, &out.Counterparty, &out.Direction,
@@ -675,7 +689,7 @@ func (s *PostgresStore) CreateLoan(input domain.Loan) (domain.Loan, error) {
 
 func (s *PostgresStore) ListLoans(userID domain.ID) []domain.Loan {
 	rows, err := s.pool.Query(context.Background(), `
-		SELECT id, user_id, portfolio_id, COALESCE(customer_id::text, ''), counterparty, direction, principal_initial::text, principal_balance::text,
+		SELECT id, user_id, COALESCE(portfolio_id::text, ''), COALESCE(customer_id::text, ''), counterparty, direction, principal_initial::text, principal_balance::text,
 		       annual_rate::text, COALESCE(day_count_basis,''), start_at, due_at, status, interest_compounding, daily_rate_per_million::text, COALESCE(settlement_account_id::text, ''), created_at, updated_at
 		FROM loans WHERE user_id=$1 ORDER BY created_at DESC`, userID)
 	if err != nil {
@@ -1487,8 +1501,8 @@ func (s *PostgresStore) CreateAutomationRule(input domain.AutomationRule) (domai
 		VALUES($1, NULLIF($2,''), $3, $4, $5, $6, $7, $8, NULLIF($9,''), COALESCE($10, TRUE), $11, $12, NULLIF($13,''), NULLIF($14,''))
 		RETURNING id, user_id, COALESCE(account_id::text, ''), name, priority, predicate, direction, action_type, type, COALESCE(category_id::text, ''),
 		          enabled, content_pattern, reference_pattern, min_amount::text, max_amount::text, created_at, updated_at
-	`, input.UserID, input.AccountID, input.Name, input.Priority, input.Predicate, input.Direction, input.ActionType, input.Type,
-		input.CategoryID, input.Enabled, input.ContentPattern, input.ReferencePattern, input.MinAmount, input.MaxAmount).Scan(
+	`, input.UserID, nilUUID(input.AccountID), input.Name, input.Priority, input.Predicate, input.Direction, input.ActionType, input.Type,
+		nilUUID(input.CategoryID), input.Enabled, input.ContentPattern, input.ReferencePattern, input.MinAmount, input.MaxAmount).Scan(
 		&out.ID, &out.UserID, &out.AccountID, &out.Name, &out.Priority, &out.Predicate, &out.Direction, &out.ActionType, &out.Type,
 		&out.CategoryID, &out.Enabled, &out.ContentPattern, &out.ReferencePattern, &out.MinAmount, &out.MaxAmount, &out.CreatedAt, &out.UpdatedAt,
 	)
@@ -1584,10 +1598,10 @@ func (s *PostgresStore) UpdateAutomationRule(id domain.ID, mutate func(*domain.A
 	mutate(&mutated)
 	_, err := s.pool.Exec(context.Background(), `
 		UPDATE bank_automation_rules
-		SET name=$2, predicate=$3, priority=$4, direction=$5, action_type=$6, type=$7, category_id=NULLIF($8, ''), enabled=$9,
-		    content_pattern=$10, reference_pattern=$11, min_amount=NULLIF($12, ''), max_amount=NULLIF($13, ''), updated_at=now()
+		SET name=$2, predicate=$3, priority=$4, direction=$5, action_type=$6, type=$7, account_id=$8, category_id=$9, enabled=$10,
+		    content_pattern=$11, reference_pattern=$12, min_amount=NULLIF($13, ''), max_amount=NULLIF($14, ''), updated_at=now()
 		WHERE id=$1
-	`, id, mutated.Name, mutated.Predicate, mutated.Priority, mutated.Direction, mutated.ActionType, mutated.Type, mutated.CategoryID, mutated.Enabled,
+	`, id, mutated.Name, mutated.Predicate, mutated.Priority, mutated.Direction, mutated.ActionType, mutated.Type, nilUUID(mutated.AccountID), nilUUID(mutated.CategoryID), mutated.Enabled,
 		mutated.ContentPattern, mutated.ReferencePattern, mutated.MinAmount, mutated.MaxAmount)
 	return err == nil
 }
@@ -1767,10 +1781,14 @@ func (s *PostgresStore) Close() error {
 }
 
 func nilUUID(id domain.ID) any {
-	if id == "" {
+	normalized := strings.TrimSpace(string(id))
+	if normalized == "" {
 		return nil
 	}
-	return id
+	if _, err := uuid.Parse(normalized); err != nil {
+		return nil
+	}
+	return domain.ID(normalized)
 }
 
 func defaultBaseCurrency(v string) string {

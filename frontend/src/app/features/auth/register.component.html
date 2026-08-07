@@ -1,54 +1,124 @@
-<section class="max-w-md mx-auto my-16">
-  <div class="m3-card p-8 shadow-md">
-    <div class="text-center mb-6">
-      <div class="brand-mark mx-auto mb-3" aria-hidden="true">F</div>
-      <h2 class="text-2xl font-bold text-[var(--text-main)] tracking-tight">Tạo tài khoản Finora</h2>
-      <p class="text-xs text-[var(--text-muted)] mt-1">Thiết lập không gian quản lý tài chính của bạn</p>
-    </div>
-
-    <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4" *ngIf="!verificationRequired; else verification">
-      <div>
-        <label class="m3-label block mb-1" for="register-name">Họ và tên</label>
-        <input id="register-name" formControlName="name" class="m3-input" autocomplete="name" placeholder="Ví dụ: Nguyễn An" />
-      </div>
-
-      <div>
-        <label class="m3-label block mb-1" for="register-confirm-password">Nhập lại mật khẩu</label>
-        <input id="register-confirm-password" formControlName="confirmPassword" type="password" class="m3-input" autocomplete="new-password" placeholder="Nhập lại mật khẩu" />
-      </div>
-
-      <div>
-        <label class="m3-label block mb-1" for="register-email">Địa chỉ email</label>
-        <input id="register-email" formControlName="email" class="m3-input" type="email" autocomplete="email" placeholder="email@example.com" />
-      </div>
-
-      <div>
-        <label class="m3-label block mb-1" for="register-password">Mật khẩu</label>
-        <input id="register-password" formControlName="password" type="password" class="m3-input" autocomplete="new-password" placeholder="Tạo mật khẩu" />
-      </div>
-
-      <button type="submit" class="m3-btn m3-btn-primary w-full py-2.5 mt-2" [disabled]="submitting">
-        <app-icon name="person_add"></app-icon> Tạo tài khoản
-      </button>
-    </form>
-
-    <ng-template #verification>
-      <form [formGroup]="form" (ngSubmit)="verifyEmail()" class="space-y-4">
-        <div><label class="m3-label block mb-1" for="register-verification-code">Mã xác thực gồm 6 chữ số</label><input id="register-verification-code" formControlName="code" class="m3-input tracking-[.35em] text-center" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" /></div>
-        <button type="submit" class="m3-btn m3-btn-primary w-full py-2.5" [disabled]="submitting"><app-icon name="verified"></app-icon> Hoàn tất xác thực</button>
-        <button type="button" (click)="resendCode()" class="w-btn w-btn-ghost w-full">Gửi lại mã</button>
-      </form>
-    </ng-template>
-
-    <p *ngIf="message" role="alert" aria-live="assertive" class="text-xs text-[var(--m3-danger)] bg-[var(--m3-danger-container)] p-3 rounded-xl mt-4 text-center">
-      {{ message }}
-    </p>
-
-    <div class="mt-6 pt-4 border-t border-[var(--m3-outline)] text-center">
-      <p class="text-xs text-[var(--text-muted)]">
-        Đã có tài khoản?
-        <a class="text-[var(--m3-primary)] font-semibold hover:underline ml-1" routerLink="/login">Đăng nhập</a>
-      </p>
-    </div>
+<div class="relative min-h-screen w-full overflow-hidden flex flex-col justify-between selection:bg-purple-600 selection:text-white font-sans bg-[#fff7fc]">
+  
+  <!-- High-Key Airy Background Image with Soft Light Overlay -->
+  <div aria-hidden="true" class="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-all duration-700" 
+       style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAuv1VBAVXQw2bzmZKIeus0GWAWdK9Xq8RAqpB6InckJ-MkZjH27I4lpMz-awnzb0u65rypAJ2t01Gm4toO3w2bihSRPh2A79QLe-LWMi61-2yNwSSjBilOXds8w_Oa0MRkugpZ9K1cwjEFRZ-hkuqU0YyKII_8PG3d707KbDtUcevM3S3wCFxc8xR9iUBdSKLH-ehioxk7Z8s5XP5oXvsyHSvYI3z9avCQL-nzoJdi2-p1JXHOKoLE');">
+    <div class="absolute inset-0 bg-white/35 backdrop-blur-[2px]"></div>
+    <div class="absolute inset-0 bg-gradient-to-b from-white/70 via-purple-50/20 to-white/80"></div>
   </div>
-</section>
+
+  <!-- Main Content Container -->
+  <div class="relative z-10 flex flex-col items-center justify-between min-h-screen p-5 md:p-12 w-full max-w-[1280px] mx-auto">
+    
+    <!-- Top Header & Brand Logo -->
+    <header class="w-full flex flex-col items-center pt-6 md:pt-10">
+      <div class="relative group cursor-pointer mb-4">
+        <div class="absolute -inset-1 bg-gradient-to-r from-purple-500 to-amber-400 rounded-2xl blur opacity-30 group-hover:opacity-60 transition duration-300"></div>
+        <img alt="Finora Logo" 
+             class="relative w-16 h-16 rounded-2xl shadow-sm object-cover border border-white bg-white" 
+             src="https://lh3.googleusercontent.com/aida/AP1WRLuGEFl0WFNEI2jYGgdLBcZl2Y6M6gcN3fpSLHUKgJ5oYkXfhq6DF844SMu9GhtkbPGYaxLPUSJsobVPHxEC51SXw4UEEehniWMM6mt64m_4WZaQpxwOjR5mDm4Jtb6E795VelAoBjH3XtG9fUE0iNQ6MjcCOvkGUsJQ02stm6t60zkcEeh0-e9a-so0CsPn-7B-n3EK1fGpey3L9VCMDr9FuyowKXeZpY94bAR0lQfvlotXIf74wjwjvA"
+             onerror="this.src='assets/branding/wealthos-app-icon.png'" />
+      </div>
+      <h1 class="text-3xl md:text-4xl font-extrabold text-[#43016a] text-center tracking-tight font-display">
+        Tạo tài khoản mới
+      </h1>
+      <p class="text-xs md:text-sm text-[#4c4450] mt-1 text-center font-medium">
+        Khởi tạo không gian quản lý tài chính cá nhân thông minh cùng Finora
+      </p>
+    </header>
+
+    <!-- Glassmorphic Register Card -->
+    <main class="w-full max-w-sm my-auto py-6">
+      <div class="bg-white/80 backdrop-blur-xl border border-white/80 rounded-[32px] p-7 md:p-8 shadow-[0_12px_40px_rgba(29,11,41,0.08)] flex flex-col items-center text-center transition-all duration-300">
+        
+        <!-- Auth Mode & Registration Tab Switcher -->
+        <div class="flex items-center gap-1 p-1 mb-5 bg-[#f3daff]/60 border border-purple-200/80 rounded-2xl w-full">
+          <a routerLink="/login" class="flex-1 py-2 text-xs font-bold rounded-xl text-[#795b8a] hover:text-[#43016a] hover:bg-white/60 text-center transition-all cursor-pointer flex items-center justify-center gap-1">
+            <span>🔑 Đăng nhập</span>
+          </a>
+          <button type="button" class="flex-1 py-2 text-xs font-extrabold rounded-xl bg-white text-[#43016a] shadow-xs text-center cursor-pointer flex items-center justify-center gap-1">
+            <span class="material-symbols-outlined text-sm">person_add</span>
+            <span>Đăng ký</span>
+          </button>
+        </div>
+
+        <form [formGroup]="form" (ngSubmit)="submit()" class="w-full space-y-3.5 text-left" *ngIf="!verificationRequired; else verification">
+          <div>
+            <label class="block text-xs font-bold text-[#261432] mb-1" for="register-name">Họ và tên</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#43016a]/60 text-lg">badge</span>
+              <input id="register-name" formControlName="name" type="text" autocomplete="name" placeholder="Nguyễn Văn A" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/90 border border-purple-200/90 text-[#261432] placeholder-purple-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#43016a] shadow-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-[#261432] mb-1" for="register-email">Địa chỉ email</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#43016a]/60 text-lg">mail</span>
+              <input id="register-email" formControlName="email" type="email" autocomplete="email" placeholder="email@example.com" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/90 border border-purple-200/90 text-[#261432] placeholder-purple-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#43016a] shadow-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-[#261432] mb-1" for="register-password">Mật khẩu</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#43016a]/60 text-lg">lock</span>
+              <input id="register-password" formControlName="password" type="password" autocomplete="new-password" placeholder="Tạo mật khẩu" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/90 border border-purple-200/90 text-[#261432] placeholder-purple-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#43016a] shadow-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-[#261432] mb-1" for="register-confirm-password">Nhập lại mật khẩu</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#43016a]/60 text-lg">lock_reset</span>
+              <input id="register-confirm-password" formControlName="confirmPassword" type="password" autocomplete="new-password" placeholder="Xác nhận mật khẩu" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/90 border border-purple-200/90 text-[#261432] placeholder-purple-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#43016a] shadow-sm" />
+            </div>
+          </div>
+
+          <button type="submit" [disabled]="submitting" class="w-full bg-gradient-to-r from-[#43016a] to-[#5b2382] text-white rounded-xl py-3 px-6 font-semibold text-xs flex items-center justify-center gap-2 shadow-md hover:opacity-95 transition-all mt-2">
+            <span *ngIf="submitting" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+            <span *ngIf="!submitting" class="material-symbols-outlined text-base">person_add</span>
+            <span>Tạo tài khoản mới</span>
+          </button>
+        </form>
+
+        <ng-template #verification>
+          <form [formGroup]="form" (ngSubmit)="verifyEmail()" class="w-full space-y-4">
+            <div class="text-center mb-2">
+              <span class="material-symbols-outlined text-amber-500 text-3xl mb-1">mark_email_unread</span>
+              <h3 class="text-base font-bold text-[#261432]">Xác thực tài khoản</h3>
+              <p class="text-xs text-[#4c4450]">Mã xác thực 6 số đã được gửi tới email</p>
+            </div>
+            <div>
+              <input id="register-verification-code" formControlName="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" class="w-full py-3 px-4 text-center tracking-[0.4em] font-mono text-xl font-bold rounded-xl bg-white border border-purple-200 text-[#261432] focus:ring-2 focus:ring-[#43016a] shadow-sm" />
+            </div>
+            <button type="submit" [disabled]="submitting" class="w-full bg-gradient-to-r from-[#43016a] to-[#5b2382] text-white rounded-xl py-3 px-6 font-semibold text-xs flex items-center justify-center gap-2 shadow-md">
+              <span class="material-symbols-outlined text-base">verified</span>
+              <span>Hoàn tất xác thực</span>
+            </button>
+            <button type="button" (click)="resendCode()" class="w-full text-xs text-[#43016a] font-bold hover:underline py-1">Gửi lại mã xác thực</button>
+          </form>
+        </ng-template>
+
+        <div *ngIf="message" role="alert" class="w-full mt-3 p-3 rounded-xl text-xs font-medium text-rose-900 bg-rose-50 border border-rose-200 flex items-start gap-2 text-left shadow-sm">
+          <span class="material-symbols-outlined text-rose-600 text-base shrink-0">info</span>
+          <span>{{ message }}</span>
+        </div>
+
+        <div class="w-full pt-3 mt-3 border-t border-purple-100 text-center">
+          <p class="text-xs text-[#4c4450]">
+            Đã có tài khoản?
+            <a routerLink="/login" class="text-[#43016a] font-extrabold hover:underline ml-1">Đăng nhập ngay</a>
+          </p>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full pt-4 pb-6 text-center">
+      <p class="text-xs text-[#4c4450] font-medium">Finora Wealth OS © 2026 — Bảo mật tuyệt đối</p>
+    </footer>
+
+  </div>
+</div>

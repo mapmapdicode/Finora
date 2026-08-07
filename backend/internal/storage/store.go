@@ -672,6 +672,11 @@ func (s *InMemoryStore) DeleteLoan(userID domain.ID, id domain.ID) error {
 			return errors.New("cannot delete loan with payment history")
 		}
 	}
+	for transactionID, transaction := range s.transactions {
+		if transaction.UserID == userID && transaction.Type == domain.TransactionTypeLoanDisbursement && transaction.Source == "loan_disbursement" && transaction.Note == "loan principal: "+string(id) {
+			delete(s.transactions, transactionID)
+		}
+	}
 	delete(s.loans, id)
 	return nil
 }

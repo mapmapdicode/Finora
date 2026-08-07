@@ -129,6 +129,7 @@ const VI_DICTIONARY: TranslationDictionary = {
     annual_rate: 'Lãi suất năm (%)',
     disbursement_account: 'Tài khoản giải ngân',
     register_button: 'Đăng ký hợp đồng nợ',
+    pay_button: 'Thu / Trả nợ',
   },
   assets: {
     title: 'Tài sản đầu tư',
@@ -310,6 +311,7 @@ const EN_DICTIONARY: TranslationDictionary = {
     annual_rate: 'Annual Rate (%)',
     disbursement_account: 'Disbursement Account',
     register_button: 'Register Loan Contract',
+    pay_button: 'Collect / Repay',
   },
   assets: {
     title: 'Investment Assets',

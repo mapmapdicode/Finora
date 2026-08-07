@@ -96,29 +96,29 @@
         <tbody>
           @for (item of filteredLogs; track item.id) {
             <tr class="align-top">
-              <td class="font-semibold text-xs whitespace-nowrap">{{ formatAsDate(item.createdAt) }}</td>
-              <td>
+              <td data-label="Thời điểm" class="font-semibold text-xs whitespace-nowrap">{{ formatAsDate(item.createdAt) }}</td>
+              <td data-label="Người thực hiện">
                 <div class="font-bold text-xs text-[var(--text-main)]">{{ item.actorId || 'Hệ thống' }}</div>
                 <div class="text-[10px] text-[var(--text-muted)] uppercase font-semibold">{{ item.actorRole || '-' }}</div>
               </td>
-              <td>
+              <td data-label="Hành động">
                 <span class="w-badge w-badge-indigo uppercase text-[10px]">
                   {{ item.action }}
                 </span>
               </td>
-              <td class="font-mono text-xs audit-col--technical">
+              <td data-label="Đối tượng" class="font-mono text-xs audit-col--technical">
                 {{ item.targetType }}{{ item.targetId ? `:${item.targetId}` : '' }}
               </td>
-              <td>
+              <td data-label="Policy / Result">
                 <span class="w-badge w-badge-neutral text-[10px]">
                   {{ item.policyDecision || '—' }} / {{ item.result || '—' }}
                 </span>
               </td>
-              <td class="audit-col--technical">
+              <td data-label="Phương thức & đường dẫn" class="audit-col--technical">
                 <span class="font-mono text-[10px] uppercase font-bold text-[var(--accent-primary)]">{{ item.method }}</span>
                 <div class="text-xs text-[var(--text-muted)] truncate max-w-[180px] font-medium">{{ item.path }}</div>
               </td>
-              <td class="audit-col--technical">
+              <td data-label="Mã truy vết" class="audit-col--technical">
                 <div class="text-[10px] font-mono text-[var(--text-muted)]" title="{{ item.requestId }}">Req: {{ item.requestId || '-' }}</div>
                 <div class="text-[10px] font-mono text-[var(--text-muted)]" title="{{ item.correlationId }}">Trace: {{ item.correlationId || '-' }}</div>
               </td>

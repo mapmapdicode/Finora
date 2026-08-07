@@ -142,16 +142,16 @@
         </thead>
         <tbody>
           <tr *ngFor="let item of properties">
-            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
+            <td data-label="Tên bất động sản" class="font-bold text-[var(--text-main)] flex items-center gap-2">
               <app-icon name="building" class="text-[var(--accent-primary)]"></app-icon>
               {{ item.name }}
             </td>
-            <td class="text-xs text-[var(--text-muted)] font-medium">{{ item.address }}</td>
-            <td>
+            <td data-label="Địa chỉ" class="text-xs text-[var(--text-muted)] font-medium">{{ item.address }}</td>
+            <td data-label="Diện tích">
               <span class="w-badge w-badge-indigo font-mono text-xs">{{ item.areaM2 }} m²</span>
             </td>
-            <td class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td>
-            <td class="text-right">
+            <td data-label="Mã bất động sản" class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td>
+            <td data-label="Thao tác" class="text-right">
               <button
                 *ngIf="auth.canMutate"
                 type="button"

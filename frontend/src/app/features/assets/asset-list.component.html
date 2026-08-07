@@ -144,19 +144,19 @@
         </thead>
         <tbody>
           <tr *ngFor="let item of assets">
-            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
+            <td data-label="Tên tài sản" class="font-bold text-[var(--text-main)] flex items-center gap-2">
               <span class="w-7 h-7 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
                 <app-icon name="savings" class="text-sm"></app-icon>
               </span>
               {{ item.name }}
             </td>
-            <td>
+            <td data-label="Loại tài sản">
               <span class="w-badge font-bold uppercase text-[10px] w-badge-indigo">
                 {{ assetTypeLabel(item.assetType) }}
               </span>
             </td>
-            <td class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td>
-            <td class="text-right">
+            <td data-label="Mã tài sản" class="font-mono text-xs text-[var(--text-muted)]">{{ item.id }}</td>
+            <td data-label="Thao tác" class="text-right">
               <button
                 *ngIf="auth.canMutate"
                 class="w-btn w-btn-outline text-xs h-8 px-3"

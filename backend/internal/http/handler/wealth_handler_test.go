@@ -600,6 +600,21 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 	if len(p4.Items) != 3 {
 		t.Fatalf("expected 3 transactions with salary in note or category, got %d", len(p4.Items))
 	}
+
+	// Date-only end boundaries must include the entire selected day. The report
+	// screen sends date picker values in this format for week/month periods.
+	day := now.Format("2006-01-02")
+	req5 := httptest.NewRequest(http.MethodGet, "/transactions?accountId="+string(acc.ID)+"&from="+day+"&to="+day+"&limit=10", nil)
+	req5.Header.Set("x-user-id", string(ws.ID))
+	resp5 := httptest.NewRecorder()
+	r.ServeHTTP(resp5, req5)
+	var p5 pageResp
+	if err := json.NewDecoder(resp5.Result().Body).Decode(&p5); err != nil {
+		t.Fatalf("decode date-bounded page: %v", err)
+	}
+	if len(p5.Items) != 3 {
+		t.Fatalf("expected date-only end boundary to include 3 transactions, got %d", len(p5.Items))
+	}
 }
 
 func TestListTransactionsRejectsInvalidCursor(t *testing.T) {

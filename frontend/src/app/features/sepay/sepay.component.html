@@ -219,7 +219,7 @@
 
         <div class="flex items-center gap-3">
           <span class="font-bold text-base whitespace-nowrap" [class.text-rose-600]="item.direction === 'out'" [class.text-emerald-600]="item.direction === 'in'">
-            {{ item.amount | number: '1.0-2' }} {{ item.currency }}
+            {{ item.amount | vndMoney: item.currency }}
           </span>
 
           <div class="flex items-center gap-1.5">

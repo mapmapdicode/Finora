@@ -29,6 +29,7 @@ import {
   TransactionListPage,
   Workspace,
   UserSettings,
+  Customer,
   MySePaySummary,
 } from '../../shared/models';
 
@@ -167,6 +168,22 @@ export class ApiService {
     return this.http.get<Loan[]>(this.baseURL('/loans'));
   }
 
+  getCustomers(search = '', limit = 50): Observable<Customer[]> {
+    const query = new URLSearchParams();
+    if (search.trim()) {
+      query.set('q', search.trim());
+    }
+    if (limit > 0) {
+      query.set('limit', String(limit));
+    }
+    const qs = query.toString();
+    return this.http.get<Customer[]>(`${this.baseURL('/customers')}${qs ? `?${qs}` : ''}`);
+  }
+
+  createCustomer(payload: { name: string; phone?: string }): Observable<Customer> {
+    return this.postWithIdempotency<Customer>('/customers', payload, 'create-customer');
+  }
+
   getLoanSummary(): Observable<LoanPortfolioSummary> {
     return this.http.get<LoanPortfolioSummary>(this.baseURL('/loans/summary'));
   }
@@ -177,6 +194,10 @@ export class ApiService {
 
   getLoanAccruals(loanId: string): Observable<LoanAccruals> {
     return this.http.get<LoanAccruals>(this.baseURL(`/loans/${loanId}/accruals`));
+  }
+
+  getLoanPayments(loanId: string): Observable<LoanPayment[]> {
+    return this.http.get<LoanPayment[]>(this.baseURL(`/loans/${loanId}/payments`));
   }
 
   createLoan(payload: Partial<Loan>) {

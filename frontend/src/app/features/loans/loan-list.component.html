@@ -1,70 +1,115 @@
-<section class="space-y-6">
-  <!-- Page Header -->
-  <div class="flex flex-wrap items-center justify-between gap-4">
+<section class="space-y-6 max-w-[1240px] mx-auto">
+  <!-- Page Header & Main Actions -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight text-[var(--text-main)]">
-        {{ 'loans.title' | translate }}
-      </h1>
-      <p class="text-xs text-[var(--text-muted)] mt-0.5 font-medium">
+      <div class="flex items-center gap-2">
+        <h1 class="text-2xl font-extrabold tracking-tight text-[var(--text-main)] font-display">
+          {{ 'loans.title' | translate }}
+        </h1>
+        <span class="w-badge w-badge-neutral text-xs font-bold">{{ loans.length }} hợp đồng</span>
+      </div>
+      <p class="text-xs text-[var(--text-muted)] mt-1 font-medium">
         {{ 'loans.subtitle' | translate }}
       </p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button 
+        type="button" 
+        (click)="showCreateForm = !showCreateForm"
+        class="w-btn w-btn-primary text-xs h-10 px-4 rounded-xl shadow-sm transition-all"
+      >
+        <app-icon [name]="showCreateForm ? 'remove' : 'add'"></app-icon>
+        <span>{{ showCreateForm ? 'Ẩn form tạo' : 'Tạo hợp đồng mới' }}</span>
+      </button>
     </div>
   </div>
 
   <!-- Readonly Warning -->
   <div *ngIf="!auth.canMutate" class="p-3.5 rounded-xl bg-amber-50 text-amber-800 text-xs flex items-center gap-2 border border-amber-200 font-medium">
     <app-icon name="lock"></app-icon>
-    <span>Không gian làm việc chỉ đọc. Bạn không thể tạo khoản vay.</span>
+    <span>Không gian làm việc chỉ đọc. Bạn không thể tạo hoặc chỉnh sửa khoản vay.</span>
   </div>
 
-  <!-- Create Loan Agreement Card Form (Full Screen Width) -->
-  <div class="w-card w-full">
-    <div class="flex items-center justify-between mb-4">
+  <!-- Collapsible Create Loan Agreement Form -->
+  <div *ngIf="showCreateForm" class="w-card w-full animate-fade">
+    <div class="flex items-center justify-between mb-4 pb-3 border-b border-[var(--border-subtle)]">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
+        <div class="w-9 h-9 rounded-xl bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
           <app-icon name="request_quote"></app-icon>
         </div>
         <div>
           <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'loans.create_title' | translate }}</h3>
-          <p class="text-xs text-[var(--text-muted)]">Ghi hợp đồng vay cùng số dư gốc và thông số lãi ban đầu.</p>
+          <p class="text-xs text-[var(--text-muted)]">Ghi hợp đồng vay mới với thông số số dư & lãi suất.</p>
         </div>
       </div>
+      <button type="button" class="app-icon-button" (click)="showCreateForm = false"><app-icon name="close"></app-icon></button>
     </div>
 
     <form (ngSubmit)="submitLoan()" [formGroup]="creationForm" class="space-y-4">
-      <div class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-subtle)] p-4">
-        <div class="flex flex-wrap justify-between gap-3 items-start"><div><h4 class="font-bold text-sm text-[var(--text-main)]">Quy đổi lãi suất</h4><p class="text-xs text-[var(--text-muted)] mt-1">Nhập tiền lãi trên mỗi 1 triệu đồng mỗi ngày; Finora tự quy đổi sang lãi suất năm (ACT/365).</p></div><b class="text-[var(--accent-primary)] text-sm">{{ annualRateEquivalent | number:'1.2-2' }}% / năm</b></div>
-        <div class="flex flex-wrap gap-2 mt-3"><button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="setQuickRate(2000)">2.000đ</button><button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="setQuickRate(3000)">3.000đ</button><button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="setQuickRate(4000)">4.000đ</button><span class="text-xs self-center text-[var(--text-muted)]">Tương đương {{ dailyRatePerMillion | number:'1.0-0' }}đ / triệu / ngày</span></div>
+      <div class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-subtle)]/60 p-4">
+        <div class="flex flex-wrap justify-between gap-3 items-center">
+          <div>
+            <h4 class="font-bold text-xs uppercase tracking-wider text-[var(--text-main)]">Quy đổi lãi suất</h4>
+            <p class="text-xs text-[var(--text-muted)] mt-0.5">Finora tự động quy đổi lãi suất triệu/ngày sang %/năm (ACT/365).</p>
+          </div>
+          <span class="w-badge w-badge-indigo text-xs font-bold">{{ annualRateEquivalent | number:'1.2-2' }}% / năm</span>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-3 items-center">
+          <button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="setQuickRate(2000)">2.000 ₫</button>
+          <button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="setQuickRate(3000)">3.000 ₫</button>
+          <button type="button" class="w-btn w-btn-outline text-xs h-8 px-3" (click)="setQuickRate(4000)">4.000 ₫</button>
+          <span class="text-xs text-[var(--text-muted)] ml-1">Tương đương {{ dailyRatePerMillion | vndMoney }} / triệu / ngày</span>
+        </div>
       </div>
+
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="w-label" for="loan-counterparty">{{ 'loans.counterparty' | translate }}</label>
-          <input id="loan-counterparty" formControlName="counterparty" placeholder="Tên bên cho vay / đi vay" class="w-input" />
+          <label class="w-label" for="loan-customer">{{ 'loans.counterparty' | translate }} *</label>
+          <select id="loan-customer" class="w-select" formControlName="customerId">
+            <option value="">-- Chọn khách hàng --</option>
+            <option *ngFor="let customer of customers" [value]="customer.id">{{ customer.name }}{{ customer.phone ? ' · ' + customer.phone : '' }}</option>
+          </select>
+          <a routerLink="/loans/create" class="inline-flex mt-1.5 text-xs font-bold text-[var(--accent-primary)] hover:underline">+ Thêm khách hàng mới</a>
         </div>
 
         <div>
-          <label class="w-label" for="loan-principal">{{ 'loans.principal' | translate }}</label>
-          <input id="loan-principal" formControlName="principalInitial" placeholder="0.00" class="w-input" />
+          <label class="w-label" for="loan-principal">{{ 'loans.principal' | translate }} *</label>
+          <input
+            id="loan-principal"
+            formControlName="principalInitial"
+            (blur)="onLoanMoneyBlur('principalInitial', $event)"
+            inputmode="numeric"
+            placeholder="0"
+            class="w-input"
+          />
         </div>
 
         <div>
-          <label class="w-label" for="loan-daily-rate">Lãi / 1 triệu / ngày (VND)</label>
-          <input id="loan-daily-rate" formControlName="dailyRatePerMillion" inputmode="decimal" (input)="syncAnnualRate()" placeholder="Ví dụ: 3000" class="w-input" />
+          <label class="w-label" for="loan-daily-rate">Lãi / 1 triệu / ngày (VND) *</label>
+          <input
+            id="loan-daily-rate"
+            formControlName="dailyRatePerMillion"
+            (blur)="onLoanMoneyBlur('dailyRatePerMillion', $event)"
+            inputmode="numeric"
+            placeholder="Ví dụ: 3.000"
+            class="w-input"
+          />
         </div>
 
         <div>
-          <label class="w-label" for="loan-direction">{{ 'loans.direction' | translate }}</label>
-          <select id="loan-direction" formControlName="direction" class="w-select">
-            <option value="receivable">Cho vay (phải thu)</option>
-            <option value="payable">Đi vay (phải trả)</option>
+          <label class="w-label" for="loan-direction">{{ 'loans.direction' | translate }} *</label>
+          <select id="loan-direction" class="w-select" formControlName="direction">
+            <option value="receivable">Cho vay (Phải thu)</option>
+            <option value="payable">Đi vay (Phải trả)</option>
           </select>
         </div>
 
         <div>
-          <label class="w-label" for="loan-settlement-account">Tài khoản giải ngân / nhận tiền</label>
-          <select id="loan-settlement-account" formControlName="settlementAccountId" class="w-select">
+          <label class="w-label" for="loan-settlement-account">Tài khoản giải ngân / nhận tiền *</label>
+          <select id="loan-settlement-account" class="w-select" formControlName="settlementAccountId">
             <option value="">-- Chọn tài khoản --</option>
-            <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
+            <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }} ({{ account.currency }})</option>
           </select>
         </div>
 
@@ -76,111 +121,431 @@
 
       <input type="hidden" formControlName="annualRate" />
 
-      <div class="flex justify-end pt-1">
-        <button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">
+      <div class="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
+        <button type="button" class="w-btn w-btn-outline text-xs h-9 px-4" (click)="showCreateForm = false">Hủy</button>
+        <button class="w-btn w-btn-primary text-xs h-9 px-5" [disabled]="!auth.canMutate || creationForm.invalid">
           <app-icon name="add"></app-icon> {{ 'common.create' | translate }}
         </button>
       </div>
     </form>
   </div>
 
-  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium" aria-live="polite">{{ statusMessage }}</p>
+  <p *ngIf="statusMessage" class="text-xs text-[var(--text-muted)] font-medium p-3 rounded-lg bg-[var(--bg-subtle)]" aria-live="polite">{{ statusMessage }}</p>
 
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-    <div class="w-card"><p class="text-xs text-[var(--text-muted)]">Gốc đang cho vay</p><p class="font-bold">{{ summary.activePrincipal }}</p></div>
-    <div class="w-card"><p class="text-xs text-[var(--text-muted)]">Lãi/ngày</p><p class="font-bold">{{ summary.dailyInterest }}</p></div>
-    <div class="w-card"><p class="text-xs text-[var(--text-muted)]">Lãi chưa thu</p><p class="font-bold">{{ summary.accruedInterest }}</p></div>
-    <div class="w-card"><p class="text-xs text-[var(--text-muted)]">Lãi đã thu</p><p class="font-bold">{{ summary.paidInterest }}</p></div>
+  <!-- Key Metrics Bar -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="w-card !mb-0 p-4 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-purple-100 text-[var(--accent-primary)] flex items-center justify-center flex-shrink-0">
+        <app-icon name="account_balance_wallet"></app-icon>
+      </div>
+      <div>
+        <p class="text-[11px] font-semibold text-[var(--text-muted)]">Gốc cho vay</p>
+        <p class="font-extrabold text-sm sm:text-base text-[var(--text-main)] tracking-tight mt-0.5">{{ summary.activePrincipal | vndMoney }}</p>
+      </div>
+    </div>
+
+    <div class="w-card !mb-0 p-4 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center flex-shrink-0">
+        <app-icon name="trending_up"></app-icon>
+      </div>
+      <div>
+        <p class="text-[11px] font-semibold text-[var(--text-muted)]">Lãi/ngày</p>
+        <p class="font-extrabold text-sm sm:text-base text-[var(--accent-primary)] tracking-tight mt-0.5">{{ summary.dailyInterest | vndMoney }}</p>
+      </div>
+    </div>
+
+    <div class="w-card !mb-0 p-4 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+        <app-icon name="pending"></app-icon>
+      </div>
+      <div>
+        <p class="text-[11px] font-semibold text-[var(--text-muted)]">Lãi chưa thu</p>
+        <p class="font-extrabold text-sm sm:text-base text-amber-700 tracking-tight mt-0.5">{{ summary.accruedInterest | vndMoney }}</p>
+      </div>
+    </div>
+
+    <div class="w-card !mb-0 p-4 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+        <app-icon name="task_alt"></app-icon>
+      </div>
+      <div>
+        <p class="text-[11px] font-semibold text-[var(--text-muted)]">Lãi đã thu</p>
+        <p class="font-extrabold text-sm sm:text-base text-emerald-700 tracking-tight mt-0.5">{{ summary.paidInterest | vndMoney }}</p>
+      </div>
+    </div>
   </div>
 
-  <form *ngIf="selectedLoanForPayment" (ngSubmit)="submitPayment()" [formGroup]="paymentForm" class="w-card grid grid-cols-1 md:grid-cols-4 gap-3">
-    <div><label class="w-label" for="loan-payment-interest">Tiền lãi đã nhận</label><input id="loan-payment-interest" class="w-input" formControlName="interestAmount" /></div>
-    <div><label class="w-label" for="loan-payment-principal">Gốc thu hồi</label><input id="loan-payment-principal" class="w-input" formControlName="principalAmount" /></div>
-    <div><label class="w-label" for="loan-payment-account">Tài khoản nhận</label><select id="loan-payment-account" class="w-select" formControlName="accountId"><option value="">-- Chọn tài khoản --</option><option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option></select></div>
-    <div class="flex gap-2 items-end"><button class="w-btn w-btn-primary" [disabled]="!auth.canMutate">Xác nhận thu</button><button type="button" class="w-btn w-btn-outline" (click)="closePayment()">Hủy</button></div>
+  <!-- Inline Repayment Modal/Form (Ultra-Compact UI) -->
+  <form id="loan-payment-form" *ngIf="selectedLoanForPayment" (ngSubmit)="submitPayment()" [formGroup]="paymentForm" class="w-card p-4 sm:p-5 border-2 border-[var(--accent-primary)] space-y-3.5 shadow-lg animate-fade">
+    <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
+      <div class="flex items-center gap-2">
+        <span class="w-7 h-7 rounded-lg bg-[var(--accent-primary)] text-white flex items-center justify-center font-bold">
+          <app-icon name="payments" class="text-sm"></app-icon>
+        </span>
+        <div>
+          <h3 class="font-extrabold text-sm text-[var(--text-main)]">Ghi nhận Thu / Trả nợ</h3>
+          <p *ngIf="activePaymentLoan" class="text-[11px] text-[var(--text-muted)]">Đối tác: <strong class="text-[var(--text-main)]">{{ activePaymentLoan.counterparty }}</strong></p>
+        </div>
+      </div>
+      <button type="button" class="app-icon-button" (click)="closePayment()"><app-icon name="close"></app-icon></button>
+    </div>
+
+    <div class="space-y-3">
+      <!-- Total Repayment Amount Input with Prefix Addon -->
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="w-label text-xs !mb-0" for="total-payment-amount">Số tiền nhận / thanh toán (VND) *</label>
+          <span class="text-[10px] text-[var(--text-muted)]">Cú pháp: 5tr, 500k, 5.000.000...</span>
+        </div>
+        <div class="flex items-center rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] overflow-hidden focus-within:border-[var(--accent-primary)] focus-within:ring-2 focus-within:ring-[var(--accent-primary)]/20">
+          <span class="px-3 py-2 font-bold text-sm text-[var(--accent-primary)] bg-[var(--bg-subtle)] border-r border-[var(--border-subtle)] flex-shrink-0">₫</span>
+          <input
+            id="total-payment-amount"
+            [value]="totalPaymentString"
+            (input)="onTotalPaymentInput($event)"
+            (blur)="onTotalPaymentBlur()"
+            inputmode="numeric"
+            placeholder="Nhập số tiền..."
+            class="w-full h-10 px-3 border-0 outline-none bg-transparent font-extrabold text-base text-[var(--text-main)]"
+          />
+        </div>
+
+        <!-- Quick Settlement Shortcuts -->
+        <div class="flex flex-wrap gap-1.5 mt-2">
+          <button type="button" class="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-subtle)]/60 hover:bg-[var(--bg-subtle)] text-[var(--text-main)] transition-colors cursor-pointer" (click)="setQuickPaymentAmount('accrued')">
+            + Lãi ({{ (accrualsMap[selectedLoanForPayment]?.totalAccruedInterest || '0') | vndMoney }})
+          </button>
+          <button type="button" class="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-subtle)]/60 hover:bg-[var(--bg-subtle)] text-[var(--text-main)] transition-colors cursor-pointer" (click)="setQuickPaymentAmount('principal')">
+            + Gốc ({{ activePaymentLoan?.principalBalance | vndMoney }})
+          </button>
+          <button type="button" class="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-[var(--accent-primary)]/40 bg-[var(--bg-subtle)] text-[var(--accent-primary)] hover:bg-[#f3daff] transition-colors cursor-pointer" (click)="setQuickPaymentAmount('full')">
+            ⚡ Tất toán hết
+          </button>
+        </div>
+      </div>
+
+      <!-- Compact Repayment Type Segmented Selector -->
+      <div>
+        <label class="w-label text-xs mb-1">Phân loại thu / trả nợ *</label>
+        <div class="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
+          <button
+            type="button"
+            (click)="setPaymentMode('interest_only')"
+            [class.bg-white]="paymentMode === 'interest_only'"
+            [class.text-[var(--accent-primary)]]="paymentMode === 'interest_only'"
+            [class.shadow-xs]="paymentMode === 'interest_only'"
+            [class.text-[var(--text-muted)]]="paymentMode !== 'interest_only'"
+            class="py-1.5 px-1.5 rounded-lg text-xs font-bold text-center transition-all cursor-pointer truncate"
+          >
+            🟢 Chỉ thu Lãi
+          </button>
+          <button
+            type="button"
+            (click)="setPaymentMode('principal_only')"
+            [class.bg-white]="paymentMode === 'principal_only'"
+            [class.text-[var(--accent-primary)]]="paymentMode === 'principal_only'"
+            [class.shadow-xs]="paymentMode === 'principal_only'"
+            [class.text-[var(--text-muted)]]="paymentMode !== 'principal_only'"
+            class="py-1.5 px-1.5 rounded-lg text-xs font-bold text-center transition-all cursor-pointer truncate"
+          >
+            🔵 Chỉ thu Gốc
+          </button>
+          <button
+            type="button"
+            (click)="setPaymentMode('both')"
+            [class.bg-white]="paymentMode === 'both'"
+            [class.text-[var(--accent-primary)]]="paymentMode === 'both'"
+            [class.shadow-xs]="paymentMode === 'both'"
+            [class.text-[var(--text-muted)]]="paymentMode !== 'both'"
+            class="py-1.5 px-1.5 rounded-lg text-xs font-bold text-center transition-all cursor-pointer truncate"
+          >
+            🟣 Cả Lãi & Gốc
+          </button>
+        </div>
+      </div>
+
+      <!-- Split Breakdown (Side by Side Grid 2 Cols) -->
+      <div class="p-2.5 rounded-xl bg-[var(--bg-subtle)]/60 border border-[var(--border-subtle)] grid grid-cols-2 gap-2">
+        <div>
+          <label class="w-label text-[11px] !mb-1" for="loan-payment-interest">Phần Tiền Lãi (VND)</label>
+          <input
+            id="loan-payment-interest"
+            class="w-input text-xs font-bold text-amber-700 h-9"
+            formControlName="interestAmount"
+            (blur)="onPaymentComponentBlur('interestAmount', $event)"
+            inputmode="numeric"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label class="w-label text-[11px] !mb-1" for="loan-payment-principal">Phần Tiền Gốc (VND)</label>
+          <input
+            id="loan-payment-principal"
+            class="w-input text-xs font-bold text-[var(--text-main)] h-9"
+            formControlName="principalAmount"
+            (blur)="onPaymentComponentBlur('principalAmount', $event)"
+            inputmode="numeric"
+            placeholder="0"
+          />
+        </div>
+      </div>
+
+      <!-- Interest Calculation & Days Info Pill -->
+      <div class="p-2.5 rounded-xl bg-[var(--bg-subtle)]/80 border border-[var(--border-subtle)] space-y-1.5">
+        <div class="flex flex-wrap items-center justify-between text-xs gap-2">
+          <div class="flex items-center gap-1.5 text-[var(--text-main)] font-semibold">
+            <app-icon name="calendar_month" class="text-sm text-[var(--accent-primary)]"></app-icon>
+            <span>Kỳ tính lãi:</span>
+            <span class="font-bold text-[var(--accent-primary)]">{{ lastInterestDate | date:'dd/MM/yyyy' }}</span>
+            <span class="text-[var(--text-muted)]">➔</span>
+            <span class="font-bold text-[var(--accent-primary)]">{{ (paymentForm.value.occurredAt || todayDateString) | date:'dd/MM/yyyy' }}</span>
+          </div>
+          <span class="w-badge w-badge-indigo font-bold text-[11px] px-2 py-0.5">
+            {{ interestDaysCount }} ngày tính lãi
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] text-[var(--text-muted)] pt-1 border-t border-[var(--border-subtle)]/60">
+          <span>Lãi/ngày: <strong class="text-[var(--text-main)]">{{ (accrualsMap[selectedLoanForPayment]?.dailyInterest || '0') | vndMoney }}</strong></span>
+          <span>Lãi tính theo số ngày: <strong class="text-amber-700 font-extrabold text-xs">{{ computedInterestByDays | vndMoney }}</strong></span>
+        </div>
+      </div>
+
+      <!-- Date Picker & Destination Account (Side-by-Side Grid 2 Cols) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div>
+          <label class="w-label text-xs !mb-1" for="loan-payment-occurred-at">Thu lãi / Ghi nhận đến ngày *</label>
+          <input
+            id="loan-payment-occurred-at"
+            type="date"
+            class="w-input text-xs font-semibold h-9"
+            formControlName="occurredAt"
+            (change)="onPaymentDateChange()"
+          />
+        </div>
+
+        <div>
+          <label class="w-label text-xs !mb-1" for="loan-payment-account">Tài khoản ghi nhận dòng tiền *</label>
+          <select id="loan-payment-account" class="w-select text-xs font-semibold h-9" formControlName="accountId">
+            <option value="">-- Chọn tài khoản --</option>
+            <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }} ({{ account.currency }})</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form Actions -->
+    <div class="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
+      <button type="button" class="w-btn w-btn-outline text-xs h-8 px-4 rounded-lg" (click)="closePayment()">Hủy</button>
+      <button class="w-btn w-btn-primary text-xs h-8 px-5 rounded-lg" [disabled]="!auth.canMutate || paymentForm.invalid">
+        <app-icon name="check"></app-icon> Xác nhận ghi nhận
+      </button>
+    </div>
   </form>
 
-  <!-- Loans List Card -->
-  <div class="w-card">
-    <div class="flex items-center justify-between mb-4">
+  <!-- Loans List Container -->
+  <div class="w-card p-0 overflow-hidden">
+    <!-- Card Top Bar -->
+    <div class="p-5 border-b border-[var(--border-subtle)] flex items-center justify-between">
       <div>
-        <h3 class="text-base font-bold text-[var(--text-main)]">{{ 'loans.title' | translate }}</h3>
-        <p class="text-xs text-[var(--text-muted)]">Các hợp đồng vay đang theo dõi trong danh mục.</p>
+        <h2 class="text-base font-bold text-[var(--text-main)]">Danh sách hợp đồng vay & nợ</h2>
+        <p class="text-xs text-[var(--text-muted)] mt-0.5">Theo dõi số dư nợ gốc, lãi/ngày và lịch thanh toán.</p>
       </div>
-      <span class="w-badge w-badge-neutral">{{ loans.length }} hợp đồng</span>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="loans.length === 0" class="w-empty-state">
+    <div *ngIf="loans.length === 0" class="w-empty-state py-12">
       <div class="w-empty-icon">
         <app-icon name="request_quote"></app-icon>
       </div>
-      <p class="w-empty-title">Chưa có khoản vay</p>
-      <p class="w-empty-desc">Tạo hợp đồng đầu tiên để theo dõi lãi phát sinh và số dư gốc.</p>
+      <p class="w-empty-title">Chưa có hợp đồng vay</p>
+      <p class="w-empty-desc">Bấm "Tạo hợp đồng mới" để bắt đầu ghi nhận và theo dõi nợ.</p>
     </div>
 
-    <!-- Loans Table -->
-    <div *ngIf="loans.length > 0" class="w-table-container">
-      <table class="w-table">
+    <!-- Streamlined Desktop & Tablet Table View (5 Clean Columns) -->
+    <div *ngIf="loans.length > 0" class="hidden md:block overflow-x-auto">
+      <table class="w-full text-left border-collapse">
         <thead>
-          <tr>
-            <th>{{ 'loans.counterparty' | translate }}</th>
-            <th>{{ 'loans.direction' | translate }}</th>
-            <th>{{ 'loans.principal' | translate }}</th>
-            <th>Số dư còn lại</th>
-            <th>Lãi/ngày</th>
-			<th>Kỳ thu kế tiếp</th>
-            <th>Lãi đã phát sinh</th>
-            <th>{{ 'common.status' | translate }}</th>
-            <th class="text-right">{{ 'common.actions' | translate }}</th>
+          <tr class="bg-[var(--bg-subtle)]/70 text-[11px] font-extrabold uppercase tracking-wider text-[var(--text-muted)] border-b border-[var(--border-subtle)]">
+            <th class="py-3.5 px-5">Đối tác / Hợp đồng</th>
+            <th class="py-3.5 px-4">Dòng tiền & Số dư</th>
+            <th class="py-3.5 px-4">Lãi / Ngày & Kỳ thu</th>
+            <th class="py-3.5 px-4">Lãi dồn tích</th>
+            <th class="py-3.5 px-5 text-right">Thao tác</th>
           </tr>
         </thead>
-        <tbody>
-          <tr *ngFor="let item of loans">
-            <td class="font-bold text-[var(--text-main)] flex items-center gap-2">
-              <span class="w-7 h-7 rounded-lg bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center">
-                <app-icon name="request_quote" class="text-sm"></app-icon>
+        <tbody class="divide-y divide-[var(--border-subtle)]">
+          <tr *ngFor="let item of loans" class="hover:bg-[var(--bg-subtle)]/40 transition-colors group">
+            <!-- Col 1: Customer & Direction -->
+            <td class="py-4 px-5">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold text-sm flex-shrink-0 shadow-xs">
+                  {{ item.counterparty.substring(0, 1).toUpperCase() }}
+                </div>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-[var(--text-main)] truncate max-w-[160px] lg:max-w-[220px]">{{ item.counterparty }}</span>
+                    <span class="w-badge uppercase text-[9px] font-extrabold px-2 py-0.5" [ngClass]="item.direction === 'payable' ? 'w-badge-danger' : 'w-badge-success'">
+                      {{ statusText(item) }}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2 mt-1">
+                    <span class="w-badge w-badge-indigo uppercase text-[9px] px-1.5 py-0.2">
+                      {{ loanStatusLabel(item.status || 'active') }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </td>
+
+            <!-- Col 2: Balance & Principal -->
+            <td class="py-4 px-4 whitespace-nowrap">
+              <span class="font-extrabold text-sm text-[var(--text-main)] block">{{ item.principalBalance | vndMoney }}</span>
+              <span class="text-[11px] text-[var(--text-muted)] block mt-0.5">Gốc {{ item.principalInitial | vndMoney }}</span>
+            </td>
+
+            <!-- Col 3: Daily Rate & Next Payment -->
+            <td class="py-4 px-4 whitespace-nowrap">
+              <span class="font-mono font-bold text-xs text-[var(--accent-primary)] block">{{ (accrualsMap[item.id]?.dailyInterest || '0') | vndMoney }} / ngày</span>
+              <span class="text-[11px] text-[var(--text-muted)] block mt-0.5">
+                Kỳ kế: {{ accrualsMap[item.id]?.nextPaymentDate ? (accrualsMap[item.id]?.nextPaymentDate | date:'dd/MM/yyyy') : '—' }}
               </span>
-              {{ item.counterparty }}
             </td>
-            <td>
-              <span class="w-badge uppercase text-[10px]" [ngClass]="item.direction === 'payable' ? 'w-badge-danger' : 'w-badge-success'">
-                {{ statusText(item) }}
-              </span>
+
+            <!-- Col 4: Accrued Interest -->
+            <td class="py-4 px-4 whitespace-nowrap">
+              <span class="font-bold text-xs text-amber-700 block">{{ (accrualsMap[item.id]?.totalAccruedInterest || '0') | vndMoney }}</span>
+              <span class="text-[10px] text-[var(--text-muted)] block mt-0.5">Chưa thanh toán</span>
             </td>
-            <td class="font-bold text-xs">{{ item.principalInitial }}</td>
-            <td class="font-bold text-xs text-[var(--text-main)]">{{ item.principalBalance }}</td>
-            <td class="font-mono text-xs font-bold text-[var(--accent-primary)]">{{ accrualsMap[item.id]?.dailyInterest || '0' }}</td>
-			<td class="text-xs">{{ accrualsMap[item.id]?.nextPaymentDate | date:'dd/MM/yyyy' }}</td>
-            <td class="font-semibold text-xs text-amber-700">
-              {{ accrualsMap[item.id]?.totalAccruedInterest || '0.00' }}
-            </td>
-            <td>
-              <span class="w-badge w-badge-indigo uppercase text-[10px]">
-                {{ loanStatusLabel(item.status || 'active') }}
-              </span>
-            </td>
-            <td class="text-right">
-              <button
-                *ngIf="auth.canMutate"
-                class="w-btn w-btn-outline text-xs h-8 px-3"
-                (click)="openPayment(item.id)"
-              >
-                <app-icon name="payments" class="text-sm"></app-icon> {{ 'loans.pay_button' | translate }}
-              </button>
-              <button *ngIf="auth.canMutate" type="button" class="w-btn w-btn-outline text-xs h-8 px-3 ml-2 text-rose-700 border-rose-200 hover:bg-rose-50" (click)="remove(item)">Xóa</button>
+
+            <!-- Col 5: Actions -->
+            <td class="py-4 px-5 text-right whitespace-nowrap">
+              <div class="inline-flex items-center justify-end gap-1.5">
+                <button
+                  *ngIf="auth.canMutate"
+                  class="w-btn w-btn-primary text-xs h-8 px-3 rounded-lg"
+                  (click)="openPayment(item.id)"
+                >
+                  <app-icon name="payments" class="text-sm"></app-icon> Thu/Trả nợ
+                </button>
+                <button type="button" class="w-btn w-btn-outline text-xs h-8 px-3 rounded-lg" (click)="openPaymentHistory(item)">
+                  <app-icon name="history" class="text-sm"></app-icon> Lịch sử
+                </button>
+                <button *ngIf="auth.canMutate" type="button" class="w-btn w-btn-ghost text-xs h-8 px-2 text-rose-700 hover:bg-rose-50 rounded-lg" (click)="remove(item)" title="Xóa">
+                  <app-icon name="delete" class="text-sm"></app-icon>
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    <!-- Mobile Responsive Cards (< 768px) -->
+    <div *ngIf="loans.length > 0" class="block md:hidden p-3 space-y-3">
+      <div *ngFor="let item of loans" class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-xs space-y-3">
+        <!-- Mobile Card Header -->
+        <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-9 h-9 rounded-xl bg-[var(--bg-subtle)] text-[var(--accent-primary)] flex items-center justify-center font-bold text-xs flex-shrink-0">
+              {{ item.counterparty.substring(0, 1).toUpperCase() }}
+            </div>
+            <span class="font-bold text-sm text-[var(--text-main)] truncate">{{ item.counterparty }}</span>
+          </div>
+          <div class="flex items-center gap-1.5 flex-shrink-0">
+            <span class="w-badge uppercase text-[9px] px-2 py-0.5" [ngClass]="item.direction === 'payable' ? 'w-badge-danger' : 'w-badge-success'">
+              {{ statusText(item) }}
+            </span>
+            <span class="w-badge w-badge-indigo uppercase text-[9px] px-2 py-0.5">
+              {{ loanStatusLabel(item.status || 'active') }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Financial Info 2x2 Grid -->
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-[var(--bg-subtle)]/50 rounded-xl p-2.5">
+            <span class="text-[10px] text-[var(--text-muted)] block font-semibold uppercase tracking-wider">Số dư nợ</span>
+            <span class="font-extrabold text-[var(--text-main)] mt-0.5 block text-sm">{{ item.principalBalance | vndMoney }}</span>
+          </div>
+          <div class="bg-[var(--bg-subtle)]/50 rounded-xl p-2.5">
+            <span class="text-[10px] text-[var(--text-muted)] block font-semibold uppercase tracking-wider">Lãi / Ngày</span>
+            <span class="font-mono font-bold text-[var(--accent-primary)] mt-0.5 block text-sm">{{ (accrualsMap[item.id]?.dailyInterest || '0') | vndMoney }}</span>
+          </div>
+          <div class="bg-[var(--bg-subtle)]/50 rounded-xl p-2.5">
+            <span class="text-[10px] text-[var(--text-muted)] block font-semibold uppercase tracking-wider">Gốc ban đầu</span>
+            <span class="font-bold text-[var(--text-main)] mt-0.5 block">{{ item.principalInitial | vndMoney }}</span>
+          </div>
+          <div class="bg-[var(--bg-subtle)]/50 rounded-xl p-2.5">
+            <span class="text-[10px] text-[var(--text-muted)] block font-semibold uppercase tracking-wider">Lãi dồn tích</span>
+            <span class="font-bold text-amber-700 mt-0.5 block">{{ (accrualsMap[item.id]?.totalAccruedInterest || '0') | vndMoney }}</span>
+          </div>
+        </div>
+
+        <div *ngIf="accrualsMap[item.id]?.nextPaymentDate" class="flex items-center justify-between text-xs px-1 text-[var(--text-muted)]">
+          <span>Kỳ thu kế tiếp:</span>
+          <span class="font-semibold text-[var(--text-main)]">{{ accrualsMap[item.id]?.nextPaymentDate | date:'dd/MM/yyyy' }}</span>
+        </div>
+
+        <!-- Actions Row -->
+        <div class="pt-1 flex items-center gap-2">
+          <button
+            *ngIf="auth.canMutate"
+            class="w-btn w-btn-primary flex-1 text-xs h-9 rounded-xl"
+            (click)="openPayment(item.id)"
+          >
+            <app-icon name="payments" class="text-sm"></app-icon> Thu/Trả nợ
+          </button>
+          <button type="button" class="w-btn w-btn-outline flex-1 text-xs h-9 rounded-xl" (click)="openPaymentHistory(item)">
+            <app-icon name="history" class="text-sm"></app-icon> Lịch sử
+          </button>
+          <button *ngIf="auth.canMutate" type="button" class="w-btn w-btn-outline text-xs h-9 px-3 text-rose-700 border-rose-200 hover:bg-rose-50 rounded-xl" (click)="remove(item)">Xóa</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div *ngIf="schedule.length" class="w-card">
-    <h3 class="font-bold mb-3">Lịch tiền lãi dự kiến</h3>
-    <div class="text-sm space-y-2" *ngFor="let item of schedule">
-      <span class="font-semibold">{{ item.paymentDate | date:'dd/MM/yyyy' }}</span> — {{ item.borrower }} — {{ item.expectedInterest }} ({{ item.cycleDays }} ngày)
-      <span class="w-badge" [ngClass]="item.status === 'overdue' ? 'w-badge-danger' : 'w-badge-neutral'">{{ item.status === 'overdue' ? 'Quá hạn' : 'Chưa đến kỳ' }}</span>
+  <!-- History Drawer Card -->
+  <section id="loan-history-section" *ngIf="selectedLoanForHistory" class="w-card p-5 animate-fade" aria-live="polite">
+    <div class="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-[var(--border-subtle)]">
+      <div>
+        <p class="text-[10px] font-extrabold tracking-wider text-[var(--accent-primary)] uppercase">Nhật ký giao dịch</p>
+        <h3 class="font-extrabold text-base text-[var(--text-main)] mt-0.5">{{ selectedLoanForHistory.counterparty }}</h3>
+        <p class="text-xs text-[var(--text-muted)]">Lịch sử thu/trả gốc, lãi và phí dịch vụ.</p>
+      </div>
+      <button type="button" class="app-icon-button" (click)="selectedLoanForHistory = null" aria-label="Đóng lịch sử vay"><app-icon name="close"></app-icon></button>
+    </div>
+    <div *ngIf="historyLoading" class="py-6 text-center text-xs text-[var(--text-muted)]"><app-icon name="progress_activity"></app-icon> Đang tải lịch sử…</div>
+    <div *ngIf="!historyLoading && !paymentHistory.length" class="w-empty-state py-7"><div class="w-empty-icon"><app-icon name="receipt_long"></app-icon></div><p class="w-empty-title">Chưa có giao dịch</p><p class="w-empty-desc">Các lần thu/trả nợ sẽ hiển thị tại đây.</p></div>
+    <div *ngIf="!historyLoading && paymentHistory.length" class="space-y-2">
+      <article *ngFor="let payment of paymentHistory" class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-subtle)]/40 p-3 flex items-center gap-3">
+        <span class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0"><app-icon name="payments"></app-icon></span>
+        <div class="min-w-0 flex-1">
+          <p class="font-extrabold text-sm text-[var(--text-main)]">{{ paymentTotal(payment) | vndMoney }}</p>
+          <p class="text-[11px] text-[var(--text-muted)] mt-0.5">{{ payment.occurredAt | date:'dd/MM/yyyy, HH:mm' }} · Gốc {{ payment.principalAmount | vndMoney }} · Lãi {{ payment.interestAmount | vndMoney }}</p>
+        </div>
+        <span *ngIf="payment.feeAmount !== '0'" class="w-badge w-badge-warning text-[10px]">Phí {{ payment.feeAmount | vndMoney }}</span>
+      </article>
+    </div>
+  </section>
+
+  <!-- Forecast Schedule -->
+  <div *ngIf="schedule.length" class="w-card p-5">
+    <h3 class="font-bold text-sm text-[var(--text-main)] mb-3">Lịch tiền lãi dự kiến</h3>
+    <div class="space-y-2">
+      <div class="text-xs flex items-center justify-between p-2.5 rounded-xl bg-[var(--bg-subtle)]/50" *ngFor="let item of schedule">
+        <div>
+          <span class="font-bold text-[var(--text-main)]">{{ item.paymentDate | date:'dd/MM/yyyy' }}</span>
+          <span class="text-[var(--text-muted)]"> — {{ item.borrower }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-extrabold text-[var(--accent-primary)]">{{ item.expectedInterest | vndMoney }}</span>
+          <span class="text-[10px] text-[var(--text-muted)]">({{ item.cycleDays }} ngày)</span>
+          <span class="w-badge text-[9px] px-2 py-0.5" [ngClass]="item.status === 'overdue' ? 'w-badge-danger' : 'w-badge-neutral'">
+            {{ item.status === 'overdue' ? 'Quá hạn' : 'Chưa đến kỳ' }}
+          </span>
+        </div>
+      </div>
     </div>
   </div>
 </section>

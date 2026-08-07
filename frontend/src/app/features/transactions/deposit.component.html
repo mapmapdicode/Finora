@@ -1,24 +1,14 @@
-<!-- TopAppBar (Transactional - Hidden Nav Shell) -->
-<header class="w-full sticky top-0 z-50 bg-[#fff7fc] shadow-[0px_4px_20px_rgba(29,11,41,0.04)] border-b border-[#cfc2d2]/30">
-  <div class="flex justify-between items-center px-4 h-16 w-full max-w-lg mx-auto">
-    <button (click)="goBack()" type="button" aria-label="Quay lại" class="text-[#4c4450] hover:opacity-80 transition-opacity p-2 -ml-2">
-      <span class="material-symbols-outlined text-2xl">arrow_back</span>
-    </button>
-    <div class="font-headline-md text-xl font-bold text-[#43016a] tracking-tight text-center flex-1 pr-8 font-display">
-      Nạp tiền vào ví
-    </div>
-  </div>
-</header>
-
 <!-- Main Content Canvas -->
 <main class="flex-1 w-full max-w-lg mx-auto px-5 py-6 flex flex-col gap-6 pb-32 font-sans text-[#261432]">
+  <header class="w-page-heading">
+    <div><p class="w-page-eyebrow">NẠP TIỀN</p><h1>Nạp tiền vào ví</h1><p>Ghi nhận nguồn tiền và tài khoản nhận một cách rõ ràng.</p></div>
+  </header>
   <!-- Amount Input Section -->
   <section class="flex flex-col items-center justify-center py-4">
     <p class="text-xs font-bold text-[#4c4450] uppercase tracking-widest">SỐ TIỀN NẠP</p>
     <div class="flex items-baseline justify-center gap-2 mt-2 w-full">
       <span class="text-4xl font-bold text-[#e9c349]">₫</span>
-      <input autofocus 
-             type="text" 
+      <input type="text"
              [value]="formattedAmount" 
              (input)="onAmountInput($event)" 
              class="bg-transparent border-none outline-none p-0 text-center text-3xl sm:text-4xl font-bold text-[#261432] w-full max-w-[280px] placeholder:text-[#cfc2d2] focus:ring-0" 
@@ -44,7 +34,7 @@
   <section *ngIf="accounts.length > 1" class="flex flex-col gap-2">
     <h2 class="text-xs font-bold text-[#4c4450] uppercase tracking-widest mb-1">VÍ NHẬN TIỀN</h2>
     <div class="bg-white rounded-xl p-3 shadow-xs border border-[#cfc2d2]/40">
-      <select [ngModel]="selectedAccountId" (ngModelChange)="selectedAccountId = $event" class="w-full bg-transparent text-sm font-bold text-[#261432] outline-none cursor-pointer">
+      <select [ngModel]="selectedAccountId" (ngModelChange)="selectedAccountId = $event" class="w-select">
         <option *ngFor="let acc of accounts" [value]="acc.id">{{ acc.name }} ({{ acc.currency }})</option>
       </select>
     </div>
@@ -55,11 +45,13 @@
     <h2 class="text-xs font-bold text-[#4c4450] uppercase tracking-widest mb-1">NGUỒN TIỀN</h2>
 
     <!-- Active Source Cards -->
-    <div *ngFor="let source of sources" 
-         (click)="selectSource(source.id)" 
+    <button *ngFor="let source of sources"
+         type="button"
+         (click)="selectSource(source.id)"
+         [attr.aria-pressed]="selectedSourceId === source.id"
          [class.border-[#43016a]]="selectedSourceId === source.id" 
          [class.border-[#cfc2d2]/30]="selectedSourceId !== source.id" 
-         class="bg-white rounded-xl p-4 shadow-[0_4px_20px_rgba(29,11,41,0.04)] border flex items-center justify-between cursor-pointer hover:bg-[#fff7fc] transition-all active:scale-[0.98]">
+         class="bg-white rounded-xl p-4 shadow-[0_4px_20px_rgba(29,11,41,0.04)] border flex items-center justify-between cursor-pointer hover:bg-[#fff7fc] transition-all active:scale-[0.98] text-left">
       <div class="flex items-center gap-4">
         <div class="w-12 h-12 rounded-full bg-[#fae8ff] flex items-center justify-center text-[#43016a]">
           <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">{{ source.icon }}</span>
@@ -72,7 +64,7 @@
       <span class="material-symbols-outlined" [ngClass]="selectedSourceId === source.id ? 'text-[#43016a]' : 'text-[#cfc2d2]'">
         {{ selectedSourceId === source.id ? 'check_circle' : 'chevron_right' }}
       </span>
-    </div>
+    </button>
   </section>
 </main>
 

@@ -444,16 +444,7 @@ func (h *WealthHandler) GetPortfolioNetWorth(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": err.Error()})
 		return
 	}
-	mode := h.getAmountDisplayMode(c)
-	resp := dto.PortfolioNetWorthResponse{
-		AsOfAt:            nw.AsOfAt,
-		BaseCurrency:      nw.BaseCurrency,
-		NetWorth:          nw.NetWorth,
-		Cash:              nw.Cash,
-		Liabilities:       nw.Liabilities,
-		AmountDisplayMode: mode,
-	}
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, portfolioNetWorthResponse(nw, h.getAmountDisplayMode(c)))
 }
 
 // GetCurrentNetWorth returns the user's consolidated position across every
@@ -469,14 +460,38 @@ func (h *WealthHandler) GetCurrentNetWorth(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "NOT_FOUND", "message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, dto.PortfolioNetWorthResponse{
-		AsOfAt:            nw.AsOfAt,
-		BaseCurrency:      nw.BaseCurrency,
-		NetWorth:          nw.NetWorth,
-		Cash:              nw.Cash,
-		Liabilities:       nw.Liabilities,
-		AmountDisplayMode: h.getAmountDisplayMode(c),
-	})
+	c.JSON(http.StatusOK, portfolioNetWorthResponse(nw, h.getAmountDisplayMode(c)))
+}
+
+func portfolioNetWorthResponse(nw service.NetWorthResult, amountDisplayMode string) dto.PortfolioNetWorthResponse {
+	return dto.PortfolioNetWorthResponse{
+		AsOfAt:          nw.AsOfAt,
+		BaseCurrency:    nw.BaseCurrency,
+		NetWorth:        nw.NetWorth,
+		NetWorthChange:  nw.NetWorthChange,
+		Cash:            nw.Cash,
+		Liabilities:     nw.Liabilities,
+		SnapshotVersion: nw.SnapshotVersion,
+		Assets: dto.PortfolioNetWorthAssets{
+			Cash:            nw.Assets.Cash,
+			Receivables:     nw.Assets.Receivables,
+			Property:        nw.Assets.Property,
+			OtherAssets:     nw.Assets.OtherAssets,
+			AccruedInterest: nw.Assets.AccruedInterest,
+		},
+		DataQuality: dto.PortfolioNetWorthDataQuality{
+			ReconciledAccounts: nw.DataQuality.ReconciledAccounts,
+			StaleValuations:    nw.DataQuality.StaleValuations,
+			AsOfSource:         nw.DataQuality.AsOfSource,
+		},
+		Attribution: dto.PortfolioNetWorthAttribution{
+			ExternalCashFlow: nw.Attribution.ExternalCashFlow,
+			AccruedInterest:  nw.Attribution.AccruedInterest,
+			ValuationChange:  nw.Attribution.ValuationChange,
+			AccruedFee:       nw.Attribution.AccruedFee,
+		},
+		AmountDisplayMode: amountDisplayMode,
+	}
 }
 
 func (h *WealthHandler) requireEditorRole(c *gin.Context) bool {
@@ -618,7 +633,6 @@ func (h *WealthHandler) CreateAccount(c *gin.Context) {
 			UserID:      wsID,
 			AccountID:   account.ID,
 			PortfolioID: pID,
-			CategoryID:  "uncategorized",
 			Name:        "Số dư đầu kỳ",
 			Type:        domain.TransactionTypeIncome,
 			Amount:      openingBalance,
@@ -978,6 +992,11 @@ func (h *WealthHandler) ListTransactions(c *gin.Context) {
 	if (!from.IsZero() && !to.IsZero()) && from.After(to) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_QUERY", "message": "from must be <= to"})
 		return
+	}
+	// A date-only end boundary is the whole calendar day. This is especially
+	// important for the weekly/monthly reports, which pass dates from a picker.
+	if len(query.To) == len("2006-01-02") && !to.IsZero() {
+		to = to.Add(24*time.Hour - time.Nanosecond)
 	}
 
 	var cursor dto.PaginatedCursor

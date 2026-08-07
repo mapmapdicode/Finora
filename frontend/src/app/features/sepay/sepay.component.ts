@@ -7,6 +7,7 @@ import { Account, BankConnection, BankFeedTransaction, SePayConnectResponse } fr
 
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { VndMoneyPipe } from '../../shared/pipes/vnd-money.pipe';
 import { finalize } from 'rxjs';
 
 type InboxTab = 'pending_review' | 'auto_ready' | 'posted' | 'ignored' | 'all';
@@ -14,7 +15,7 @@ type InboxTab = 'pending_review' | 'auto_ready' | 'posted' | 'ignored' | 'all';
 @Component({
   selector: 'app-sepay',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, TranslatePipe, IconComponent],
+  imports: [CommonModule, ReactiveFormsModule, TranslatePipe, IconComponent, VndMoneyPipe],
   templateUrl: './sepay.component.html',
 })
 export class SePayComponent implements OnInit {
