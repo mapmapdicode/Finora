@@ -18,6 +18,14 @@ http://110.172.29.117:2001/public/v1
 - `occurredAt` nhận `YYYY-MM-DD` hoặc RFC3339. Nên dùng RFC3339 có múi giờ Việt Nam, ví dụ `2026-08-09T19:30:00+07:00`.
 - API trả JSON lỗi theo dạng `{ "code": "...", "message": "..." }`.
 
+### Lấy `userId` một lần
+
+Sau khi đăng nhập Finora, response của `POST /api/v1/auth/login` có trường `user.id`. Lưu UUID này trong cấu hình bot. Với tài khoản `hoangxuan.ks6@gmail.com` trên production hiện tại, `userId` là:
+
+```text
+d2932d32-40c3-4654-bf5d-a2f7c4c6f08f
+```
+
 ## 1. Ngữ cảnh bot: lấy tài khoản và khoản vay đang hiệu lực
 
 ```bash
