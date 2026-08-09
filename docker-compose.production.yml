@@ -21,9 +21,10 @@ services:
     # Override the image ENTRYPOINT so DATABASE_URL can be assembled from the
     # VPS-only postgres.env before the API process starts.
     entrypoint: ["/bin/sh", "-ec"]
-    command: >-
-      export DATABASE_URL="postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/$${POSTGRES_DB}?sslmode=disable";
-      exec wealthos-backend
+    command:
+      - >-
+        export DATABASE_URL="postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/$${POSTGRES_DB}?sslmode=disable";
+        exec wealthos-backend
     depends_on:
       - finora-redis
     networks:
