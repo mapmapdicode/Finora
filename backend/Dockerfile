@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 COPY . .
@@ -11,4 +11,3 @@ COPY --from=builder /bin/wealthos-backend /usr/local/bin/wealthos-backend
 COPY --from=builder /app/internal/db/migrations /app/internal/db/migrations
 EXPOSE 8080
 ENTRYPOINT ["wealthos-backend"]
-
