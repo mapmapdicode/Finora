@@ -26,6 +26,7 @@ export class LoanListComponent implements OnInit {
   summary: LoanPortfolioSummary = { activePrincipal: '0', dailyInterest: '0', accruedInterest: '0', paidInterest: '0' };
   schedule: LoanScheduleItem[] = [];
   paymentHistory: LoanPayment[] = [];
+  loanListView: 'open' | 'closed' = 'open';
   creationForm: FormGroup;
   paymentForm: FormGroup;
   requestForm: FormGroup;
@@ -45,6 +46,23 @@ export class LoanListComponent implements OnInit {
 
   get annualRateEquivalent(): number {
     return (this.dailyRatePerMillion * 365 * 100) / 1_000_000;
+  }
+
+  /** Hợp đồng đã tất toán chỉ nằm trong lịch sử, không lẫn với các khoản còn dư nợ. */
+  isOpenLoan(loan: Loan): boolean {
+    return !['closed', 'settled', 'cancelled'].includes((loan.status || 'active').toLowerCase());
+  }
+
+  get openLoans(): Loan[] {
+    return this.loans.filter((loan) => this.isOpenLoan(loan));
+  }
+
+  get closedLoans(): Loan[] {
+    return this.loans.filter((loan) => !this.isOpenLoan(loan));
+  }
+
+  get visibleLoans(): Loan[] {
+    return this.loanListView === 'open' ? this.openLoans : this.closedLoans;
   }
 
   constructor(private api: ApiService, private fb: FormBuilder, public auth: AuthService) {
@@ -421,6 +439,7 @@ export class LoanListComponent implements OnInit {
       active: 'Đang hiệu lực',
       overdue: 'Quá hạn',
       settled: 'Đã tất toán',
+      closed: 'Đã tất toán',
       cancelled: 'Đã huỷ',
     };
     return labels[status || ''] || status || 'Chưa xác định';

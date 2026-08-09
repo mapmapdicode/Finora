@@ -6,7 +6,7 @@
         <h1 class="text-2xl font-extrabold tracking-tight text-[var(--text-main)] font-display">
           {{ 'loans.title' | translate }}
         </h1>
-        <span class="w-badge w-badge-neutral text-xs font-bold">{{ loans.length }} hợp đồng</span>
+        <span class="w-badge w-badge-neutral text-xs font-bold">{{ openLoans.length }} đang hiệu lực</span>
       </div>
       <p class="text-xs text-[var(--text-muted)] mt-1 font-medium">
         {{ 'loans.subtitle' | translate }}
@@ -338,24 +338,34 @@
   <!-- Loans List Container -->
   <div class="w-card p-0 overflow-hidden">
     <!-- Card Top Bar -->
-    <div class="p-5 border-b border-[var(--border-subtle)] flex items-center justify-between">
+    <div class="p-5 border-b border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>
         <h2 class="text-base font-bold text-[var(--text-main)]">Danh sách hợp đồng vay & nợ</h2>
-        <p class="text-xs text-[var(--text-muted)] mt-0.5">Theo dõi số dư nợ gốc, lãi/ngày và lịch thanh toán.</p>
+        <p class="text-xs text-[var(--text-muted)] mt-0.5">
+          {{ loanListView === 'open' ? 'Chỉ hiển thị hợp đồng còn dư nợ.' : 'Các hợp đồng đã tất toán để tra cứu lịch sử.' }}
+        </p>
+      </div>
+      <div class="grid grid-cols-2 w-full sm:w-auto gap-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-subtle)] p-1">
+        <button type="button" class="w-btn text-[11px] h-8 px-3 rounded-lg" [ngClass]="loanListView === 'open' ? 'w-btn-primary' : 'w-btn-ghost'" (click)="loanListView = 'open'">
+          Đang hiệu lực ({{ openLoans.length }})
+        </button>
+        <button type="button" class="w-btn text-[11px] h-8 px-3 rounded-lg" [ngClass]="loanListView === 'closed' ? 'w-btn-primary' : 'w-btn-ghost'" (click)="loanListView = 'closed'">
+          Đã tất toán ({{ closedLoans.length }})
+        </button>
       </div>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="loans.length === 0" class="w-empty-state py-12">
+    <div *ngIf="visibleLoans.length === 0" class="w-empty-state py-12">
       <div class="w-empty-icon">
         <app-icon name="request_quote"></app-icon>
       </div>
-      <p class="w-empty-title">Chưa có hợp đồng vay</p>
-      <p class="w-empty-desc">Bấm "Tạo hợp đồng mới" để bắt đầu ghi nhận và theo dõi nợ.</p>
+      <p class="w-empty-title">{{ loanListView === 'open' ? 'Chưa có hợp đồng còn dư nợ' : 'Chưa có hợp đồng đã tất toán' }}</p>
+      <p class="w-empty-desc">{{ loanListView === 'open' ? 'Bấm "Tạo hợp đồng mới" để bắt đầu ghi nhận và theo dõi nợ.' : 'Các hợp đồng tất toán sẽ được lưu ở đây để tra cứu.' }}</p>
     </div>
 
     <!-- Legacy table retained only as a non-rendered fallback. Loan data is rendered as responsive cards below. -->
-    <div *ngIf="loans.length > 0" class="hidden">
+    <div *ngIf="visibleLoans.length > 0" class="hidden">
       <table class="w-full text-left border-collapse">
         <thead>
           <tr class="bg-[var(--bg-subtle)]/70 text-[11px] font-extrabold uppercase tracking-wider text-[var(--text-muted)] border-b border-[var(--border-subtle)]">
@@ -367,7 +377,7 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-[var(--border-subtle)]">
-          <tr *ngFor="let item of loans" class="hover:bg-[var(--bg-subtle)]/40 transition-colors group">
+          <tr *ngFor="let item of visibleLoans" class="hover:bg-[var(--bg-subtle)]/40 transition-colors group">
             <!-- Col 1: Customer & Direction -->
             <td class="py-4 px-5">
               <div class="flex items-center gap-3">
@@ -414,7 +424,7 @@
             <td class="py-4 px-5 text-right whitespace-nowrap">
               <div class="inline-flex items-center justify-end gap-1.5">
                 <button
-                  *ngIf="auth.canMutate"
+                  *ngIf="auth.canMutate && isOpenLoan(item)"
                   class="w-btn w-btn-primary text-xs h-8 px-3 rounded-lg"
                   (click)="openPayment(item.id)"
                 >
@@ -434,8 +444,8 @@
     </div>
 
     <!-- Responsive cards at every viewport: no horizontal table scrolling. -->
-    <div *ngIf="loans.length > 0" class="p-3 sm:p-4 space-y-3">
-      <div *ngFor="let item of loans" class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-xs space-y-3">
+    <div *ngIf="visibleLoans.length > 0" class="p-3 sm:p-4 space-y-3">
+      <div *ngFor="let item of visibleLoans" class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-xs space-y-3">
         <!-- Mobile Card Header -->
         <div class="flex flex-col items-start gap-2 pb-2.5 border-b border-[var(--border-subtle)] sm:flex-row sm:items-center sm:justify-between">
           <div class="flex items-center gap-2.5 min-w-0">
@@ -482,13 +492,13 @@
         <!-- Actions Row -->
         <div class="pt-1 grid grid-cols-2 gap-2">
           <button
-            *ngIf="auth.canMutate"
+            *ngIf="auth.canMutate && isOpenLoan(item)"
             class="w-btn w-btn-primary flex-1 text-xs h-9 rounded-xl"
             (click)="openPayment(item.id)"
           >
             <app-icon name="payments" class="text-sm"></app-icon> Thu/Trả nợ
           </button>
-          <button type="button" class="w-btn w-btn-outline flex-1 text-xs h-9 rounded-xl" (click)="openPaymentHistory(item)">
+          <button type="button" class="w-btn w-btn-outline text-xs h-9 rounded-xl" [ngClass]="isOpenLoan(item) ? '' : 'col-span-2'" (click)="openPaymentHistory(item)">
             <app-icon name="history" class="text-sm"></app-icon> Lịch sử
           </button>
           <button *ngIf="auth.canMutate" type="button" class="w-btn w-btn-outline col-span-2 text-xs h-9 px-3 text-rose-700 border-rose-200 hover:bg-rose-50 rounded-xl" (click)="remove(item)">Xóa hợp đồng</button>
