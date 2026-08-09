@@ -17,6 +17,7 @@ backend/*.test
 
 # Environment files
 .env
+.env.production
 backend/.env
 frontend/.env
 

@@ -1,0 +1,49 @@
+# Production stack for a VPS that already has the Finora PostgreSQL container.
+# Database credentials stay in /opt/finora/postgres.env on the VPS and are
+# never committed to this repository.
+services:
+  finora-redis:
+    image: redis:7-alpine
+    container_name: finora-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - finora_redis_data:/data
+
+  finora-backend:
+    build:
+      context: ./backend
+    container_name: finora-backend
+    restart: unless-stopped
+    env_file:
+      - ./.env.production
+      - /opt/finora/postgres.env
+    # Override the image ENTRYPOINT so DATABASE_URL can be assembled from the
+    # VPS-only postgres.env before the API process starts.
+    entrypoint: ["/bin/sh", "-ec"]
+    command: >-
+      export DATABASE_URL="postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/$${POSTGRES_DB}?sslmode=disable";
+      exec wealthos-backend
+    depends_on:
+      - finora-redis
+    networks:
+      - default
+      - finora-data
+
+  finora-web:
+    build:
+      context: ./frontend
+    container_name: finora-web
+    restart: unless-stopped
+    depends_on:
+      - finora-backend
+    ports:
+      - "2001:80"
+
+volumes:
+  finora_redis_data:
+
+networks:
+  finora-data:
+    external: true
+    name: finora-net
