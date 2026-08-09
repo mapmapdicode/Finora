@@ -16,6 +16,7 @@ http://110.172.29.117:2001/public/v1
 - `userId`, `accountId`, `loanId` là UUID Finora. Lấy chúng từ endpoint **Ngữ cảnh bot** bên dưới.
 - Tất cả tiền là chuỗi số VND dương, không dấu chấm, không `VND`: `"125000"`, `"6000000"`.
 - `occurredAt` nhận `YYYY-MM-DD` hoặc RFC3339. Nên dùng RFC3339 có múi giờ Việt Nam, ví dụ `2026-08-09T19:30:00+07:00`.
+- Với câu như “chi hôm nay”, bot nên **bỏ hẳn** `occurredAt`; Finora sẽ dùng giờ server hiện tại. Chỉ gửi `occurredAt` khi người dùng nêu một ngày cụ thể hoặc bot có ngày chắc chắn.
 - API trả JSON lỗi theo dạng `{ "code": "...", "message": "..." }`.
 
 ### Lấy `userId` một lần
