@@ -111,6 +111,8 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 
 		userRequired.GET("/transactions", h.ListTransactions)
 		userRequired.POST("/transactions", middleware.IdempotencyGuard(store), h.CreateTransaction)
+		userRequired.POST("/imports/markdown/preview", h.PreviewMarkdownImport)
+		userRequired.POST("/imports/markdown/commit", h.CommitMarkdownImport)
 
 		userRequired.POST("/transfers", middleware.IdempotencyGuard(store), h.CreateTransfer)
 

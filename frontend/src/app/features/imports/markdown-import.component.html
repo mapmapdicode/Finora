@@ -1,0 +1,25 @@
+<main class="mx-auto w-full max-w-2xl space-y-5 px-4 py-6 pb-24 text-[#261432]">
+  <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p class="w-page-eyebrow">NHẬP DỮ LIỆU</p><h1>Import từ Markdown</h1><p>Kiểm tra dữ liệu theo tháng trước khi ghi nhận.</p></div><a class="w-btn w-btn-outline shrink-0 text-xs" href="assets/finora-import-template.md" download="finora-import-template.md">Tải mẫu .md</a></header>
+  <section class="w-card space-y-4 p-4 sm:p-5">
+    <div class="rounded-xl border border-[#eadfec] bg-[#fff7fc] p-3 text-xs leading-relaxed text-[#4c4450]"><strong class="text-[#261432]">Bắt đầu nhanh:</strong> tải file mẫu, điền dữ liệu theo các bảng có sẵn, chọn đúng tháng rồi chọn lại file ở bên dưới. File mẫu ghi rõ quy ước VND, mã tài khoản, hợp đồng và thanh toán.</div>
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <label class="w-label">Tháng nhập<input class="w-input mt-1" type="month" [(ngModel)]="month" /></label>
+      <label class="flex items-center gap-3 rounded-xl border border-[#eadfec] bg-[#fff7fc] p-3 text-sm font-semibold"><input type="checkbox" [(ngModel)]="overwrite" /> Ghi đè dữ liệu tháng này</label>
+    </div>
+    <label class="block rounded-xl border-2 border-dashed border-[#cfc2d2] p-4 text-center text-sm font-semibold text-[#43016a]">Chọn file .md<input class="mt-2 block w-full text-xs text-[#4c4450]" type="file" accept=".md,text/markdown" (change)="readFile($event)" /></label>
+    <label class="w-label">Hoặc dán nội dung Markdown<textarea class="w-input mt-1 min-h-44 font-mono text-xs" [(ngModel)]="markdown" placeholder="# Finora Import v1&#10;&#10;## Thu chi"></textarea></label>
+    <p *ngIf="error" class="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700">{{ error }}</p>
+    <p *ngIf="success" class="rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">{{ success }}</p>
+    <button type="button" class="w-btn w-btn-primary w-full" (click)="previewImport()" [disabled]="loading">{{ loading ? 'Đang kiểm tra…' : 'Kiểm tra file' }}</button>
+  </section>
+  <section *ngIf="preview" class="w-card space-y-3 p-4 sm:p-5">
+    <h2 class="text-base font-extrabold">Kết quả kiểm tra</h2>
+    <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4"><div class="rounded-xl bg-purple-50 p-3"><b>{{ preview.summary.accounts }}</b><br>Tài khoản</div><div class="rounded-xl bg-purple-50 p-3"><b>{{ preview.summary.transactions }}</b><br>Thu/chi</div><div class="rounded-xl bg-purple-50 p-3"><b>{{ preview.summary.loans }}</b><br>Khoản vay</div><div class="rounded-xl bg-purple-50 p-3"><b>{{ preview.summary.payments }}</b><br>Thanh toán</div></div>
+    <div *ngIf="preview.canCommit" class="space-y-3 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">
+      <p>File hợp lệ. Xác nhận bên dưới để ghi dữ liệu vào hệ thống.</p>
+      <button type="button" class="w-btn w-btn-primary w-full" (click)="commitImport()" [disabled]="committing">{{ committing ? 'Đang import…' : 'Xác nhận import dữ liệu' }}</button>
+      <p class="font-normal text-emerald-800">Import được chống trùng theo mã nguồn. Khi chọn “Ghi đè”, các dòng đã nhập sẽ được bỏ qua thay vì tạo thêm bản sao.</p>
+    </div>
+    <div *ngIf="preview.issues.length" class="space-y-2"><article *ngFor="let issue of preview.issues" class="rounded-xl bg-rose-50 p-3 text-xs text-rose-800"><b>Dòng {{ issue.line || '—' }}</b> · {{ issue.message }}</article></div>
+  </section>
+</main>

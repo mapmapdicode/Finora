@@ -86,6 +86,7 @@ export class DashboardComponent implements OnInit {
   readonly homeModules = [
     { path: '/accounts', icon: 'account_balance', title: 'Tài khoản', description: 'Ví, ngân hàng và số dư' },
     { path: '/transactions', icon: 'receipt_long', title: 'Giao dịch', description: 'Nhật ký thu, chi và chuyển tiền' },
+    { path: '/imports/markdown', icon: 'upload_file', title: 'Nhập dữ liệu', description: 'Import thu chi, khoản vay từ file Markdown' },
     { path: '/loans', icon: 'request_quote', title: 'Khoản vay', description: 'Lãi, lịch thu và lịch sử vay' },
     { path: '/assets', icon: 'savings', title: 'Tài sản đầu tư', description: 'Theo dõi tài sản và định giá' },
     { path: '/properties', icon: 'home', title: 'Bất động sản', description: 'Danh mục nhà đất của bạn' },

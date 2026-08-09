@@ -54,6 +54,12 @@ type loanPaymentRequestPayload struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+type markdownImportPreviewRequest struct {
+	Markdown  string `json:"markdown"`
+	Month     string `json:"month"`
+	Overwrite bool   `json:"overwrite"`
+}
+
 type assistantCommandApprovalRequest struct {
 	ApprovalID string `json:"approvalId"`
 }

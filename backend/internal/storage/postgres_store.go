@@ -707,6 +707,38 @@ func (s *PostgresStore) ListLoans(userID domain.ID) []domain.Loan {
 	return out
 }
 
+func (s *PostgresStore) UpsertImportReference(input domain.ImportReference) (domain.ImportReference, error) {
+	var out domain.ImportReference
+	err := s.pool.QueryRow(context.Background(), `
+		INSERT INTO markdown_import_references(user_id, external_code, entity_type, entity_id, import_month)
+		VALUES($1, $2, $3, $4, $5)
+		ON CONFLICT (user_id, entity_type, external_code) DO UPDATE
+		SET entity_id=EXCLUDED.entity_id, import_month=EXCLUDED.import_month, updated_at=now()
+		RETURNING id, user_id, external_code, entity_type, entity_id, import_month, created_at, updated_at
+	`, input.UserID, strings.TrimSpace(input.ExternalCode), strings.TrimSpace(input.EntityType), input.EntityID, input.ImportMonth).Scan(
+		&out.ID, &out.UserID, &out.ExternalCode, &out.EntityType, &out.EntityID, &out.ImportMonth, &out.CreatedAt, &out.UpdatedAt,
+	)
+	if err != nil {
+		return domain.ImportReference{}, err
+	}
+	return out, nil
+}
+
+func (s *PostgresStore) GetImportReference(userID domain.ID, entityType, externalCode string) (*domain.ImportReference, bool) {
+	var out domain.ImportReference
+	err := s.pool.QueryRow(context.Background(), `
+		SELECT id, user_id, external_code, entity_type, entity_id, import_month, created_at, updated_at
+		FROM markdown_import_references
+		WHERE user_id=$1 AND entity_type=$2 AND external_code=$3
+	`, userID, strings.TrimSpace(entityType), strings.TrimSpace(externalCode)).Scan(
+		&out.ID, &out.UserID, &out.ExternalCode, &out.EntityType, &out.EntityID, &out.ImportMonth, &out.CreatedAt, &out.UpdatedAt,
+	)
+	if err != nil {
+		return nil, false
+	}
+	return &out, true
+}
+
 func (s *PostgresStore) CreateLoanPayment(input domain.LoanPayment) (domain.LoanPayment, error) {
 	ctx := context.Background()
 	var out domain.LoanPayment

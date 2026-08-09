@@ -196,6 +196,18 @@ type Customer struct {
 	Phone          string `json:"phone,omitempty"`
 }
 
+// ImportReference preserves the source code from a Markdown import.  Domain
+// entities use UUIDs internally, while monthly Markdown files use stable codes
+// such as CASH and loan_07_0518 to link later files to earlier imports.
+type ImportReference struct {
+	Timestamped
+	UserID       ID     `json:"userId"`
+	ExternalCode string `json:"externalCode"`
+	EntityType   string `json:"entityType"`
+	EntityID     ID     `json:"entityId"`
+	ImportMonth  string `json:"importMonth"`
+}
+
 type LoanPayment struct {
 	Timestamped
 	UserID        ID        `json:"userId"`

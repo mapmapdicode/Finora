@@ -164,6 +164,21 @@ export class ApiService {
     return this.postWithIdempotency<Transaction>('/transactions', payload, 'create-transaction');
   }
 
+  previewMarkdownImport(payload: { markdown: string; month: string; overwrite: boolean }) {
+    return this.http.post<{
+      month: string; overwrite: boolean; canCommit: boolean;
+      summary: { accounts: number; transactions: number; loans: number; payments: number };
+      issues: Array<{ line: number; section: string; message: string }>;
+    }>(this.baseURL('/imports/markdown/preview'), payload);
+  }
+
+  commitMarkdownImport(payload: { markdown: string; month: string; overwrite: boolean }) {
+    return this.http.post<{
+      month: string;
+      result: { accountsCreated: number; transactionsCreated: number; loansCreated: number; paymentsCreated: number; rowsSkipped: number };
+    }>(this.baseURL('/imports/markdown/commit'), payload);
+  }
+
   getLoans(): Observable<Loan[]> {
     return this.http.get<Loan[]>(this.baseURL('/loans'));
   }

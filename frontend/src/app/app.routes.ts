@@ -22,6 +22,7 @@ import { DepositComponent } from './features/transactions/deposit.component';
 import { ReportsComponent } from './features/reports/reports.component';
 import { TransactionCreateComponent } from './features/transactions/transaction-create.component';
 import { LoanCreateComponent } from './features/loans/loan-create.component';
+import { MarkdownImportComponent } from './features/imports/markdown-import.component';
 
 export const appRoutes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
@@ -34,6 +35,7 @@ export const appRoutes: Routes = [
   { path: 'deposit', component: DepositComponent, canActivate: [authGuard] },
   { path: 'loans', component: LoanListComponent, canActivate: [authGuard] },
   { path: 'loans/create', component: LoanCreateComponent, canActivate: [authGuard] },
+  { path: 'imports/markdown', component: MarkdownImportComponent, canActivate: [authGuard] },
   { path: 'assets', component: AssetListComponent, canActivate: [authGuard] },
   { path: 'properties', component: PropertyListComponent, canActivate: [authGuard] },
   { path: 'forecast', component: ForecastPageComponent, canActivate: [authGuard] },

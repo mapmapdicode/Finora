@@ -26,6 +26,7 @@ type InMemoryStore struct {
 	customers               map[domain.ID]*domain.Customer
 	loans                   map[domain.ID]*domain.Loan
 	loanPayments            map[domain.ID]*domain.LoanPayment
+	importReferences        map[string]*domain.ImportReference
 	properties              map[domain.ID]*domain.Property
 	propertyValues          map[domain.ID]*domain.PropertyValuation
 	assets                  map[domain.ID]*domain.Asset
@@ -75,6 +76,7 @@ func NewInMemoryStore() *InMemoryStore {
 		customers:               map[domain.ID]*domain.Customer{},
 		loans:                   map[domain.ID]*domain.Loan{},
 		loanPayments:            map[domain.ID]*domain.LoanPayment{},
+		importReferences:        map[string]*domain.ImportReference{},
 		properties:              map[domain.ID]*domain.Property{},
 		propertyValues:          map[domain.ID]*domain.PropertyValuation{},
 		assets:                  map[domain.ID]*domain.Asset{},
@@ -870,6 +872,39 @@ func (s *InMemoryStore) ListLoans(userID domain.ID) []domain.Loan {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out
+}
+
+func importReferenceKey(userID domain.ID, entityType, externalCode string) string {
+	return string(userID) + "::" + strings.ToLower(strings.TrimSpace(entityType)) + "::" + strings.TrimSpace(externalCode)
+}
+
+func (s *InMemoryStore) UpsertImportReference(input domain.ImportReference) (domain.ImportReference, error) {
+	if input.UserID == "" || strings.TrimSpace(input.ExternalCode) == "" || strings.TrimSpace(input.EntityType) == "" || input.EntityID == "" {
+		return domain.ImportReference{}, errors.New("import reference fields are required")
+	}
+	key := importReferenceKey(input.UserID, input.EntityType, input.ExternalCode)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.importReferences[key]; ok {
+		input.ID, input.CreatedAt = existing.ID, existing.CreatedAt
+	} else {
+		input.ID, input.CreatedAt = newID(), now()
+	}
+	input.UpdatedAt = now()
+	copy := input
+	s.importReferences[key] = &copy
+	return copy, nil
+}
+
+func (s *InMemoryStore) GetImportReference(userID domain.ID, entityType, externalCode string) (*domain.ImportReference, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.importReferences[importReferenceKey(userID, entityType, externalCode)]
+	if !ok {
+		return nil, false
+	}
+	copy := *item
+	return &copy, true
 }
 
 func (s *InMemoryStore) ListLoanPayments(userID domain.ID, loanID domain.ID) []domain.LoanPayment {

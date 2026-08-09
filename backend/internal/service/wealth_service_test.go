@@ -258,6 +258,40 @@ func TestInterestReceiptStartsTheNextAccrualPeriodAndKeepsItsHistory(t *testing.
 	}
 }
 
+func TestInterestPaidInAdvanceContinuesAccruingFromThePaymentDate(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	user, portfolioID, err := setupDemoUser(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := store.ListAccounts(user.ID)[0]
+	start := time.Date(2026, time.August, 10, 0, 0, 0, 0, time.UTC)
+	loan, err := store.CreateLoan(domain.Loan{
+		UserID: user.ID, PortfolioID: portfolioID, Counterparty: "Borrower", Direction: domain.LoanDirectionReceivable,
+		PrincipalInitial: "200000000", PrincipalBalance: "200000000", AnnualRate: "0", DailyRatePerMillion: "3000",
+		DayCountBasis: "ACT_365", StartAt: start, DueAt: start.AddDate(0, 3, 0), Status: domain.LoanStatusActive,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewWealthService(store, nil)
+	paidAt := time.Date(2026, time.August, 20, 0, 0, 0, 0, time.UTC)
+	if _, err := svc.CreateLoanPayment(string(loan.ID), domain.LoanPayment{
+		AccountID: account.ID, Principal: "0", Interest: "6000000", InterestDays: 10, Fee: "0", Waived: "0", OccurredAt: paidAt,
+	}); err != nil {
+		t.Fatalf("record advance interest: %v", err)
+	}
+
+	rows, summary := svc.loanAccrualsByLoan(loan, time.Date(2026, time.August, 25, 0, 0, 0, 0, time.UTC))
+	if len(rows) != 2 || rows[0].Days != 10 || rows[1].Days != 5 {
+		t.Fatalf("expected 10/08–20/08 then 20/08–25/08, got %#v", rows)
+	}
+	if summary.TotalAccrued != 9000000 || summary.TotalPaid != 6000000 || rows[1].UnpaidInterest != "3000000.00" {
+		t.Fatalf("expected 9m accrued, 6m paid and 3m still unpaid, got summary=%#v rows=%#v", summary, rows)
+	}
+}
+
 func TestEnqueueAndProcessSePayEvent(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	ws, _, err := setupDemoUser(store)
