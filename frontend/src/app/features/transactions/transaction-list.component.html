@@ -209,6 +209,16 @@
 
       <!-- Filter Form Controls -->
       <form [formGroup]="filterForm" (ngSubmit)="applyFilters()" class="flex flex-wrap items-center gap-2">
+        <label class="sr-only" for="transaction-month">Lọc giao dịch theo tháng</label>
+        <input
+          id="transaction-month"
+          type="month"
+          formControlName="month"
+          class="w-input h-8 w-36 text-xs"
+          aria-label="Lọc giao dịch theo tháng"
+          (change)="selectMonth()"
+        />
+
         <select formControlName="accountId" class="w-select w-select-sm text-xs w-40" aria-label="Lọc giao dịch theo tài khoản" (change)="applyFilters()">
           <option value="">{{ 'common.all_accounts' | translate }}</option>
           <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }}</option>
@@ -252,11 +262,11 @@
       </label>
       <label>
         <span>Từ ngày</span>
-        <input type="date" formControlName="from" class="w-input" (change)="applyFilters()" />
+        <input type="date" formControlName="from" class="w-input" (change)="onCustomDateFilterChanged()" />
       </label>
       <label>
         <span>Đến ngày</span>
-        <input type="date" formControlName="to" class="w-input" (change)="applyFilters()" />
+        <input type="date" formControlName="to" class="w-input" (change)="onCustomDateFilterChanged()" />
       </label>
     </form>
 

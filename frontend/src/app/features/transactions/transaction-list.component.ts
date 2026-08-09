@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { debounceTime, distinctUntilChanged, Subject, takeUntil } from 'rxjs';
+import { debounceTime, distinctUntilChanged, forkJoin, Subject, takeUntil } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { Account, Transaction, TransactionListPage } from '../../shared/models';
 import { AuthService } from '../../core/services/auth.service';
@@ -21,6 +21,7 @@ type TransactionFilters = {
   search: string;
   from: string;
   to: string;
+  month: string;
   limit: number;
 };
 
@@ -34,6 +35,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   form!: FormGroup;
   filterForm!: FormGroup;
   items: Transaction[] = [];
+  summaryItems: Transaction[] = [];
   accounts: Account[] = [];
   accountsLoading = true;
   mode: 'transaction' | 'transfer' = 'transaction';
@@ -49,13 +51,13 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   accountNameById = new Map<string, string>();
 
   get totalIncome(): number {
-    return this.items
+    return this.summaryItems
       .filter((x) => x.type === 'income')
       .reduce((sum, x) => sum + (Number.parseFloat(String(x.amount)) || 0), 0);
   }
 
   get totalExpense(): number {
-    return this.items
+    return this.summaryItems
       .filter((x) => x.type === 'expense')
       .reduce((sum, x) => sum + (Number.parseFloat(String(x.amount)) || 0), 0);
   }
@@ -65,7 +67,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   }
 
   get currencies(): string[] {
-    return Array.from(new Set(this.items.map((item) => item.currency || 'VND')));
+    return Array.from(new Set(this.summaryItems.map((item) => item.currency || 'VND')));
   }
 
   get hasMultipleCurrencies(): boolean {
@@ -119,6 +121,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
       search: [''],
       from: [''],
       to: [''],
+      month: [this.currentMonth()],
       limit: [this.pageLimit],
     });
   }
@@ -166,14 +169,19 @@ export class TransactionListComponent implements OnInit, OnDestroy {
     const parsedLimit = Number.parseInt(rawLimit, 10);
     const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : this.pageLimit;
 
+    const from = params.get('from')?.trim() ?? '';
+    const to = params.get('to')?.trim() ?? '';
+    const requestedMonth = params.get('month')?.trim() ?? '';
+
     return {
       accountId: params.get('accountId')?.trim() ?? '',
       type: params.get('type')?.trim() ?? '',
       status: params.get('status')?.trim() ?? '',
       categoryId: params.get('categoryId')?.trim() ?? '',
       search: params.get('search')?.trim() ?? '',
-      from: params.get('from')?.trim() ?? '',
-      to: params.get('to')?.trim() ?? '',
+      from,
+      to,
+      month: this.isMonthKey(requestedMonth) ? requestedMonth : (from || to ? '' : this.currentMonth()),
       limit,
     };
   }
@@ -187,6 +195,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
       search: payload.search || null,
       from: payload.from || null,
       to: payload.to || null,
+      month: payload.month || null,
       limit: payload.limit ? String(payload.limit) : null,
     };
 
@@ -207,10 +216,13 @@ export class TransactionListComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.nextCursor = '';
     this.totalFiltered = 0;
-    this.api.getTransactions(payload).subscribe({
-      next: (page: TransactionListPage) => {
+    forkJoin({
+      page: this.api.getTransactions(payload),
+      summary: this.api.getTransactions({ ...payload, cursor: undefined, limit: 5000 }),
+    }).subscribe({
+      next: ({ page, summary }: { page: TransactionListPage; summary: TransactionListPage }) => {
         this.items = sortTransactionsNewestFirst(page.items ?? []);
-        this.items = sortTransactionsNewestFirst(this.items);
+        this.summaryItems = summary.items ?? [];
         this.nextCursor = page.nextCursor || '';
         this.totalFiltered = this.items.length + (this.nextCursor ? 1 : 0);
         this.loading = false;
@@ -260,6 +272,7 @@ export class TransactionListComponent implements OnInit, OnDestroy {
       search: '',
       from: '',
       to: '',
+      month: this.currentMonth(),
       limit: this.pageLimit,
     });
     this.applyFilters();
@@ -327,6 +340,19 @@ export class TransactionListComponent implements OnInit, OnDestroy {
   setMode(mode: 'transaction' | 'transfer') {
     this.mode = mode;
     this.form.patchValue({ mode });
+  }
+
+  selectMonth() {
+    if (!this.isMonthKey(this.filterForm.value.month || '')) {
+      this.filterForm.patchValue({ month: this.currentMonth() }, { emitEvent: false });
+    }
+    this.filterForm.patchValue({ from: '', to: '' }, { emitEvent: false });
+    this.applyFilters();
+  }
+
+  onCustomDateFilterChanged() {
+    this.filterForm.patchValue({ month: '' }, { emitEvent: false });
+    this.applyFilters();
   }
 
   openEntry(mode: 'transaction' | 'transfer' = 'transaction') {
@@ -424,16 +450,37 @@ export class TransactionListComponent implements OnInit, OnDestroy {
     const parsedLimit = Number.parseInt(limitValue, 10);
     const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : this.pageLimit;
     this.pageLimit = limit;
+    const month = this.isMonthKey(this.filterForm.value.month || '') ? this.filterForm.value.month : '';
+    const monthRange = month ? this.rangeForMonth(month) : null;
+
     return {
       accountId: accountId || undefined,
       type: this.filterForm.value.type || undefined,
       status: this.filterForm.value.status || undefined,
       categoryId: this.filterForm.value.categoryId || undefined,
       search: this.filterForm.value.search || undefined,
-      from: this.filterForm.value.from || undefined,
-      to: this.filterForm.value.to || undefined,
+      from: monthRange?.from || this.filterForm.value.from || undefined,
+      to: monthRange?.to || this.filterForm.value.to || undefined,
+      month,
       limit,
     };
+  }
+
+  private currentMonth(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  private isMonthKey(value: string): boolean {
+    return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+  }
+
+  private rangeForMonth(month: string): { from: string; to: string } {
+    const [yearRaw, monthRaw] = month.split('-');
+    const year = Number(yearRaw);
+    const monthIndex = Number(monthRaw);
+    const lastDay = new Date(year, monthIndex, 0).getDate();
+    return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, '0')}` };
   }
 
   private totalTextFor(type: 'income' | 'expense', sign: '+' | '-'): string {
