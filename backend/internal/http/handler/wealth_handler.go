@@ -874,6 +874,155 @@ func (h *WealthHandler) BotListTransactions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"accountId": account.ID, "from": from.Format(time.RFC3339), "to": to.Format(time.RFC3339), "items": items})
 }
 
+// botUserFromPath identifies the Finora workspace for the simple bot API.
+// This endpoint is intended for a user's own trusted automation; it therefore
+// does not require a JWT or account key. The UUID is still checked before any
+// read or write is allowed, and is attached to the request for audit records.
+func (h *WealthHandler) botUserFromPath(c *gin.Context) (domain.ID, bool) {
+	userID := domain.ID(strings.TrimSpace(c.Param("id")))
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "USER_ID_REQUIRED", "message": "userId is required"})
+		return "", false
+	}
+	if _, found := h.store.GetUserByID(userID); !found {
+		c.JSON(http.StatusNotFound, gin.H{"code": "USER_NOT_FOUND", "message": "user not found"})
+		return "", false
+	}
+	c.Set("user_id", string(userID))
+	c.Set("user_role", "bot")
+	return userID, true
+}
+
+func (h *WealthHandler) botAccountForUser(userID, accountID domain.ID) (*domain.Account, error) {
+	if accountID != "" {
+		account, found := h.store.GetAccount(accountID)
+		if !found || account.UserID != userID {
+			return nil, errors.New("account not found for user")
+		}
+		return account, nil
+	}
+	accounts := h.store.ListAccounts(userID)
+	if len(accounts) == 0 {
+		return nil, errors.New("user has no account; create an account first")
+	}
+	return &accounts[0], nil
+}
+
+// BotGetUserContext gives a bot the account and open-loan IDs it needs for
+// later calls. It intentionally returns only the current user's own data.
+func (h *WealthHandler) BotGetUserContext(c *gin.Context) {
+	userID, ok := h.botUserFromPath(c)
+	if !ok {
+		return
+	}
+	openLoans := make([]domain.Loan, 0)
+	for _, loan := range h.store.ListLoans(userID) {
+		if loan.Status != domain.LoanStatusClosed && loan.Status != domain.LoanStatusCancelled {
+			openLoans = append(openLoans, loan)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"userId":    userID,
+		"accounts":  h.store.ListAccounts(userID),
+		"openLoans": openLoans,
+	})
+}
+
+// BotCreateUserTransaction records a single income or expense. accountId is
+// optional so a one-account user can send only their user ID and transaction.
+func (h *WealthHandler) BotCreateUserTransaction(c *gin.Context) {
+	userID, ok := h.botUserFromPath(c)
+	if !ok {
+		return
+	}
+	var body dto.BotUserTransactionCreateRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+	typeValue := domain.TransactionType(strings.ToLower(strings.TrimSpace(body.Type)))
+	if typeValue != domain.TransactionTypeIncome && typeValue != domain.TransactionTypeExpense {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_TYPE", "message": "type must be income or expense"})
+		return
+	}
+	account, err := h.botAccountForUser(userID, domain.ID(strings.TrimSpace(body.AccountID)))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "ACCOUNT_NOT_FOUND", "message": err.Error()})
+		return
+	}
+	occurredAt := time.Now().UTC()
+	if raw := strings.TrimSpace(body.OccurredAt); raw != "" {
+		occurredAt, err = parseDateTime(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_DATE", "message": "occurredAt must be YYYY-MM-DD or RFC3339"})
+			return
+		}
+	}
+	transaction, err := h.service.CreateTransaction(domain.Transaction{
+		UserID: userID, AccountID: account.ID, PortfolioID: account.PortfolioID,
+		CategoryID: domain.ID(strings.TrimSpace(body.CategoryID)), Name: strings.TrimSpace(body.Name),
+		Type: typeValue, Amount: strings.TrimSpace(body.Amount), Currency: account.Currency,
+		Note: strings.TrimSpace(body.Note), OccurredAt: occurredAt,
+		Status: domain.TransactionStatusPosted, Source: "bot_user_id_api",
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	h.recordAudit(c, "", "transaction", transaction.ID, nil, transaction, "success", "trusted bot user-id API")
+	c.JSON(http.StatusCreated, gin.H{"transaction": transaction, "accountId": account.ID})
+}
+
+// BotCreateUserLoanPayment accepts interest-only, principal-only, and mixed
+// payments. The loan must belong to the user addressed in the route.
+func (h *WealthHandler) BotCreateUserLoanPayment(c *gin.Context) {
+	userID, ok := h.botUserFromPath(c)
+	if !ok {
+		return
+	}
+	var body dto.BotUserLoanPaymentCreateRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+	loanID := domain.ID(strings.TrimSpace(body.LoanID))
+	if loanID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "LOAN_ID_REQUIRED", "message": "loanId is required"})
+		return
+	}
+	loan, found := h.store.GetLoan(loanID)
+	if !found || loan.UserID != userID {
+		c.JSON(http.StatusNotFound, gin.H{"code": "LOAN_NOT_FOUND", "message": "loan not found for user"})
+		return
+	}
+	if loan.Status == domain.LoanStatusClosed || loan.Status == domain.LoanStatusCancelled {
+		c.JSON(http.StatusConflict, gin.H{"code": "LOAN_CLOSED", "message": "cannot record a payment for a closed loan"})
+		return
+	}
+	occurredAt := time.Now().UTC()
+	var err error
+	if raw := strings.TrimSpace(body.OccurredAt); raw != "" {
+		occurredAt, err = parseDateTime(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_DATE", "message": "occurredAt must be YYYY-MM-DD or RFC3339"})
+			return
+		}
+	}
+	payment, err := h.service.CreateLoanPayment(string(loanID), domain.LoanPayment{
+		UserID: userID, LoanID: loanID, AccountID: domain.ID(strings.TrimSpace(body.AccountID)),
+		Principal:    firstNonEmpty(strings.TrimSpace(body.Principal), "0"),
+		Interest:     firstNonEmpty(strings.TrimSpace(body.Interest), "0"),
+		InterestDays: body.InterestDays, Fee: firstNonEmpty(strings.TrimSpace(body.Fee), "0"),
+		Waived: firstNonEmpty(strings.TrimSpace(body.Waived), "0"), OccurredAt: occurredAt,
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	h.recordAudit(c, "", "loan_payment", payment.ID, nil, payment, "success", "trusted bot user-id API")
+	c.JSON(http.StatusCreated, gin.H{"payment": payment, "loanId": loanID})
+}
+
 func (h *WealthHandler) DeleteAccount(c *gin.Context) {
 	if !h.requireEditorRole(c) {
 		return

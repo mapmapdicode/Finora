@@ -200,6 +200,58 @@ func TestBotPublicAPICreatesAccountScopedLoan(t *testing.T) {
 	}
 }
 
+func TestSimpleBotAPIRecordsTransactionAndLoanPaymentByUserID(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("simple-bot@example.test", "Simple Bot", "hash")
+	ws, err := store.EnsureUserPortfolio("Simple Bot", "VND", userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portfolio, err := store.CreatePortfolio(domain.Portfolio{UserID: ws.ID, Name: "Main", BaseCurrency: "VND"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := store.CreateAccount(domain.Account{UserID: ws.ID, PortfolioID: portfolio.ID, Name: "Cash", Type: "cash", Currency: "VND"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loan, err := store.CreateLoan(domain.Loan{
+		UserID: ws.ID, PortfolioID: portfolio.ID, Counterparty: "Nguyen Van A",
+		Direction: domain.LoanDirectionReceivable, PrincipalInitial: "1000000", PrincipalBalance: "1000000",
+		AnnualRate: "0", DailyRatePerMillion: "3000", DayCountBasis: "365",
+		StartAt: time.Now().AddDate(0, 0, -3), DueAt: time.Now().AddDate(0, 1, 0),
+		Status: domain.LoanStatusActive, SettlementAccountID: account.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
+
+	transactionW := httptest.NewRecorder()
+	transactionC, _ := gin.CreateTestContext(transactionW)
+	transactionC.Request = httptest.NewRequest(http.MethodPost, "/public/v1/users/"+string(userID)+"/transactions", strings.NewReader(`{"type":"expense","amount":"125000","name":"Lunch"}`))
+	transactionC.Request.Header.Set("Content-Type", "application/json")
+	transactionC.Params = gin.Params{{Key: "id", Value: string(userID)}}
+	h.BotCreateUserTransaction(transactionC)
+	if transactionW.Code != http.StatusCreated || !strings.Contains(transactionW.Body.String(), string(account.ID)) {
+		t.Fatalf("transaction status=%d body=%s", transactionW.Code, transactionW.Body.String())
+	}
+
+	paymentW := httptest.NewRecorder()
+	paymentC, _ := gin.CreateTestContext(paymentW)
+	paymentC.Request = httptest.NewRequest(http.MethodPost, "/public/v1/users/"+string(userID)+"/loan-payments", strings.NewReader(`{"loanId":"`+string(loan.ID)+`","principalAmount":"1000000","interestAmount":"9000"}`))
+	paymentC.Request.Header.Set("Content-Type", "application/json")
+	paymentC.Params = gin.Params{{Key: "id", Value: string(userID)}}
+	h.BotCreateUserLoanPayment(paymentC)
+	if paymentW.Code != http.StatusCreated {
+		t.Fatalf("payment status=%d body=%s", paymentW.Code, paymentW.Body.String())
+	}
+	updated, found := store.GetLoan(loan.ID)
+	if !found || updated.PrincipalBalance != "0.00" || updated.Status != domain.LoanStatusClosed {
+		t.Fatalf("loan was not settled: %+v", updated)
+	}
+}
+
 func (f *fakeBankHub) Configured() bool { return true }
 func (f *fakeBankHub) CreateLink(context.Context, string, string) (sepay.LinkSession, error) {
 	return sepay.LinkSession{}, nil

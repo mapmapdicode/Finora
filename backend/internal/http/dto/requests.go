@@ -115,6 +115,32 @@ type BotTransactionCreateRequest struct {
 	OccurredAt string `json:"occurredAt"`
 }
 
+// BotUserTransactionCreateRequest is the low-friction ingestion format for a
+// trusted personal bot. The user ID in the URL chooses the workspace; accountId
+// is optional and defaults to that user's first account.
+type BotUserTransactionCreateRequest struct {
+	AccountID  string `json:"accountId"`
+	Type       string `json:"type"`
+	Amount     string `json:"amount"`
+	Name       string `json:"name"`
+	CategoryID string `json:"categoryId"`
+	Note       string `json:"note"`
+	OccurredAt string `json:"occurredAt"`
+}
+
+// BotUserLoanPaymentCreateRequest supports interest-only, principal-only, or
+// combined payments. Set the irrelevant amount to "0" or omit it.
+type BotUserLoanPaymentCreateRequest struct {
+	LoanID       string `json:"loanId"`
+	AccountID    string `json:"accountId"`
+	Principal    string `json:"principalAmount"`
+	Interest     string `json:"interestAmount"`
+	InterestDays int    `json:"interestDays"`
+	Fee          string `json:"feeAmount"`
+	Waived       string `json:"waivedAmount"`
+	OccurredAt   string `json:"occurredAt"`
+}
+
 // BotLoanCreateRequest is intentionally scoped to the account selected in the
 // public API path.  In particular, it has no settlementAccountId or
 // portfolioId fields, so a bot account key cannot move money in another

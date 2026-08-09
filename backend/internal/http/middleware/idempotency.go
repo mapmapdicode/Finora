@@ -105,6 +105,12 @@ func IdempotencyGuard(stores ...storage.Store) gin.HandlerFunc {
 		}
 
 		userID := currentContextString(c, "user_id")
+		// Public bot routes authenticate or validate their target inside the
+		// handler, after this middleware runs. Scope their idempotency record by
+		// the route ID meanwhile, so two users cannot collide on the same key.
+		if userID == "anonymous" && strings.TrimSpace(c.Param("id")) != "" {
+			userID = "route:" + strings.TrimSpace(c.Param("id"))
+		}
 		sum := sha256.Sum256(rawBody)
 		bodyHash := hex.EncodeToString(sum[:])
 		marker := c.Request.Method + ":" + c.Request.URL.Path + ":" + userID + ":" + key + ":" + bodyHash

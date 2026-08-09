@@ -1,5 +1,7 @@
 # Bot Public API
 
+> Cần bot đơn giản chỉ dùng `userId`? Xem [22-bot-simple-ingest-api.md](./22-bot-simple-ingest-api.md). Tài liệu này mô tả API có account key, phù hợp tích hợp bên thứ ba và an toàn hơn.
+
 API này dành cho bot/automation ghi nhận giao dịch vào **một** account Finora. Không dùng JWT; mỗi request bắt buộc có secret riêng theo account trong header `X-Finora-Account-Key`.
 
 Mọi `POST` public API phải có thêm `Idempotency-Key` duy nhất (UUID được khuyến nghị). Gửi lại đúng key cùng payload sẽ nhận lại response đã tạo, không tạo bản ghi thứ hai.

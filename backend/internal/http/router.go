@@ -64,6 +64,12 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 	r.POST("/public/v1/accounts/:id/transactions", middleware.IdempotencyGuard(store), h.BotCreateTransaction)
 	r.POST("/public/v1/accounts/:id/loans", middleware.IdempotencyGuard(store), h.BotCreateLoan)
 	r.GET("/public/v1/accounts/:id/transactions/history", h.BotListTransactions)
+	// Simple ingestion routes for a user's own trusted bot. They deliberately
+	// use the user UUID in the path so an integration can operate without a JWT
+	// or an account-specific key. See docs/development/22-bot-simple-ingest-api.md.
+	r.GET("/public/v1/users/:id/context", h.BotGetUserContext)
+	r.POST("/public/v1/users/:id/transactions", middleware.IdempotencyGuard(store), h.BotCreateUserTransaction)
+	r.POST("/public/v1/users/:id/loan-payments", middleware.IdempotencyGuard(store), h.BotCreateUserLoanPayment)
 	// Stable provider-facing path. Keep this outside /api/v1 so a deployed
 	// webhook URL remains short and does not change with API versioning.
 	r.POST("/hooks/sepay-bankhub-ipn", h.BankHubIPN)
