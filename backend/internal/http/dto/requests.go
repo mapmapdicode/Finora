@@ -128,6 +128,18 @@ type BotUserTransactionCreateRequest struct {
 	OccurredAt string `json:"occurredAt"`
 }
 
+// BotUserTransactionUpdateRequest uses pointers so a bot can change exactly
+// the stated fields, including intentionally clearing a name or note.
+type BotUserTransactionUpdateRequest struct {
+	AccountID  *string `json:"accountId"`
+	Type       *string `json:"type"`
+	Amount     *string `json:"amount"`
+	Name       *string `json:"name"`
+	CategoryID *string `json:"categoryId"`
+	Note       *string `json:"note"`
+	OccurredAt *string `json:"occurredAt"`
+}
+
 // BotUserLoanPaymentCreateRequest supports interest-only, principal-only, or
 // combined payments. Set the irrelevant amount to "0" or omit it.
 type BotUserLoanPaymentCreateRequest struct {

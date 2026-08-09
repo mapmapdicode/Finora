@@ -732,6 +732,20 @@ func (s *InMemoryStore) CreateTransaction(input domain.Transaction) (domain.Tran
 	return input, nil
 }
 
+func (s *InMemoryStore) UpdateTransaction(input domain.Transaction) (domain.Transaction, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, ok := s.transactions[input.ID]
+	if !ok || current.UserID != input.UserID {
+		return domain.Transaction{}, errors.New("transaction not found")
+	}
+	input.CreatedAt = current.CreatedAt
+	input.UpdatedAt = now()
+	copy := input
+	s.transactions[input.ID] = &copy
+	return copy, nil
+}
+
 func (s *InMemoryStore) GetTransaction(id domain.ID) (*domain.Transaction, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -103,7 +103,33 @@ Ví dụ ghi thu nhập:
 
 Response `201` chứa `{ "transaction": {...}, "accountId": "..." }`.
 
-## 3. Ghi nhận thu lãi, thu gốc hoặc cả hai
+## 3. Sửa giao dịch bot đã ghi nhầm
+
+Bot có thể sửa giao dịch nó đã tạo bằng `transaction.id` trả về khi tạo. Chỉ giao dịch có `source: "bot_user_id_api"` được sửa bằng API này; Finora chặn sửa bút toán khoản vay, chuyển tiền và ngân hàng để không làm sai số dư liên quan.
+
+```http
+PATCH /public/v1/users/{userId}/transactions/{transactionId}
+Content-Type: application/json
+Idempotency-Key: <UUID mới cho lần sửa này>
+```
+
+Ví dụ sửa giao dịch “Ăn cả ngày” bị bot ghi sai ngày 02/08 thành tối 09/08:
+
+```bash
+curl -X PATCH 'http://110.172.29.117:2001/public/v1/users/USER_ID/transactions/TRANSACTION_ID' \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: 6ab1f8c2-3960-4450-a8b5-551037c0dd2d' \
+  --data '{
+    "occurredAt": "2026-08-09T23:47:00+07:00",
+    "amount": "150000",
+    "name": "Ăn cả ngày",
+    "note": "Bot sửa lại ngày theo yêu cầu người dùng"
+  }'
+```
+
+Tất cả trường trong body là tùy chọn; chỉ trường xuất hiện mới bị thay đổi: `accountId`, `type` (`income`/`expense`), `amount`, `name`, `categoryId`, `note`, `occurredAt`. Response `200` trả `{ "transaction": {...} }` đã cập nhật.
+
+## 4. Ghi nhận thu lãi, thu gốc hoặc cả hai
 
 ```http
 POST /public/v1/users/{userId}/loan-payments

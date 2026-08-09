@@ -1122,6 +1122,33 @@ func (s *WealthService) CreateTransaction(input domain.Transaction) (domain.Tran
 	return s.store.CreateTransactionStrict(input)
 }
 
+func (s *WealthService) UpdateTransaction(input domain.Transaction) (domain.Transaction, error) {
+	current, found := s.store.GetTransaction(input.ID)
+	if !found || current.UserID != input.UserID {
+		return domain.Transaction{}, errors.New("transaction not found")
+	}
+	if _, ok := s.validateTransactionType(input.Type); !ok {
+		return domain.Transaction{}, errors.New("transaction type is invalid")
+	}
+	if _, ok := s.validateTransactionStatus(input.Status); !ok {
+		return domain.Transaction{}, errors.New("transaction status is invalid")
+	}
+	amount, err := parseAmount(input.Amount)
+	if err != nil || amount <= 0 {
+		return domain.Transaction{}, errors.New("amount must be greater than 0")
+	}
+	account, found := s.store.GetAccount(input.AccountID)
+	if !found || account.UserID != input.UserID {
+		return domain.Transaction{}, errors.New("account does not belong to user")
+	}
+	input.PortfolioID = account.PortfolioID
+	input.Currency = account.Currency
+	if input.OccurredAt.IsZero() {
+		return domain.Transaction{}, errors.New("occurredAt is required")
+	}
+	return s.store.UpdateTransaction(input)
+}
+
 func (s *WealthService) CreateTransfer(input domain.Transfer) (domain.Transfer, error) {
 	if input.Amount == "" {
 		return domain.Transfer{}, errors.New("amount is required")

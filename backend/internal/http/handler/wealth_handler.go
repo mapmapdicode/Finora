@@ -973,6 +973,77 @@ func (h *WealthHandler) BotCreateUserTransaction(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"transaction": transaction, "accountId": account.ID})
 }
 
+// BotUpdateUserTransaction corrects a transaction previously created by the
+// simple bot API. It deliberately cannot edit loan, transfer, or bank-origin
+// ledger entries because those records have related financial state.
+func (h *WealthHandler) BotUpdateUserTransaction(c *gin.Context) {
+	userID, ok := h.botUserFromPath(c)
+	if !ok {
+		return
+	}
+	transactionID := domain.ID(strings.TrimSpace(c.Param("transactionId")))
+	transaction, found := h.store.GetTransaction(transactionID)
+	if !found || transaction.UserID != userID {
+		c.JSON(http.StatusNotFound, gin.H{"code": "TRANSACTION_NOT_FOUND", "message": "transaction not found for user"})
+		return
+	}
+	if transaction.Source != "bot_user_id_api" {
+		c.JSON(http.StatusConflict, gin.H{"code": "TRANSACTION_NOT_EDITABLE", "message": "only transactions created by this bot API can be edited"})
+		return
+	}
+	var body dto.BotUserTransactionUpdateRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_JSON", "message": err.Error()})
+		return
+	}
+	updated := *transaction
+	if body.AccountID != nil {
+		account, err := h.botAccountForUser(userID, domain.ID(strings.TrimSpace(*body.AccountID)))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "ACCOUNT_NOT_FOUND", "message": err.Error()})
+			return
+		}
+		updated.AccountID = account.ID
+		updated.PortfolioID = account.PortfolioID
+		updated.Currency = account.Currency
+	}
+	if body.Type != nil {
+		typeValue := domain.TransactionType(strings.ToLower(strings.TrimSpace(*body.Type)))
+		if typeValue != domain.TransactionTypeIncome && typeValue != domain.TransactionTypeExpense {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_TYPE", "message": "type must be income or expense"})
+			return
+		}
+		updated.Type = typeValue
+	}
+	if body.Amount != nil {
+		updated.Amount = strings.TrimSpace(*body.Amount)
+	}
+	if body.Name != nil {
+		updated.Name = strings.TrimSpace(*body.Name)
+	}
+	if body.CategoryID != nil {
+		updated.CategoryID = domain.ID(strings.TrimSpace(*body.CategoryID))
+	}
+	if body.Note != nil {
+		updated.Note = strings.TrimSpace(*body.Note)
+	}
+	if body.OccurredAt != nil {
+		occurredAt, err := parseDateTime(strings.TrimSpace(*body.OccurredAt))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_DATE", "message": "occurredAt must be YYYY-MM-DD or RFC3339"})
+			return
+		}
+		updated.OccurredAt = occurredAt
+	}
+	result, err := h.service.UpdateTransaction(updated)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": err.Error()})
+		return
+	}
+	h.recordAudit(c, "", "transaction", result.ID, transaction, result, "success", "trusted bot user-id API correction")
+	c.JSON(http.StatusOK, gin.H{"transaction": result})
+}
+
 // BotCreateUserLoanPayment accepts interest-only, principal-only, and mixed
 // payments. The loan must belong to the user addressed in the route.
 func (h *WealthHandler) BotCreateUserLoanPayment(c *gin.Context) {

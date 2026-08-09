@@ -38,6 +38,7 @@ type Store interface {
 
 	CreateTransactionStrict(input domain.Transaction) (domain.Transaction, error)
 	CreateTransaction(input domain.Transaction) (domain.Transaction, error)
+	UpdateTransaction(input domain.Transaction) (domain.Transaction, error)
 	GetTransaction(id domain.ID) (*domain.Transaction, bool)
 	ListTransactions(userID domain.ID, accountID domain.ID) []domain.Transaction
 

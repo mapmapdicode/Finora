@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"wealthos-backend/internal/domain"
 )
@@ -455,6 +456,38 @@ func (s *PostgresStore) CreateTransaction(input domain.Transaction) (domain.Tran
 		&out.Type, &out.Amount, &out.Currency, &out.Note, &out.OccurredAt, &out.Status, &out.Source, &out.CreatedAt, &out.UpdatedAt,
 	)
 	if err != nil {
+		return domain.Transaction{}, err
+	}
+	return out, nil
+}
+
+func (s *PostgresStore) UpdateTransaction(input domain.Transaction) (domain.Transaction, error) {
+	var out domain.Transaction
+	err := s.pool.QueryRow(context.Background(), `
+		UPDATE transactions
+		SET account_id=$3,
+			category_id=NULLIF($4, '')::UUID,
+			portfolio_id=NULLIF($5, '')::UUID,
+			name=$6,
+			type=$7,
+			amount=CAST($8 AS NUMERIC),
+			currency=$9,
+			note=$10,
+			occurred_at=$11,
+			status=$12,
+			updated_at=now()
+		WHERE id=$1 AND user_id=$2
+		RETURNING id, user_id, account_id, COALESCE(category_id::text, ''), COALESCE(portfolio_id::text, ''),
+		          COALESCE(name, ''), type, amount::text, currency, note, occurred_at, status, source, created_at, updated_at
+	`, input.ID, input.UserID, input.AccountID, nilUUID(input.CategoryID), nilUUID(input.PortfolioID), input.Name,
+		input.Type, input.Amount, input.Currency, input.Note, input.OccurredAt.UTC(), input.Status).Scan(
+		&out.ID, &out.UserID, &out.AccountID, &out.CategoryID, &out.PortfolioID, &out.Name,
+		&out.Type, &out.Amount, &out.Currency, &out.Note, &out.OccurredAt, &out.Status, &out.Source, &out.CreatedAt, &out.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Transaction{}, errors.New("transaction not found")
+		}
 		return domain.Transaction{}, err
 	}
 	return out, nil

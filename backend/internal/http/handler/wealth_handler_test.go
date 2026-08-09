@@ -236,6 +236,21 @@ func TestSimpleBotAPIRecordsTransactionAndLoanPaymentByUserID(t *testing.T) {
 	if transactionW.Code != http.StatusCreated || !strings.Contains(transactionW.Body.String(), string(account.ID)) {
 		t.Fatalf("transaction status=%d body=%s", transactionW.Code, transactionW.Body.String())
 	}
+	var createdTransaction struct {
+		Transaction domain.Transaction `json:"transaction"`
+	}
+	if err := json.Unmarshal(transactionW.Body.Bytes(), &createdTransaction); err != nil {
+		t.Fatal(err)
+	}
+	correctionW := httptest.NewRecorder()
+	correctionC, _ := gin.CreateTestContext(correctionW)
+	correctionC.Request = httptest.NewRequest(http.MethodPatch, "/public/v1/users/"+string(userID)+"/transactions/"+string(createdTransaction.Transaction.ID), strings.NewReader(`{"amount":"150000","name":"All-day food","occurredAt":"2026-08-09T23:47:00+07:00"}`))
+	correctionC.Request.Header.Set("Content-Type", "application/json")
+	correctionC.Params = gin.Params{{Key: "id", Value: string(userID)}, {Key: "transactionId", Value: string(createdTransaction.Transaction.ID)}}
+	h.BotUpdateUserTransaction(correctionC)
+	if correctionW.Code != http.StatusOK || !strings.Contains(correctionW.Body.String(), "All-day food") {
+		t.Fatalf("correction status=%d body=%s", correctionW.Code, correctionW.Body.String())
+	}
 
 	paymentW := httptest.NewRecorder()
 	paymentC, _ := gin.CreateTestContext(paymentW)
