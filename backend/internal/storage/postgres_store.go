@@ -331,10 +331,11 @@ func (s *PostgresStore) FirstPortfolio(userID domain.ID) (domain.Portfolio, bool
 
 func (s *PostgresStore) GetAccount(id domain.ID) (*domain.Account, bool) {
 	row := s.pool.QueryRow(context.Background(), `
-		SELECT id, user_id, portfolio_id, name, type, currency, created_at, updated_at
+		SELECT id, user_id, portfolio_id, name, type, currency,
+		       COALESCE(balance_override::text, ''), COALESCE(balance_override_at, '0001-01-01 00:00:00+00'::timestamptz), created_at, updated_at
 		FROM accounts WHERE id=$1`, id)
 	var a domain.Account
-	if err := row.Scan(&a.ID, &a.UserID, &a.PortfolioID, &a.Name, &a.Type, &a.Currency, &a.CreatedAt, &a.UpdatedAt); err != nil {
+	if err := row.Scan(&a.ID, &a.UserID, &a.PortfolioID, &a.Name, &a.Type, &a.Currency, &a.BalanceOverride, &a.BalanceOverrideAt, &a.CreatedAt, &a.UpdatedAt); err != nil {
 		return nil, false
 	}
 	return &a, true
@@ -346,9 +347,10 @@ func (s *PostgresStore) CreateAccount(input domain.Account) (domain.Account, err
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO accounts(user_id, portfolio_id, name, type, currency)
 		VALUES($1, $2, $3, $4, $5)
-		RETURNING id, user_id, portfolio_id, name, type, currency, created_at, updated_at
+		RETURNING id, user_id, portfolio_id, name, type, currency,
+		          COALESCE(balance_override::text, ''), COALESCE(balance_override_at, '0001-01-01 00:00:00+00'::timestamptz), created_at, updated_at
 	`, input.UserID, nilUUID(input.PortfolioID), input.Name, input.Type, defaultCurrency(input.Currency)).Scan(
-		&out.ID, &out.UserID, &out.PortfolioID, &out.Name, &out.Type, &out.Currency, &out.CreatedAt, &out.UpdatedAt,
+		&out.ID, &out.UserID, &out.PortfolioID, &out.Name, &out.Type, &out.Currency, &out.BalanceOverride, &out.BalanceOverrideAt, &out.CreatedAt, &out.UpdatedAt,
 	)
 	if err != nil {
 		return domain.Account{}, err
@@ -358,7 +360,8 @@ func (s *PostgresStore) CreateAccount(input domain.Account) (domain.Account, err
 
 func (s *PostgresStore) ListAccounts(userID domain.ID) []domain.Account {
 	rows, err := s.pool.Query(context.Background(), `
-		SELECT id, user_id, portfolio_id, name, type, currency, created_at, updated_at
+		SELECT id, user_id, portfolio_id, name, type, currency,
+		       COALESCE(balance_override::text, ''), COALESCE(balance_override_at, '0001-01-01 00:00:00+00'::timestamptz), created_at, updated_at
 		FROM accounts WHERE user_id=$1
 		ORDER BY name ASC
 	`, userID)
@@ -369,7 +372,7 @@ func (s *PostgresStore) ListAccounts(userID domain.ID) []domain.Account {
 	out := make([]domain.Account, 0)
 	for rows.Next() {
 		var a domain.Account
-		if err := rows.Scan(&a.ID, &a.UserID, &a.PortfolioID, &a.Name, &a.Type, &a.Currency, &a.CreatedAt, &a.UpdatedAt); err == nil {
+		if err := rows.Scan(&a.ID, &a.UserID, &a.PortfolioID, &a.Name, &a.Type, &a.Currency, &a.BalanceOverride, &a.BalanceOverrideAt, &a.CreatedAt, &a.UpdatedAt); err == nil {
 			out = append(out, a)
 		}
 	}

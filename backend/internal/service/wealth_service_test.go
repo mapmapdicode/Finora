@@ -1275,6 +1275,43 @@ func TestPendingTransactionDoesNotAffectNetWorth(t *testing.T) {
 	}
 }
 
+func TestAccountBalanceOverrideReplacesLedgerCashWithoutTransaction(t *testing.T) {
+	clearSnapshotState()
+	store := storage.NewInMemoryStore()
+	userID := store.SeedDemoUser("override@wealthos.vn", "Override User", "pass")
+	ws, err := store.EnsureUserPortfolio("Override", "VND", userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portfolio, ok := store.FirstPortfolio(ws.ID)
+	if !ok {
+		t.Fatal("missing portfolio")
+	}
+	account, err := store.CreateAccount(domain.Account{
+		UserID:            ws.ID,
+		PortfolioID:       portfolio.ID,
+		Name:              "Cash",
+		Type:              "cash",
+		Currency:          "VND",
+		BalanceOverride:   "42",
+		BalanceOverrideAt: time.Now().UTC().Add(-time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewWealthService(store, nil)
+	if _, err := svc.CreateTransaction(domain.Transaction{UserID: ws.ID, AccountID: account.ID, PortfolioID: portfolio.ID, Type: domain.TransactionTypeIncome, Amount: "100", Currency: "VND", Status: domain.TransactionStatusPosted, OccurredAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := svc.ComputeNetWorth(ws.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Cash != "42.00" || result.NetWorth != "42.00" {
+		t.Fatalf("expected balance override to replace ledger cash, got %+v", result)
+	}
+}
+
 func TestCreateTransactionRejectsNonPositiveAmount(t *testing.T) {
 	clearSnapshotState()
 	store := storage.NewInMemoryStore()

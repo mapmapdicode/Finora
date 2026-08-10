@@ -113,11 +113,13 @@ type Portfolio struct {
 
 type Account struct {
 	Timestamped
-	UserID      ID     `json:"userId"`
-	PortfolioID ID     `json:"portfolioId"`
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Currency    string `json:"currency"`
+	UserID            ID        `json:"userId"`
+	PortfolioID       ID        `json:"portfolioId"`
+	Name              string    `json:"name"`
+	Type              string    `json:"type"`
+	Currency          string    `json:"currency"`
+	BalanceOverride   string    `json:"-"`
+	BalanceOverrideAt time.Time `json:"-"`
 }
 
 // BotAccountKey authorizes an external bot for exactly one Finora account.

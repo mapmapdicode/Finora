@@ -361,7 +361,9 @@ func (s *WealthService) computeNetWorthForPortfolioAt(userID, portfolioID domain
 		reconciledAccounts = len(s.portfolioAccounts(userID, portfolioID))
 	}
 
-	net := cash + valuationAssets + receivables + accruedReceivableInterest - liabilities - accruedPayableInterest
+	// Unpaid interest is shown separately as accrued interest. It is not cash
+	// or settled principal yet, so it must not inflate the headline net worth.
+	net := cash + valuationAssets + receivables - liabilities
 	current := netWorthSnapshot{
 		AsOfAt:             asOf,
 		BaseCurrency:       ws.BaseCurrency,
@@ -411,13 +413,12 @@ func (s *WealthService) portfolioAccounts(userID, portfolioID domain.ID) []domai
 
 func (s *WealthService) computeCash(userID, portfolioID domain.ID, asOf time.Time) float64 {
 	txs := s.store.ListTransactions(userID, "")
+	accounts := s.portfolioAccounts(userID, portfolioID)
 	accountByID := map[domain.ID]domain.Account{}
-	if portfolioID != "" {
-		for _, account := range s.portfolioAccounts(userID, portfolioID) {
-			accountByID[account.ID] = account
-		}
+	for _, account := range accounts {
+		accountByID[account.ID] = account
 	}
-	cash := 0.0
+	cashByAccount := map[domain.ID]float64{}
 	for _, t := range txs {
 		if !s.matchesPortfolio(portfolioID, t.PortfolioID, t.AccountID, accountByID) {
 			continue
@@ -434,21 +435,29 @@ func (s *WealthService) computeCash(userID, portfolioID domain.ID, asOf time.Tim
 		}
 		switch t.Type {
 		case domain.TransactionTypeIncome:
-			cash += amt
+			cashByAccount[t.AccountID] += amt
 		case domain.TransactionTypeExpense, domain.TransactionTypeInvestment, domain.TransactionTypeLoanDisbursement:
-			cash -= amt
+			cashByAccount[t.AccountID] -= amt
 		case domain.TransactionTypeLoanPayment:
 			// Keep loan payment sign aligned with loan direction when possible.
 			sign := 1.0
 			if paymentSign, ok := s.loanPaymentSign(userID, portfolioID, t); ok {
 				sign = paymentSign
 			}
-			cash += sign * amt
+			cashByAccount[t.AccountID] += sign * amt
 		case domain.TransactionTypeTransfer, domain.TransactionTypeValuationAdj:
 			// ignored in cash rollup
 		default:
 			// ignore unknown types
 		}
+	}
+	cash := 0.0
+	for _, account := range accounts {
+		if account.BalanceOverride != "" && (account.BalanceOverrideAt.IsZero() || !asOf.Before(account.BalanceOverrideAt)) {
+			cash += parseAmountWithFallback(account.BalanceOverride)
+			continue
+		}
+		cash += cashByAccount[account.ID]
 	}
 	return cash
 }
