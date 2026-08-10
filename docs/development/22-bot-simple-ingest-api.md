@@ -58,9 +58,7 @@ Chỉ khoản có `status` đang hiệu lực được trả trong `openLoans`; 
 
 ## 2. Báo cáo lãi cộng dồn hằng ngày (dùng thẳng cho cronjob)
 
-```http
 GET /public/v1/users/{userId}/loans/accrual-report
-```
 
 ```bash
 curl -s 'http://110.172.29.117:2001/public/v1/users/USER_ID/loans/accrual-report' \
@@ -80,21 +78,19 @@ Ví dụ `markdown`:
 loan_17_0710 (30M) — 30 ngày — 2,700k
 loan_01_0209 (100M) — 29 ngày — 8,700k
 ...
-
-Tổng gốc: 1,198M
-Lãi/ngày: 3,594k
-Tổng lãi cộng dồn: 57,963k
 ```
 
 Mỗi dòng gồm mã khoản vay Markdown nếu có (nếu không dùng tên đối tác), gốc còn lại, số ngày từ lần nhận lãi gần nhất và lãi chưa nhận. Khoản đã tất toán hoặc khoản đi vay không được đưa vào báo cáo phải thu này.
 
+Tổng gốc: 1,198M
+Lãi/ngày: 3,594k
+Tổng lãi cộng dồn: 57,963k
+
 ## 3. Liệt kê thu/chi theo khoảng thời gian
 
-```http
 GET /public/v1/users/{userId}/transactions?from=YYYY-MM-DD&to=YYYY-MM-DD
-```
 
-Endpoint này chỉ trả giao dịch thu nhập (`income`) và chi tiêu (`expense`), theo thứ tự **mới nhất trước**. Các dòng giải ngân, thu nợ/trả nợ và chuyển tiền không nằm trong danh sách để bot có đúng sổ Thu/Chi.
+Endpoint này chỉ trả giao dịch thu nhập (`income`) và chi tiêu (`expense`), theo thứ tự mới nhất trước. Các dòng giải ngân, thu nợ/trả nợ và chuyển tiền không nằm trong danh sách để bot có đúng sổ Thu/Chi.
 
 ```bash
 curl -s 'http://110.172.29.117:2001/public/v1/users/USER_ID/transactions?from=2026-08-01&to=2026-08-31&limit=100'
@@ -107,11 +103,10 @@ Tham số:
 | `from`, `to` | Có | `YYYY-MM-DD` hoặc RFC3339. Nếu gửi ngày không có giờ, `to` bao gồm hết ngày đó. |
 | `accountId` | Không | Chỉ lấy giao dịch của một tài khoản thuộc chính user. |
 | `type` | Không | `income` hoặc `expense`. Bỏ trống để lấy cả thu và chi. |
-| `limit` | Không | Số dòng mỗi lần, mặc định `100`, tối đa `500`. |
+| `limit` | Không | Số dòng mỗi lần, mặc định 100, tối đa 500. |
 | `cursor` | Không | Lấy trang sau, dùng nguyên giá trị `nextCursor` server trả về và URL-encode khi cần. |
 
 Ví dụ chỉ tìm các khoản chi trong tháng:
-
 ```bash
 curl -s 'http://110.172.29.117:2001/public/v1/users/USER_ID/transactions?from=2026-08-01&to=2026-08-31&type=expense&accountId=ACCOUNT_ID&limit=100'
 ```
@@ -141,11 +136,9 @@ Khi `nextCursor` khác rỗng, bot tiếp tục gọi cùng bộ lọc với `&c
 
 ## 4. Ghi thu nhập hoặc chi tiêu
 
-```http
 POST /public/v1/users/{userId}/transactions
 Content-Type: application/json
 Idempotency-Key: <UUID mới cho nghiệp vụ này>
-```
 
 Ví dụ ghi chi tiền ăn vào tài khoản tiền mặt:
 
@@ -214,11 +207,9 @@ Tất cả trường trong body là tùy chọn; chỉ trường xuất hiện m
 
 ## 6. Ghi nhận thu lãi, thu gốc hoặc cả hai
 
-```http
 POST /public/v1/users/{userId}/loan-payments
 Content-Type: application/json
 Idempotency-Key: <UUID mới cho nghiệp vụ này>
-```
 
 ### Chỉ thu lãi
 
@@ -268,7 +259,7 @@ curl -X POST 'http://110.172.29.117:2001/public/v1/users/USER_ID/loan-payments' 
 ## Mẫu xử lý cho bot
 
 1. Gọi `/users/{userId}/context` để tìm account/loan phù hợp.
-2. Khi cần đọc sổ, gọi `/users/{userId}/transactions` với `from`/`to` và theo hết các trang `nextCursor`.
+2. Khi cần đọc sổ, gọi `/users/{userId}/transactions` với `from/to` và theo hết các trang `nextCursor`.
 3. Hiểu ý định người dùng: `thu`, `chi`, `thu lãi`, `thu gốc`, hoặc `thu cả hai`.
 4. Chuẩn hóa tiền thành chuỗi chữ số VND; không tự thêm dấu âm.
 5. Tạo `Idempotency-Key` mới, gọi đúng endpoint một lần.
