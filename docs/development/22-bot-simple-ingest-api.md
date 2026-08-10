@@ -77,13 +77,13 @@ Ví dụ `markdown`:
 ```text
 📊 Lãi cộng dồn — 10/08/2026
 
-loan_17_0710 (30M) — 31 ngày — 2,790k
-loan_01_0209 (100M) — 30 ngày — 9,000k
+loan_17_0710 (30M) — 30 ngày — 2,700k
+loan_01_0209 (100M) — 29 ngày — 8,700k
 ...
 
 Tổng gốc: 1,198M
 Lãi/ngày: 3,594k
-Tổng lãi cộng dồn: 61,557k
+Tổng lãi cộng dồn: 57,963k
 ```
 
 Mỗi dòng gồm mã khoản vay Markdown nếu có (nếu không dùng tên đối tác), gốc còn lại, số ngày từ lần nhận lãi gần nhất và lãi chưa nhận. Khoản đã tất toán hoặc khoản đi vay không được đưa vào báo cáo phải thu này.

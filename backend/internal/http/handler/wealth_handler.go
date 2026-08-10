@@ -995,14 +995,14 @@ func (h *WealthHandler) BotLoanAccrualReport(c *gin.Context) {
 	asOf := time.Now().In(loc)
 	lines := []string{fmt.Sprintf("📊 Lãi cộng dồn — %s", asOf.Format("02/01/2006")), ""}
 	for _, item := range items {
-		lines = append(lines, fmt.Sprintf("%s (%s) — %d ngày — %s", item.Code, compactVND(item.PrincipalBalance), item.Days, compactVND(item.AccruedInterest)))
+		lines = append(lines, fmt.Sprintf("%s (%s) — %d ngày — %s", item.Code, compactPrincipalVND(item.PrincipalBalance), item.Days, compactInterestVND(item.AccruedInterest)))
 	}
 	totals := botAccrualReportTotals{
 		Principal:       formatReportMoney(principalTotal),
 		DailyInterest:   formatReportMoney(dailyTotal),
 		AccruedInterest: formatReportMoney(accruedTotal),
 	}
-	lines = append(lines, "", fmt.Sprintf("Tổng gốc: %s", compactVND(totals.Principal)), fmt.Sprintf("Lãi/ngày: %s", compactVND(totals.DailyInterest)), fmt.Sprintf("Tổng lãi cộng dồn: %s", compactVND(totals.AccruedInterest)))
+	lines = append(lines, "", fmt.Sprintf("Tổng gốc: %s", compactPrincipalVND(totals.Principal)), fmt.Sprintf("Lãi/ngày: %s", compactInterestVND(totals.DailyInterest)), fmt.Sprintf("Tổng lãi cộng dồn: %s", compactInterestVND(totals.AccruedInterest)))
 	c.JSON(http.StatusOK, gin.H{
 		"userId":   userID,
 		"asOfAt":   asOf,
@@ -1025,11 +1025,21 @@ func formatReportMoney(value float64) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
-func compactVND(value string) string {
+func compactPrincipalVND(value string) string {
 	amount := math.Round(parseReportAmount(value))
 	if amount >= 1000000 && math.Mod(amount, 1000000) == 0 {
 		return formatGroupedInteger(int64(amount/1000000)) + "M"
 	}
+	if amount >= 1000 && math.Mod(amount, 1000) == 0 {
+		return formatGroupedInteger(int64(amount/1000)) + "k"
+	}
+	return formatGroupedInteger(int64(amount)) + "đ"
+}
+
+// Interest is consistently rendered in thousands so 6,000,000 VND becomes
+// 6,000k, matching the compact daily cron format.
+func compactInterestVND(value string) string {
+	amount := math.Round(parseReportAmount(value))
 	if amount >= 1000 && math.Mod(amount, 1000) == 0 {
 		return formatGroupedInteger(int64(amount/1000)) + "k"
 	}
