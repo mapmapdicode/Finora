@@ -56,7 +56,39 @@ Response trả `accounts` và `openLoans`. Bot cần gọi bước này khi bắ
 
 Chỉ khoản có `status` đang hiệu lực được trả trong `openLoans`; khoản đã tất toán không thể nhận thêm thanh toán.
 
-## 2. Ghi thu nhập hoặc chi tiêu
+## 2. Báo cáo lãi cộng dồn hằng ngày (dùng thẳng cho cronjob)
+
+```http
+GET /public/v1/users/{userId}/loans/accrual-report
+```
+
+```bash
+curl -s 'http://110.172.29.117:2001/public/v1/users/USER_ID/loans/accrual-report' \
+  | jq -r '.markdown'
+```
+
+Response có hai phần:
+
+- `loans` và `totals`: JSON số tiền chính xác để bot tiếp tục xử lý.
+- `markdown`: chuỗi hoàn chỉnh để bot gửi nguyên văn vào Telegram/Zalo/Discord; server tính theo lịch nhận lãi/gốc thực tế, bot không cần tự cộng ngày.
+
+Ví dụ `markdown`:
+
+```text
+📊 Lãi cộng dồn — 10/08/2026
+
+loan_17_0710 (30M) — 31 ngày — 2,790k
+loan_01_0209 (100M) — 30 ngày — 9,000k
+...
+
+Tổng gốc: 1,198M
+Lãi/ngày: 3,594k
+Tổng lãi cộng dồn: 61,557k
+```
+
+Mỗi dòng gồm mã khoản vay Markdown nếu có (nếu không dùng tên đối tác), gốc còn lại, số ngày từ lần nhận lãi gần nhất và lãi chưa nhận. Khoản đã tất toán hoặc khoản đi vay không được đưa vào báo cáo phải thu này.
+
+## 3. Ghi thu nhập hoặc chi tiêu
 
 ```http
 POST /public/v1/users/{userId}/transactions
@@ -103,7 +135,7 @@ Ví dụ ghi thu nhập:
 
 Response `201` chứa `{ "transaction": {...}, "accountId": "..." }`.
 
-## 3. Sửa giao dịch bot đã ghi nhầm
+## 4. Sửa giao dịch bot đã ghi nhầm
 
 Bot có thể sửa giao dịch nó đã tạo bằng `transaction.id` trả về khi tạo. Chỉ giao dịch có `source: "bot_user_id_api"` được sửa bằng API này; Finora chặn sửa bút toán khoản vay, chuyển tiền và ngân hàng để không làm sai số dư liên quan.
 
@@ -129,7 +161,7 @@ curl -X PATCH 'http://110.172.29.117:2001/public/v1/users/USER_ID/transactions/T
 
 Tất cả trường trong body là tùy chọn; chỉ trường xuất hiện mới bị thay đổi: `accountId`, `type` (`income`/`expense`), `amount`, `name`, `categoryId`, `note`, `occurredAt`. Response `200` trả `{ "transaction": {...} }` đã cập nhật.
 
-## 4. Ghi nhận thu lãi, thu gốc hoặc cả hai
+## 5. Ghi nhận thu lãi, thu gốc hoặc cả hai
 
 ```http
 POST /public/v1/users/{userId}/loan-payments

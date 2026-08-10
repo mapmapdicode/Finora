@@ -921,6 +921,18 @@ func (s *InMemoryStore) GetImportReference(userID domain.ID, entityType, externa
 	return &copy, true
 }
 
+func (s *InMemoryStore) GetImportReferenceByEntity(userID domain.ID, entityType string, entityID domain.ID) (*domain.ImportReference, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, item := range s.importReferences {
+		if item.UserID == userID && item.EntityType == strings.TrimSpace(entityType) && item.EntityID == entityID {
+			copy := *item
+			return &copy, true
+		}
+	}
+	return nil, false
+}
+
 func (s *InMemoryStore) ListLoanPayments(userID domain.ID, loanID domain.ID) []domain.LoanPayment {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

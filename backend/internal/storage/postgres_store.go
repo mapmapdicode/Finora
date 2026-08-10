@@ -772,6 +772,23 @@ func (s *PostgresStore) GetImportReference(userID domain.ID, entityType, externa
 	return &out, true
 }
 
+func (s *PostgresStore) GetImportReferenceByEntity(userID domain.ID, entityType string, entityID domain.ID) (*domain.ImportReference, bool) {
+	var out domain.ImportReference
+	err := s.pool.QueryRow(context.Background(), `
+		SELECT id, user_id, external_code, entity_type, entity_id, import_month, created_at, updated_at
+		FROM markdown_import_references
+		WHERE user_id=$1 AND entity_type=$2 AND entity_id=$3
+		ORDER BY updated_at DESC
+		LIMIT 1
+	`, userID, strings.TrimSpace(entityType), entityID).Scan(
+		&out.ID, &out.UserID, &out.ExternalCode, &out.EntityType, &out.EntityID, &out.ImportMonth, &out.CreatedAt, &out.UpdatedAt,
+	)
+	if err != nil {
+		return nil, false
+	}
+	return &out, true
+}
+
 func (s *PostgresStore) CreateLoanPayment(input domain.LoanPayment) (domain.LoanPayment, error) {
 	ctx := context.Background()
 	var out domain.LoanPayment

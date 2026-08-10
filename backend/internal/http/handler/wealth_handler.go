@@ -54,6 +54,22 @@ type loanPaymentRequestPayload struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+type botAccrualReportLoan struct {
+	LoanID           string `json:"loanId"`
+	Code             string `json:"code"`
+	Counterparty     string `json:"counterparty"`
+	PrincipalBalance string `json:"principalBalance"`
+	DailyInterest    string `json:"dailyInterest"`
+	AccruedInterest  string `json:"accruedInterest"`
+	Days             int    `json:"days"`
+}
+
+type botAccrualReportTotals struct {
+	Principal       string `json:"principal"`
+	DailyInterest   string `json:"dailyInterest"`
+	AccruedInterest string `json:"accruedInterest"`
+}
+
 type markdownImportPreviewRequest struct {
 	Markdown  string `json:"markdown"`
 	Month     string `json:"month"`
@@ -926,6 +942,110 @@ func (h *WealthHandler) BotGetUserContext(c *gin.Context) {
 		"accounts":  h.store.ListAccounts(userID),
 		"openLoans": openLoans,
 	})
+}
+
+// BotLoanAccrualReport calculates the open receivables server-side and returns
+// a ready-to-send Markdown message so a scheduled bot never needs to duplicate
+// Finora's interest/day/payment logic.
+func (h *WealthHandler) BotLoanAccrualReport(c *gin.Context) {
+	userID, ok := h.botUserFromPath(c)
+	if !ok {
+		return
+	}
+	items := make([]botAccrualReportLoan, 0)
+	principalTotal, dailyTotal, accruedTotal := 0.0, 0.0, 0.0
+	for _, loan := range h.store.ListLoans(userID) {
+		if loan.Direction != domain.LoanDirectionReceivable || loan.Status == domain.LoanStatusClosed || loan.Status == domain.LoanStatusCancelled {
+			continue
+		}
+		accruals, err := h.service.GetLoanAccruals(string(loan.ID))
+		if err != nil {
+			continue
+		}
+		code := ""
+		if ref, found := h.store.GetImportReferenceByEntity(userID, "loan", loan.ID); found {
+			code = ref.ExternalCode
+		}
+		if code == "" {
+			code = loan.Counterparty
+		}
+		days := 0
+		if count := len(accruals.Rows); count > 0 {
+			days = accruals.Rows[count-1].Days
+		}
+		item := botAccrualReportLoan{
+			LoanID:           string(loan.ID),
+			Code:             code,
+			Counterparty:     loan.Counterparty,
+			PrincipalBalance: loan.PrincipalBalance,
+			DailyInterest:    accruals.DailyInterest,
+			AccruedInterest:  accruals.UnpaidInterest,
+			Days:             days,
+		}
+		items = append(items, item)
+		principalTotal += parseReportAmount(item.PrincipalBalance)
+		dailyTotal += parseReportAmount(item.DailyInterest)
+		accruedTotal += parseReportAmount(item.AccruedInterest)
+	}
+
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil {
+		loc = time.UTC
+	}
+	asOf := time.Now().In(loc)
+	lines := []string{fmt.Sprintf("📊 Lãi cộng dồn — %s", asOf.Format("02/01/2006")), ""}
+	for _, item := range items {
+		lines = append(lines, fmt.Sprintf("%s (%s) — %d ngày — %s", item.Code, compactVND(item.PrincipalBalance), item.Days, compactVND(item.AccruedInterest)))
+	}
+	totals := botAccrualReportTotals{
+		Principal:       formatReportMoney(principalTotal),
+		DailyInterest:   formatReportMoney(dailyTotal),
+		AccruedInterest: formatReportMoney(accruedTotal),
+	}
+	lines = append(lines, "", fmt.Sprintf("Tổng gốc: %s", compactVND(totals.Principal)), fmt.Sprintf("Lãi/ngày: %s", compactVND(totals.DailyInterest)), fmt.Sprintf("Tổng lãi cộng dồn: %s", compactVND(totals.AccruedInterest)))
+	c.JSON(http.StatusOK, gin.H{
+		"userId":   userID,
+		"asOfAt":   asOf,
+		"currency": "VND",
+		"loans":    items,
+		"totals":   totals,
+		"markdown": strings.Join(lines, "\n"),
+	})
+}
+
+func parseReportAmount(value string) float64 {
+	parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+		return 0
+	}
+	return parsed
+}
+
+func formatReportMoney(value float64) string {
+	return strconv.FormatFloat(value, 'f', 2, 64)
+}
+
+func compactVND(value string) string {
+	amount := math.Round(parseReportAmount(value))
+	if amount >= 1000000 && math.Mod(amount, 1000000) == 0 {
+		return formatGroupedInteger(int64(amount/1000000)) + "M"
+	}
+	if amount >= 1000 && math.Mod(amount, 1000) == 0 {
+		return formatGroupedInteger(int64(amount/1000)) + "k"
+	}
+	return formatGroupedInteger(int64(amount)) + "đ"
+}
+
+func formatGroupedInteger(value int64) string {
+	raw := strconv.FormatInt(value, 10)
+	start := 0
+	if strings.HasPrefix(raw, "-") {
+		start = 1
+	}
+	for index := len(raw) - 3; index > start; index -= 3 {
+		raw = raw[:index] + "," + raw[index:]
+	}
+	return raw
 }
 
 // BotCreateUserTransaction records a single income or expense. accountId is

@@ -225,7 +225,19 @@ func TestSimpleBotAPIRecordsTransactionAndLoanPaymentByUserID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.UpsertImportReference(domain.ImportReference{UserID: ws.ID, EntityType: "loan", ExternalCode: "loan_test_01", EntityID: loan.ID, ImportMonth: "2026-08"}); err != nil {
+		t.Fatal(err)
+	}
 	h := NewWealthHandler(store, service.NewWealthService(store, nil), nil)
+
+	reportW := httptest.NewRecorder()
+	reportC, _ := gin.CreateTestContext(reportW)
+	reportC.Request = httptest.NewRequest(http.MethodGet, "/public/v1/users/"+string(userID)+"/loans/accrual-report", nil)
+	reportC.Params = gin.Params{{Key: "id", Value: string(userID)}}
+	h.BotLoanAccrualReport(reportC)
+	if reportW.Code != http.StatusOK || !strings.Contains(reportW.Body.String(), "loan_test_01") || !strings.Contains(reportW.Body.String(), "markdown") {
+		t.Fatalf("report status=%d body=%s", reportW.Code, reportW.Body.String())
+	}
 
 	transactionW := httptest.NewRecorder()
 	transactionC, _ := gin.CreateTestContext(transactionW)
@@ -546,7 +558,9 @@ func TestListTransactionsSupportsPaginationAndFilters(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 
-	now := time.Now().UTC()
+	// Keep all fixtures on the same UTC date; using the real clock makes this
+	// date-boundary test flaky for the first three hours after midnight.
+	now := time.Now().UTC().Truncate(24 * time.Hour).Add(12 * time.Hour)
 	_, err = store.CreateTransaction(domain.Transaction{
 		UserID:     ws.ID,
 		AccountID:  acc.ID,

@@ -55,6 +55,7 @@ type Store interface {
 	ListLoanPayments(userID domain.ID, loanID domain.ID) []domain.LoanPayment
 	UpsertImportReference(input domain.ImportReference) (domain.ImportReference, error)
 	GetImportReference(userID domain.ID, entityType, externalCode string) (*domain.ImportReference, bool)
+	GetImportReferenceByEntity(userID domain.ID, entityType string, entityID domain.ID) (*domain.ImportReference, bool)
 
 	CreateLoanPayment(input domain.LoanPayment) (domain.LoanPayment, error)
 	// SettleLoanPayment persists the ledger entry, loan balance change and payment
