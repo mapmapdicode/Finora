@@ -69,6 +69,7 @@ func NewServer(cfg *config.Config, store storage.Store, svc *service.WealthServi
 	// or an account-specific key. See docs/development/22-bot-simple-ingest-api.md.
 	r.GET("/public/v1/users/:id/context", h.BotGetUserContext)
 	r.GET("/public/v1/users/:id/loans/accrual-report", h.BotLoanAccrualReport)
+	r.GET("/public/v1/users/:id/transactions", h.BotListUserTransactions)
 	r.POST("/public/v1/users/:id/transactions", middleware.IdempotencyGuard(store), h.BotCreateUserTransaction)
 	r.PATCH("/public/v1/users/:id/transactions/:transactionId", middleware.IdempotencyGuard(store), h.BotUpdateUserTransaction)
 	r.POST("/public/v1/users/:id/loan-payments", middleware.IdempotencyGuard(store), h.BotCreateUserLoanPayment)

@@ -1013,6 +1013,109 @@ func (h *WealthHandler) BotLoanAccrualReport(c *gin.Context) {
 	})
 }
 
+// BotListUserTransactions returns the user's regular income and expense ledger
+// entries in reverse chronological order. Loan payments and transfers are
+// intentionally excluded: this endpoint is the bot's Thu/Chi history view.
+func (h *WealthHandler) BotListUserTransactions(c *gin.Context) {
+	userID, ok := h.botUserFromPath(c)
+	if !ok {
+		return
+	}
+
+	fromRaw := strings.TrimSpace(c.Query("from"))
+	toRaw := strings.TrimSpace(c.Query("to"))
+	if fromRaw == "" || toRaw == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "DATE_RANGE_REQUIRED", "message": "from and to are required"})
+		return
+	}
+	from := parseDateFilter(fromRaw)
+	to := parseDateFilter(toRaw)
+	if from.IsZero() || to.IsZero() || from.After(to) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_DATE_RANGE", "message": "from and to must be valid dates with from <= to"})
+		return
+	}
+	if len(toRaw) == len("2006-01-02") {
+		to = to.Add(24*time.Hour - time.Nanosecond)
+	}
+
+	accountID := domain.ID(strings.TrimSpace(c.Query("accountId")))
+	if accountID != "" {
+		if _, err := h.botAccountForUser(userID, accountID); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "ACCOUNT_NOT_FOUND", "message": err.Error()})
+			return
+		}
+	}
+	typeFilter := domain.TransactionType(strings.ToLower(strings.TrimSpace(c.Query("type"))))
+	if typeFilter != "" && typeFilter != domain.TransactionTypeIncome && typeFilter != domain.TransactionTypeExpense {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_TYPE", "message": "type must be income or expense"})
+		return
+	}
+
+	limit := 100
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 || parsed > 500 {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_LIMIT", "message": "limit must be an integer from 1 to 500"})
+			return
+		}
+		limit = parsed
+	}
+	var cursor dto.PaginatedCursor
+	if raw := strings.TrimSpace(c.Query("cursor")); raw != "" {
+		var err error
+		cursor, err = dto.DecodeTransactionCursor(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_CURSOR", "message": err.Error()})
+			return
+		}
+	}
+
+	raw := h.store.ListTransactions(userID, accountID)
+	filtered := make([]domain.Transaction, 0, len(raw))
+	for _, item := range raw {
+		if item.Type != domain.TransactionTypeIncome && item.Type != domain.TransactionTypeExpense {
+			continue
+		}
+		if typeFilter != "" && item.Type != typeFilter {
+			continue
+		}
+		if item.OccurredAt.Before(from) || item.OccurredAt.After(to) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	filtered = sortTransactionsForCursor(filtered)
+
+	start := 0
+	if c.Query("cursor") != "" {
+		for start < len(filtered) {
+			item := filtered[start]
+			if item.OccurredAt.After(cursor.OccurredAt) || (item.OccurredAt.Equal(cursor.OccurredAt) && string(item.ID) >= cursor.ID) {
+				start++
+				continue
+			}
+			break
+		}
+	}
+	end := start + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	items := filtered[start:end]
+	nextCursor := ""
+	if end < len(filtered) && len(items) > 0 {
+		last := items[len(items)-1]
+		nextCursor = dto.EncodeTransactionCursor(last.OccurredAt, string(last.ID))
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"userId":     userID,
+		"from":       from.Format(time.RFC3339),
+		"to":         to.Format(time.RFC3339),
+		"items":      items,
+		"nextCursor": nextCursor,
+	})
+}
+
 func parseReportAmount(value string) float64 {
 	parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
 	if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) {

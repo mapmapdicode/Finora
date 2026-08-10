@@ -264,6 +264,15 @@ func TestSimpleBotAPIRecordsTransactionAndLoanPaymentByUserID(t *testing.T) {
 		t.Fatalf("correction status=%d body=%s", correctionW.Code, correctionW.Body.String())
 	}
 
+	listW := httptest.NewRecorder()
+	listC, _ := gin.CreateTestContext(listW)
+	listC.Request = httptest.NewRequest(http.MethodGet, "/public/v1/users/"+string(userID)+"/transactions?from=2026-08-01&to=2026-08-31&type=expense&limit=10", nil)
+	listC.Params = gin.Params{{Key: "id", Value: string(userID)}}
+	h.BotListUserTransactions(listC)
+	if listW.Code != http.StatusOK || !strings.Contains(listW.Body.String(), "All-day food") || !strings.Contains(listW.Body.String(), `"type":"expense"`) {
+		t.Fatalf("list status=%d body=%s", listW.Code, listW.Body.String())
+	}
+
 	paymentW := httptest.NewRecorder()
 	paymentC, _ := gin.CreateTestContext(paymentW)
 	paymentC.Request = httptest.NewRequest(http.MethodPost, "/public/v1/users/"+string(userID)+"/loan-payments", strings.NewReader(`{"loanId":"`+string(loan.ID)+`","principalAmount":"1000000","interestAmount":"9000"}`))

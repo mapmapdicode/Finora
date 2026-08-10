@@ -88,7 +88,58 @@ Tổng lãi cộng dồn: 57,963k
 
 Mỗi dòng gồm mã khoản vay Markdown nếu có (nếu không dùng tên đối tác), gốc còn lại, số ngày từ lần nhận lãi gần nhất và lãi chưa nhận. Khoản đã tất toán hoặc khoản đi vay không được đưa vào báo cáo phải thu này.
 
-## 3. Ghi thu nhập hoặc chi tiêu
+## 3. Liệt kê thu/chi theo khoảng thời gian
+
+```http
+GET /public/v1/users/{userId}/transactions?from=YYYY-MM-DD&to=YYYY-MM-DD
+```
+
+Endpoint này chỉ trả giao dịch thu nhập (`income`) và chi tiêu (`expense`), theo thứ tự **mới nhất trước**. Các dòng giải ngân, thu nợ/trả nợ và chuyển tiền không nằm trong danh sách để bot có đúng sổ Thu/Chi.
+
+```bash
+curl -s 'http://110.172.29.117:2001/public/v1/users/USER_ID/transactions?from=2026-08-01&to=2026-08-31&limit=100'
+```
+
+Tham số:
+
+| Tham số | Bắt buộc | Quy tắc |
+|---|---:|---|
+| `from`, `to` | Có | `YYYY-MM-DD` hoặc RFC3339. Nếu gửi ngày không có giờ, `to` bao gồm hết ngày đó. |
+| `accountId` | Không | Chỉ lấy giao dịch của một tài khoản thuộc chính user. |
+| `type` | Không | `income` hoặc `expense`. Bỏ trống để lấy cả thu và chi. |
+| `limit` | Không | Số dòng mỗi lần, mặc định `100`, tối đa `500`. |
+| `cursor` | Không | Lấy trang sau, dùng nguyên giá trị `nextCursor` server trả về và URL-encode khi cần. |
+
+Ví dụ chỉ tìm các khoản chi trong tháng:
+
+```bash
+curl -s 'http://110.172.29.117:2001/public/v1/users/USER_ID/transactions?from=2026-08-01&to=2026-08-31&type=expense&accountId=ACCOUNT_ID&limit=100'
+```
+
+Response:
+
+```json
+{
+  "userId": "USER_ID",
+  "from": "2026-08-01T00:00:00Z",
+  "to": "2026-08-31T23:59:59Z",
+  "items": [
+    {
+      "id": "TRANSACTION_ID",
+      "type": "expense",
+      "amount": "150000.00",
+      "name": "Ăn cả ngày",
+      "occurredAt": "2026-08-09T16:47:00Z",
+      "status": "posted"
+    }
+  ],
+  "nextCursor": ""
+}
+```
+
+Khi `nextCursor` khác rỗng, bot tiếp tục gọi cùng bộ lọc với `&cursor=NEXT_CURSOR` cho đến khi nhận chuỗi rỗng. Bot nên đọc toàn bộ các trang trước khi tổng hợp báo cáo tháng.
+
+## 4. Ghi thu nhập hoặc chi tiêu
 
 ```http
 POST /public/v1/users/{userId}/transactions
@@ -135,7 +186,7 @@ Ví dụ ghi thu nhập:
 
 Response `201` chứa `{ "transaction": {...}, "accountId": "..." }`.
 
-## 4. Sửa giao dịch bot đã ghi nhầm
+## 5. Sửa giao dịch bot đã ghi nhầm
 
 Bot có thể sửa giao dịch nó đã tạo bằng `transaction.id` trả về khi tạo. Chỉ giao dịch có `source: "bot_user_id_api"` được sửa bằng API này; Finora chặn sửa bút toán khoản vay, chuyển tiền và ngân hàng để không làm sai số dư liên quan.
 
@@ -161,7 +212,7 @@ curl -X PATCH 'http://110.172.29.117:2001/public/v1/users/USER_ID/transactions/T
 
 Tất cả trường trong body là tùy chọn; chỉ trường xuất hiện mới bị thay đổi: `accountId`, `type` (`income`/`expense`), `amount`, `name`, `categoryId`, `note`, `occurredAt`. Response `200` trả `{ "transaction": {...} }` đã cập nhật.
 
-## 5. Ghi nhận thu lãi, thu gốc hoặc cả hai
+## 6. Ghi nhận thu lãi, thu gốc hoặc cả hai
 
 ```http
 POST /public/v1/users/{userId}/loan-payments
@@ -217,9 +268,10 @@ curl -X POST 'http://110.172.29.117:2001/public/v1/users/USER_ID/loan-payments' 
 ## Mẫu xử lý cho bot
 
 1. Gọi `/users/{userId}/context` để tìm account/loan phù hợp.
-2. Hiểu ý định người dùng: `thu`, `chi`, `thu lãi`, `thu gốc`, hoặc `thu cả hai`.
-3. Chuẩn hóa tiền thành chuỗi chữ số VND; không tự thêm dấu âm.
-4. Tạo `Idempotency-Key` mới, gọi đúng endpoint một lần.
-5. Chỉ báo thành công sau khi nhận HTTP `201`; nếu timeout, gửi lại **cùng** key và body để an toàn.
+2. Khi cần đọc sổ, gọi `/users/{userId}/transactions` với `from`/`to` và theo hết các trang `nextCursor`.
+3. Hiểu ý định người dùng: `thu`, `chi`, `thu lãi`, `thu gốc`, hoặc `thu cả hai`.
+4. Chuẩn hóa tiền thành chuỗi chữ số VND; không tự thêm dấu âm.
+5. Tạo `Idempotency-Key` mới, gọi đúng endpoint một lần.
+6. Chỉ báo thành công sau khi nhận HTTP `201`; nếu timeout, gửi lại **cùng** key và body để an toàn.
 
 Các lỗi thường gặp: `USER_NOT_FOUND`, `ACCOUNT_NOT_FOUND`, `LOAN_NOT_FOUND`, `LOAN_CLOSED`, `MISSING_IDEMPOTENCY_KEY`, `DUPLICATE_IDEMPOTENCY_KEY` và `BAD_REQUEST`.
