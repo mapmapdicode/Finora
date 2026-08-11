@@ -215,6 +215,9 @@ func TestCreateLoanPaymentAtomicallyWritesLedgerAndBalance(t *testing.T) {
 	if got := len(store.ListTransactions(user.ID, account.ID)); got != 1 {
 		t.Fatalf("expected one ledger transaction, got %d", got)
 	}
+	if ledger := store.ListTransactions(user.ID, account.ID)[0]; ledger.Type != domain.TransactionTypeLoanPayment {
+		t.Fatalf("principal collection must remain loan_payment, got %s", ledger.Type)
+	}
 }
 
 func TestInterestReceiptStartsTheNextAccrualPeriodAndKeepsItsHistory(t *testing.T) {
@@ -244,6 +247,10 @@ func TestInterestReceiptStartsTheNextAccrualPeriodAndKeepsItsHistory(t *testing.
 	}
 	if payment.InterestDays != 3 {
 		t.Fatalf("expected history to preserve 3 interest days, got %d", payment.InterestDays)
+	}
+	ledger := store.ListTransactions(user.ID, account.ID)
+	if len(ledger) != 1 || ledger[0].Type != domain.TransactionTypeIncome || ledger[0].Name != "Thu lãi khoản vay" {
+		t.Fatalf("interest-only receipt must be income, got %#v", ledger)
 	}
 
 	rows, summary := svc.loanAccrualsByLoan(loan, start.AddDate(0, 0, 5))

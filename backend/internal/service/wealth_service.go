@@ -1272,9 +1272,18 @@ func (s *WealthService) CreateLoanPayment(loanID string, payment domain.LoanPaym
 	if nextBalance <= 0 && nextStatus != domain.LoanStatusCancelled {
 		nextStatus = domain.LoanStatusClosed
 	}
+	ledgerType := domain.TransactionTypeLoanPayment
+	ledgerName := ""
+	// A receivable payment made up solely of interest is income, not a loan
+	// principal collection. This lets the income journal and monthly cash-flow
+	// totals reflect money earned from lending without counting returned principal.
+	if loan.Direction == domain.LoanDirectionReceivable && principal == 0 && interest > 0 && fee == 0 {
+		ledgerType = domain.TransactionTypeIncome
+		ledgerName = "Thu lãi khoản vay"
+	}
 	ledger := domain.Transaction{
 		UserID: loan.UserID, AccountID: acc.ID, PortfolioID: acc.PortfolioID,
-		Type: domain.TransactionTypeLoanPayment, Amount: formatMoney(totalAmount),
+		Name: ledgerName, Type: ledgerType, Amount: formatMoney(totalAmount),
 		Currency: currencyOrDefault(acc.Currency, loan.Direction),
 		Note:     fmt.Sprintf("loan payment for %s", loanID), OccurredAt: payment.OccurredAt,
 		Status: domain.TransactionStatusPosted, Source: "loan_payment",

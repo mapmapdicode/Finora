@@ -254,7 +254,7 @@ curl -X POST 'http://110.172.29.117:2001/public/v1/users/USER_ID/loan-payments' 
 | `accountId` | Không | Tài khoản nhận/trả tiền. Bỏ trống sẽ dùng tài khoản giải ngân của khoản vay, rồi tài khoản đầu tiên nếu khoản vay chưa có tài khoản đó. |
 | `interestDays`, `feeAmount`, `waivedAmount`, `occurredAt` | Không | Dùng khi bot có thông tin chi tiết. Mặc định là `0`/thời điểm gọi API. |
 
-Ít nhất một trong `interestAmount`, `principalAmount`, `feeAmount` phải lớn hơn 0. Khi toàn bộ dư nợ gốc được thu, hợp đồng chuyển sang `closed` (đã tất toán). Response `201` chứa `{ "payment": {...}, "loanId": "..." }` và đồng thời tạo dòng tiền `loan_payment` cho tài khoản nhận tiền.
+Ít nhất một trong `interestAmount`, `principalAmount`, `feeAmount` phải lớn hơn 0. Khi toàn bộ dư nợ gốc được thu, hợp đồng chuyển sang `closed` (đã tất toán). Response `201` chứa `{ "payment": {...}, "loanId": "..." }`. Nếu khoản phải thu chỉ nhận **lãi** (gốc và phí đều bằng `0`), dòng tiền được ghi là `income` để xuất hiện trong Tổng thu; nếu có thu gốc thì vẫn là `loan_payment` để không cộng gốc vào thu nhập.
 
 ## Mẫu xử lý cho bot
 
