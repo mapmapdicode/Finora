@@ -108,6 +108,42 @@ void main() {
     expect(find.text('Cá nhân'), findsAtLeastNWidgets(1));
   });
 
+  testWidgets('phone footer background reaches the screen edge', (
+    tester,
+  ) async {
+    final view = tester.view;
+    final originalPhysicalSize = view.physicalSize;
+    final originalDevicePixelRatio = view.devicePixelRatio;
+    view.physicalSize = const Size(390, 844);
+    view.devicePixelRatio = 1;
+    addTearDown(() {
+      view.physicalSize = originalPhysicalSize;
+      view.devicePixelRatio = originalDevicePixelRatio;
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(padding: EdgeInsets.only(bottom: 34)),
+          child: HomePage(
+            api: _FakeApiClient(),
+            loginBuilder: (_) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final footer = tester.getRect(
+      find.byKey(const ValueKey('finora-mobile-bottom-bar')),
+    );
+    final footerContent = tester.getRect(
+      find.byKey(const ValueKey('finora-mobile-bottom-bar-content')),
+    );
+    expect(footer.bottom, 844);
+    expect(footerContent.bottom, 810);
+  });
+
   testWidgets(
     '3:2 tablet uses a navigation rail and keeps all pages reachable',
     (tester) async {

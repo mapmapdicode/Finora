@@ -5,8 +5,11 @@ import 'package:mobile/features/auth/domain/entities/auth_session.dart';
 import 'package:mobile/features/auth/domain/entities/registration_result.dart';
 import 'package:mobile/features/auth/domain/repositories/auth_repository.dart';
 import 'package:mobile/features/auth/presentation/view_models/login_view_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   test(
     'sign in delegates trimmed credentials and clears loading state',
     () async {
@@ -23,6 +26,21 @@ void main() {
       expect(repository.signInCredentials?.email, 'demo@finora.vn');
       expect(viewModel.isBusy, isFalse);
       expect(viewModel.error, isNull);
+    },
+  );
+
+  test(
+    'remembers the identifier from the last successful login only',
+    () async {
+      final viewModel = LoginViewModel(_FakeAuthRepository());
+
+      await viewModel.authenticate(
+        registering: false,
+        email: ' latest@finora.vn ',
+        password: 'secret',
+      );
+
+      expect(await viewModel.loadLastLoginIdentifier(), 'latest@finora.vn');
     },
   );
 

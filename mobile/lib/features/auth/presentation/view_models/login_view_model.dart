@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:mobile/core/network/api_exception.dart';
 import 'package:mobile/features/auth/domain/entities/auth_credentials.dart';
 import 'package:mobile/features/auth/domain/repositories/auth_repository.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Owns login UI state and commands; the view never calls the repository.
 class LoginViewModel extends ChangeNotifier {
   LoginViewModel(this._repository);
+
+  static const _lastLoginIdentifierKey = 'auth.last_login_identifier';
 
   final AuthRepository _repository;
   bool _isBusy = false;
@@ -15,6 +20,18 @@ class LoginViewModel extends ChangeNotifier {
   bool get isBusy => _isBusy;
   String? get error => _error;
   String? get pendingVerificationEmail => _pendingVerificationEmail;
+
+  /// Returns the last successfully authenticated account for this device.
+  /// Passwords are deliberately never persisted here.
+  Future<String?> loadLastLoginIdentifier() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final identifier = preferences.getString(_lastLoginIdentifierKey)?.trim();
+      return identifier == null || identifier.isEmpty ? null : identifier;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<bool> authenticate({
     required bool registering,
@@ -48,6 +65,7 @@ class LoginViewModel extends ChangeNotifier {
         return false;
       } else {
         await _repository.signIn(credentials);
+        await _rememberLoginIdentifier(credentials.email);
       }
       _pendingVerificationEmail = null;
       return true;
@@ -80,6 +98,7 @@ class LoginViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       await _repository.verifyEmail(email: email, code: code.trim());
+      await _rememberLoginIdentifier(email);
       _pendingVerificationEmail = null;
       return true;
     } on ApiException catch (error) {
@@ -125,6 +144,16 @@ class LoginViewModel extends ChangeNotifier {
     _pendingVerificationEmail = null;
     _error = null;
     notifyListeners();
+  }
+
+  Future<void> _rememberLoginIdentifier(String identifier) async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(_lastLoginIdentifierKey, identifier.trim());
+    } catch (_) {
+      // Authentication must not fail solely because local preferences are
+      // unavailable on the device.
+    }
   }
 
   String _friendlyAuthError(ApiException error) {

@@ -189,6 +189,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     widget.viewModel.addListener(_onViewModelChanged);
+    _restoreLastLoginIdentifier();
 
     _entranceController = AnimationController(
       vsync: this,
@@ -241,6 +242,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         );
 
     _entranceController.forward();
+  }
+
+  Future<void> _restoreLastLoginIdentifier() async {
+    final identifier = await widget.viewModel.loadLastLoginIdentifier();
+    if (!mounted || identifier == null || email.text.isNotEmpty) return;
+    setState(() => email.text = identifier);
   }
 
   void _onViewModelChanged() {
@@ -636,6 +643,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
         SafeArea(
+          bottom: false,
           child: LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth >= 760;
@@ -1883,24 +1891,36 @@ class _LoginBottomNav extends StatelessWidget {
       ),
     ];
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.88),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: FinoraColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: FinoraColors.primary.withValues(alpha: 0.10),
-              blurRadius: 16,
-            ),
-          ],
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x00FAFAFC), Color(0xD9FAFAFC)],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: items,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.88),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: FinoraColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: FinoraColors.primary.withValues(alpha: 0.10),
+                  blurRadius: 16,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: items,
+            ),
+          ),
         ),
       ),
     );
@@ -2367,31 +2387,7 @@ class _HomePageState extends State<HomePage> {
       drawer: null,
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.075,
-              child: Image.asset(
-                'assets/images/app_bg_maple_light.png',
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: const [
-                    Color(0x00fafafc),
-                    Color(0x44f3f0ff),
-                    Color(0x66fafafc),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          const Positioned.fill(child: FinoraAppBackground()),
           SafeArea(
             child: Row(
               children: [
@@ -2411,57 +2407,63 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       bottomNavigationBar: compact
-          ? SafeArea(
-              top: false,
-              child: Container(
-                height: 74,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border(top: BorderSide(color: FinoraColors.border)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x0f000000),
-                      blurRadius: 10,
-                      offset: Offset(0, -2),
-                    ),
-                  ],
+          ? Container(
+              key: const ValueKey('finora-mobile-bottom-bar'),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.96),
+                border: const Border(
+                  top: BorderSide(color: FinoraColors.border),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildBottomNavItem(
-                        icon: Icons.home_rounded,
-                        label: 'Trang chủ',
-                        isSelected: index == 0,
-                        onTap: () => setState(() => index = 0),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0f000000),
+                    blurRadius: 10,
+                    offset: Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: SizedBox(
+                  height: 74,
+                  child: Row(
+                    key: const ValueKey('finora-mobile-bottom-bar-content'),
+                    children: [
+                      Expanded(
+                        child: _buildBottomNavItem(
+                          icon: Icons.home_rounded,
+                          label: 'Trang chủ',
+                          isSelected: index == 0,
+                          onTap: () => setState(() => index = 0),
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: _buildBottomNavItem(
-                        icon: Icons.account_balance_wallet_rounded,
-                        label: 'Tài khoản',
-                        isSelected: index == 1,
-                        onTap: () => setState(() => index = 1),
+                      Expanded(
+                        child: _buildBottomNavItem(
+                          icon: Icons.account_balance_wallet_rounded,
+                          label: 'Tài khoản',
+                          isSelected: index == 1,
+                          onTap: () => setState(() => index = 1),
+                        ),
                       ),
-                    ),
-                    _buildQuickActionButton(),
-                    Expanded(
-                      child: _buildBottomNavItem(
-                        icon: Icons.receipt_long_rounded,
-                        label: 'Giao dịch',
-                        isSelected: index == 2,
-                        onTap: () => setState(() => index = 2),
+                      _buildQuickActionButton(),
+                      Expanded(
+                        child: _buildBottomNavItem(
+                          icon: Icons.receipt_long_rounded,
+                          label: 'Giao dịch',
+                          isSelected: index == 2,
+                          onTap: () => setState(() => index = 2),
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: _buildBottomNavItem(
-                        icon: Icons.person_rounded,
-                        label: 'Cá nhân',
-                        isSelected: index == 13,
-                        onTap: () => setState(() => index = 13),
+                      Expanded(
+                        child: _buildBottomNavItem(
+                          icon: Icons.person_rounded,
+                          label: 'Cá nhân',
+                          isSelected: index == 13,
+                          onTap: () => setState(() => index = 13),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             )

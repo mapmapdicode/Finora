@@ -30,6 +30,37 @@ class FinoraContentWidth extends StatelessWidget {
   );
 }
 
+/// A quiet, shared backdrop for authenticated Finora screens. The artwork is
+/// deliberately subdued so data cards remain the visual focus.
+class FinoraAppBackground extends StatelessWidget {
+  const FinoraAppBackground({super.key});
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      Opacity(
+        opacity: 0.16,
+        child: Image.asset(
+          'assets/images/app_bg_maple_light.png',
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+        ),
+      ),
+      const DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xA8FAFAFC), Color(0x66FAFAFC), Color(0xB3FAFAFC)],
+            stops: [0, 0.42, 1],
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 class FinoraCard extends StatelessWidget {
   const FinoraCard({
     super.key,

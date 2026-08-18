@@ -28,11 +28,15 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
+		<!-- The current VPS API is publicly reachable over HTTP only. Remove this
+		     exception after moving the API to a dedicated HTTPS origin. -->
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Finora kết nối tới API phát triển trên mạng nội bộ của bạn.</string>
+	<string>Finora kết nối tới dịch vụ trên VPS để đồng bộ dữ liệu.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
